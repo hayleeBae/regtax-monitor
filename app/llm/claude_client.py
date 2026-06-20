@@ -25,10 +25,9 @@ class ClaudeClient(LlmClient):
             f"[개정 전]\n{before}\n\n[개정 후]\n{after}\n\n"
             '반드시 JSON으로만 응답: {"summary": "...", "impact": "..."}'
         )
-        # 요약·분석은 가벼운 작업 -> 저렴한 모델로 충분
         resp = self.client.messages.create(
             model=settings.llm_model_cheap,
-            max_tokens=1024,
+            max_tokens=2048,
             messages=[{"role": "user", "content": prompt}],
         )
         text = "".join(b.text for b in resp.content if b.type == "text")
