@@ -195,17 +195,26 @@ def map_change(change_id: int, k: int = 5, db: Session = Depends(get_session)) -
     if not hits:
         return {"mapped": 0, "note": "인덱싱된 코드가 없습니다. POST /index 를 먼저 실행하세요."}
 
-    saved = 0
+    # 같은 파일의 여러 청크가 동일 (path, symbol)로 반환될 수 있으므로
+    # 최고 점수 청크만 남긴다 (hits는 이미 score 내림차순).
+    best: dict[tuple[str, str], object] = {}
     for hit in hits:
+        key = (hit.path, hit.symbol)
+        if key not in best:
+            best[key] = hit
+
+    article_id = f"{row.law_id}:{row.article_no}"
+    saved = 0
+    for hit in best.values():
         exists = (
             db.query(Mapping)
-            .filter_by(article_id=f"{row.law_id}:{row.article_no}", path=hit.path, symbol=hit.symbol)
+            .filter_by(article_id=article_id, path=hit.path, symbol=hit.symbol)
             .first()
         )
         if exists:
             continue
         db.add(Mapping(
-            article_id=f"{row.law_id}:{row.article_no}",
+            article_id=article_id,
             repo="mock_repo",
             path=hit.path,
             symbol=hit.symbol,
