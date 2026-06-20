@@ -48,7 +48,8 @@ def health() -> dict:
 @app.post("/collect")
 def collect(db: Session = Depends(get_session)) -> dict:
     """
-    법제처 API에서 last_sync 이후 변경 법령을 수집하여 DB에 저장한다.
+    법제처 API에서 last_sync 이후 변경 법령을 수집하여 DB에 저장하고,
+    신규 건에 한해 개정문·제개정이유(신구대조)를 자동 조회한다.
     OC 키 없으면 mock 데이터로 동작.
     """
     state = db.get(SyncState, 1)
@@ -61,7 +62,7 @@ def collect(db: Session = Depends(get_session)) -> dict:
     client = LawApiClient()
     items = client.search_changed(since)
 
-    saved = 0
+    saved_ids: list[int] = []
     for item in items:
         exists = (
             db.query(LawChange)
@@ -70,7 +71,7 @@ def collect(db: Session = Depends(get_session)) -> dict:
         )
         if exists:
             continue
-        db.add(LawChange(
+        row = LawChange(
             law_id=item["law_id"],
             law_mst=item.get("law_mst", ""),
             law_name=item["law_name"],
@@ -79,18 +80,39 @@ def collect(db: Session = Depends(get_session)) -> dict:
             effective_date=item["effective_date"],
             before_text=item["before_text"],
             after_text=item["after_text"],
-        ))
-        saved += 1
+        )
+        db.add(row)
+        db.flush()  # id 확보
+        saved_ids.append(row.id)
 
     state.last_sync = datetime.now(timezone.utc).strftime("%Y%m%d")
     state.last_run_at = datetime.now(timezone.utc)
     db.commit()
 
+    # 신규 건에 한해 신구대조 자동 조회 (mock 모드 또는 MST 없으면 건너뜀)
+    detail_ok, detail_fail = 0, 0
+    if not client._mock_mode:
+        for change_id in saved_ids:
+            row = db.get(LawChange, change_id)
+            if not row or not row.law_mst:
+                continue
+            try:
+                detail = client.fetch_detail(row.law_mst)
+                row.article_no = detail["article_no"]
+                row.before_text = detail["before_text"]
+                row.after_text = detail["after_text"]
+                detail_ok += 1
+            except Exception:
+                detail_fail += 1
+        db.commit()
+
     return {
         "fetched": len(items),
-        "saved": saved,
+        "saved": len(saved_ids),
         "since": since,
         "mock_mode": client._mock_mode,
+        "detail_fetched": detail_ok,
+        "detail_failed": detail_fail,
     }
 
 
