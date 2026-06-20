@@ -101,16 +101,16 @@ def list_changes(db: Session = Depends(get_session)) -> list[dict]:
 
 
 @app.post("/changes/{change_id}/analyze")
-def analyze(change_id: int, db: Session = Depends(get_session)) -> dict:
+def analyze(change_id: int, force: bool = False, db: Session = Depends(get_session)) -> dict:
     """
     Claude로 법령 변경 조문을 분석하여 ai_summary, ai_impact를 DB에 저장한다.
-    이미 분석된 건은 재분석하지 않는다 (status가 new일 때만).
+    이미 분석된 건은 재분석하지 않는다. force=true 로 강제 재분석 가능.
     """
     row = db.get(LawChange, change_id)
     if row is None:
         raise HTTPException(status_code=404, detail="변경 건을 찾을 수 없습니다.")
-    if row.ai_summary:
-        return {"skipped": True, "reason": "이미 분석된 건입니다.", "id": change_id}
+    if row.ai_summary and not force:
+        return {"skipped": True, "reason": "이미 분석된 건입니다. 재분석하려면 ?force=true 를 사용하세요.", "id": change_id}
 
     llm = ClaudeClient()
     result = llm.analyze_change(
