@@ -21,6 +21,7 @@ class LawChange(Base):
 
     id = Column(Integer, primary_key=True)
     law_id = Column(String, index=True)          # 법령 ID
+    law_mst = Column(String)                     # 법령 MST (상세 조회용)
     law_name = Column(String)                    # 법령명
     article_no = Column(String)                  # 조문 번호
     promulgation_date = Column(String)           # 공포일 (YYYYMMDD) — 알림 트리거

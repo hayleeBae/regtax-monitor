@@ -60,6 +60,7 @@ def collect(db: Session = Depends(get_session)) -> dict:
             continue
         db.add(LawChange(
             law_id=item["law_id"],
+            law_mst=item.get("law_mst", ""),
             law_name=item["law_name"],
             article_no=item["article_no"],
             promulgation_date=item["promulgation_date"],
@@ -78,6 +79,34 @@ def collect(db: Session = Depends(get_session)) -> dict:
         "saved": saved,
         "since": since,
         "mock_mode": client._mock_mode,
+    }
+
+
+@app.post("/changes/{change_id}/fetch-detail")
+def fetch_detail(change_id: int, db: Session = Depends(get_session)) -> dict:
+    """
+    법령 MST로 개정문·제개정이유를 조회하여 before_text / after_text / article_no 를 채운다.
+    collect 후 이 엔드포인트를 호출해야 analyze 에서 의미 있는 결과가 나온다.
+    """
+    row = db.get(LawChange, change_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="변경 건을 찾을 수 없습니다.")
+    if not row.law_mst:
+        raise HTTPException(status_code=422, detail="법령 MST가 없습니다. mock 데이터이거나 수집 오류입니다.")
+
+    client = LawApiClient()
+    detail = client.fetch_detail(row.law_mst)
+
+    row.article_no = detail["article_no"]
+    row.before_text = detail["before_text"]
+    row.after_text = detail["after_text"]
+    db.commit()
+
+    return {
+        "id": change_id,
+        "article_no": row.article_no,
+        "before_text_preview": row.before_text[:200] + ("…" if len(row.before_text) > 200 else ""),
+        "after_text_preview": row.after_text[:200] + ("…" if len(row.after_text) > 200 else ""),
     }
 
 

@@ -6,6 +6,8 @@
 
 API 문서: https://open.law.go.kr/LSO/openApi/openApiInfo.do
 """
+import re
+
 import httpx
 
 from config import settings
@@ -48,6 +50,48 @@ class LawApiClient:
 
         return unique
 
+    def fetch_detail(self, mst: str) -> dict:
+        """
+        법령 MST로 개정문·제개정이유를 조회하여 반환한다.
+        반환값: {"article_no": str, "before_text": str, "after_text": str}
+        """
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(f"{BASE_URL}/lawService.do", params={
+                "OC": self.oc,
+                "target": "law",
+                "MST": mst,
+                "type": "JSON",
+            })
+            resp.raise_for_status()
+            data = resp.json()
+
+        law = data.get("법령", {})
+
+        # 개정문 — 구체적인 변경 내용 ("X를 Y로 한다" 형식)
+        gaejung_items = law.get("개정문", {}).get("개정문내용", [])
+        if isinstance(gaejung_items, list) and gaejung_items:
+            raw = gaejung_items[0] if isinstance(gaejung_items[0], list) else gaejung_items
+            before_text = "\n".join(str(s) for s in raw if str(s).strip())
+        else:
+            before_text = ""
+
+        # 제개정이유 — 개정 배경·주요내용
+        iyou_items = law.get("제개정이유", {}).get("제개정이유내용", [])
+        if isinstance(iyou_items, list) and iyou_items:
+            raw = iyou_items[0] if isinstance(iyou_items[0], list) else iyou_items
+            after_text = "\n".join(str(s) for s in raw if str(s).strip())
+        else:
+            after_text = ""
+
+        # 개정문에서 조문 번호 추출 (첫 번째 언급 기준)
+        article_no = _extract_article_no(before_text)
+
+        return {
+            "article_no": article_no,
+            "before_text": before_text,
+            "after_text": after_text,
+        }
+
     def _fetch_one_query(self, query: str, since: str) -> list[dict]:
         params = {
             "OC": self.oc,
@@ -56,8 +100,8 @@ class LawApiClient:
             "query": query,
             "display": 20,
             "page": 1,
-            "sort": "date",                  # 최신 공포일순
-            "promulgationDateFrom": since,   # 이 날짜 이후 공포분만
+            "sort": "date",
+            "promulgationDateFrom": since,
         }
         with httpx.Client(timeout=20) as client:
             resp = client.get(f"{BASE_URL}/lawSearch.do", params=params)
@@ -65,16 +109,17 @@ class LawApiClient:
             data = resp.json()
 
         laws = data.get("LawSearch", {}).get("law", [])
-        if isinstance(laws, dict):   # 단건이면 dict로 오는 경우 있음
+        if isinstance(laws, dict):
             laws = [laws]
 
         return [
             {
                 "law_id": item.get("법령ID", ""),
+                "law_mst": item.get("법령일련번호", ""),
                 "law_name": item.get("법령명한글", ""),
                 "promulgation_date": item.get("공포일자", ""),
                 "effective_date": item.get("시행일자", ""),
-                "article_no": "",   # 신구대조 연동 시 채움
+                "article_no": "",
                 "before_text": "",
                 "after_text": "",
             }
@@ -87,6 +132,7 @@ class LawApiClient:
         return [
             {
                 "law_id": "MOCK-001",
+                "law_mst": "",
                 "law_name": "소득세법",
                 "promulgation_date": since,
                 "effective_date": since,
@@ -95,3 +141,9 @@ class LawApiClient:
                 "after_text": "종합소득에 대한 소득세는 … 개정된 세율을 적용한다.",
             }
         ]
+
+
+def _extract_article_no(text: str) -> str:
+    """개정문 텍스트에서 첫 번째 조문 번호를 추출한다."""
+    m = re.search(r"제\d+조(?:의\d+)?(?:제\d+항)?", text)
+    return m.group() if m else ""
