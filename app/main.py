@@ -18,7 +18,19 @@ MOCK_REPO_ROOT = "./mock_repo"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    _auto_index_if_empty()
     yield
+
+
+def _auto_index_if_empty() -> None:
+    """ChromaDB 컬렉션이 비어 있으면 서버 시작 시 자동 인덱싱."""
+    indexer = CodeIndexer()
+    if indexer.collection.count() > 0:
+        return
+    print("ChromaDB가 비어 있습니다. 코드베이스 자동 인덱싱을 시작합니다...")
+    adapter = MockCodebaseAdapter(repo_root=MOCK_REPO_ROOT, indexer=indexer)
+    count = indexer.index(adapter)
+    print(f"자동 인덱싱 완료: {count}개 청크")
 
 
 app = FastAPI(
