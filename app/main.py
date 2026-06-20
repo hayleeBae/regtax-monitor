@@ -94,6 +94,7 @@ def list_changes(db: Session = Depends(get_session)) -> list[dict]:
             "effective_date": r.effective_date,
             "status": r.status,
             "ai_summary": r.ai_summary,
+            "ai_impact": r.ai_impact,
         }
         for r in rows
     ]
