@@ -262,14 +262,24 @@ def map_change(change_id: int, k: int = 5, db: Session = Depends(get_session)) -
 
 
 @app.get("/changes/{change_id}/mappings")
-def get_mappings(change_id: int, db: Session = Depends(get_session)) -> list[dict]:
-    """법령 변경에 매핑된 코드 위치 목록 조회."""
+def get_mappings(
+    change_id: int,
+    verified_only: bool = False,
+    db: Session = Depends(get_session),
+) -> list[dict]:
+    """
+    법령 변경에 매핑된 코드 위치 목록 조회.
+    verified_only=true 이면 담당자가 확인한 매핑만 반환.
+    """
     row = db.get(LawChange, change_id)
     if row is None:
         raise HTTPException(status_code=404, detail="변경 건을 찾을 수 없습니다.")
 
     article_id = f"{row.law_id}:{row.article_no}"
-    mappings = db.query(Mapping).filter_by(article_id=article_id).all()
+    q = db.query(Mapping).filter_by(article_id=article_id)
+    if verified_only:
+        q = q.filter(Mapping.verified == True)  # noqa: E712
+    mappings = q.order_by(Mapping.verified.desc(), Mapping.confidence.desc()).all()
     return [
         {
             "id": m.id,
@@ -280,6 +290,25 @@ def get_mappings(change_id: int, db: Session = Depends(get_session)) -> list[dic
         }
         for m in mappings
     ]
+
+
+@app.patch("/mappings/{mapping_id}/verify")
+def verify_mapping(
+    mapping_id: int,
+    verified: bool = True,
+    db: Session = Depends(get_session),
+) -> dict:
+    """
+    담당자가 매핑 정확성을 검증한다.
+    verified=true: 이 코드 위치가 해당 조문과 관련 있음을 확인.
+    verified=false: 잘못된 매핑으로 표시 (이후 apply에서 제외됨).
+    """
+    m = db.get(Mapping, mapping_id)
+    if m is None:
+        raise HTTPException(status_code=404, detail="매핑을 찾을 수 없습니다.")
+    m.verified = verified
+    db.commit()
+    return {"mapping_id": mapping_id, "path": m.path, "symbol": m.symbol, "verified": m.verified}
 
 
 @app.post("/changes/{change_id}/apply")
@@ -298,16 +327,30 @@ def apply(
         raise HTTPException(status_code=404, detail="변경 건을 찾을 수 없습니다.")
 
     article_id = f"{row.law_id}:{row.article_no}"
-    mappings = (
+
+    # verified 매핑이 있으면 우선 사용, 없으면 confidence 기준 fallback
+    verified_mappings = (
         db.query(Mapping)
-        .filter(Mapping.article_id == article_id, Mapping.confidence >= min_confidence)
+        .filter(Mapping.article_id == article_id, Mapping.verified == True)  # noqa: E712
         .order_by(Mapping.confidence.desc())
         .all()
     )
+    if verified_mappings:
+        mappings = verified_mappings
+        mapping_mode = "verified"
+    else:
+        mappings = (
+            db.query(Mapping)
+            .filter(Mapping.article_id == article_id, Mapping.confidence >= min_confidence)
+            .order_by(Mapping.confidence.desc())
+            .all()
+        )
+        mapping_mode = "confidence"
+
     if not mappings:
         raise HTTPException(
             status_code=422,
-            detail=f"신뢰도 {min_confidence} 이상 매핑이 없습니다. POST /changes/{change_id}/map 을 먼저 실행하세요.",
+            detail=f"사용 가능한 매핑이 없습니다. POST /changes/{change_id}/map 을 먼저 실행하세요.",
         )
 
     # 매핑된 파일의 실제 코드를 읽어 스니펫 조합
@@ -351,6 +394,7 @@ def apply(
         "proposal_id": proposal.id,
         "law_change_id": change_id,
         "approval_status": proposal.approval_status,
+        "mapping_mode": mapping_mode,   # "verified" | "confidence"
         "snippets_used": list(seen_paths),
         "diff_preview": diff_text[:400] + ("…" if len(diff_text) > 400 else ""),
     }
