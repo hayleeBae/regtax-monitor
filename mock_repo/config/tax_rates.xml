@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  국세청 세율 설정 파일.
+  소득세법 제55조, 법인세법 제55조 기준.
+  세율 개정 시 effective 날짜와 함께 구간 수치를 업데이트한다.
+-->
+<taxConfig>
+
+    <!-- 소득세법 제55조 제1항: 종합소득세율 (2024년 기준) -->
+    <incomeTax lawRef="소득세법 제55조" effective="2024-01-01">
+        <bracket no="1" upperLimit="14000000"    rate="0.06" deduction="0"/>
+        <bracket no="2" upperLimit="50000000"    rate="0.15" deduction="840000"/>
+        <bracket no="3" upperLimit="88000000"    rate="0.24" deduction="6240000"/>
+        <bracket no="4" upperLimit="150000000"   rate="0.35" deduction="15360000"/>
+        <bracket no="5" upperLimit="300000000"   rate="0.38" deduction="19860000"/>
+        <bracket no="6" upperLimit="500000000"   rate="0.40" deduction="25860000"/>
+        <bracket no="7" upperLimit="1000000000"  rate="0.42" deduction="35860000"/>
+        <bracket no="8" upperLimit="unlimited"   rate="0.45" deduction="65860000"/>
+    </incomeTax>
+
+    <!-- 법인세법 제55조: 법인세율 (2024년 기준) -->
+    <corporateTax lawRef="법인세법 제55조" effective="2024-01-01">
+        <bracket no="1" upperLimit="200000000"    rate="0.09"/>
+        <bracket no="2" upperLimit="20000000000"  rate="0.19"/>
+        <bracket no="3" upperLimit="300000000000" rate="0.21"/>
+        <bracket no="4" upperLimit="unlimited"    rate="0.24"/>
+    </corporateTax>
+
+</taxConfig>

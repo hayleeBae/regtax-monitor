@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+*.db
+.chroma/
+chroma_data/
+.DS_Store
+mock_repo/patches/
