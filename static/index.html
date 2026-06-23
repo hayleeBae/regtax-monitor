@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>국세 법령 변경 모니터링</title>
+  <style>
+    :root {
+      --bg: #f5f7fa;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --text: #1a202c;
+      --text-muted: #718096;
+      --primary: #3182ce;
+      --primary-hover: #2b6cb0;
+      --success: #38a169;
+      --danger: #e53e3e;
+      --warning: #d69e2e;
+      --header-bg: #1a365d;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--header-bg);
+      color: white;
+      padding: 0 24px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    }
+    .header-left { display: flex; align-items: baseline; gap: 12px; }
+    .header-left h1 { font-size: 17px; font-weight: 700; }
+    .header-left .subtitle { font-size: 11px; color: rgba(255,255,255,0.55); }
+    .header-right { display: flex; gap: 8px; }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 7px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+    .btn-secondary { background: rgba(255,255,255,0.14); color: white; border: 1px solid rgba(255,255,255,0.28); }
+    .btn-secondary:hover:not(:disabled) { background: rgba(255,255,255,0.24); }
+    .btn-outline { background: transparent; color: var(--primary); border: 1px solid var(--primary); }
+    .btn-outline:hover:not(:disabled) { background: #ebf8ff; }
+    .btn-success { background: var(--success); color: white; }
+    .btn-success:hover:not(:disabled) { background: #2f855a; }
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-danger:hover:not(:disabled) { background: #c53030; }
+    .btn-warning { background: #dd6b20; color: white; }
+    .btn-warning:hover:not(:disabled) { background: #c05621; }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+
+    /* ── Main layout ── */
+    main { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 12px;
+      text-align: center;
+      cursor: pointer;
+      transition: box-shadow 0.15s, border-color 0.15s;
+      user-select: none;
+    }
+    .stat-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .stat-card.active { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(49,130,206,0.2); }
+    .stat-count { font-size: 28px; font-weight: 700; display: block; }
+    .stat-label { font-size: 11px; color: var(--text-muted); margin-top: 3px; display: block; }
+    .stat-card[data-status="all"] .stat-count { color: #1a202c; }
+    .stat-card[data-status="new"] .stat-count { color: #718096; }
+    .stat-card[data-status="reviewing"] .stat-count { color: var(--primary); }
+    .stat-card[data-status="pending_apply"] .stat-count { color: #dd6b20; }
+    .stat-card[data-status="done"] .stat-count { color: var(--success); }
+
+    /* ── Change cards ── */
+    .change-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-bottom: 10px;
+      transition: box-shadow 0.15s;
+    }
+    .change-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .change-card.status-done { opacity: 0.6; }
+
+    .card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .card-title { font-size: 15px; font-weight: 600; }
+    .card-article { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .card-meta {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+    .card-summary {
+      font-size: 13px;
+      color: #4a5568;
+      line-height: 1.6;
+      background: #f7fafc;
+      border-left: 3px solid #cbd5e0;
+      padding: 8px 12px;
+      border-radius: 0 6px 6px 0;
+      margin-bottom: 12px;
+    }
+    .card-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+    /* ── Badges ── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge-new { background: #edf2f7; color: #4a5568; }
+    .badge-reviewing { background: #ebf8ff; color: #2b6cb0; }
+    .badge-pending { background: #fffaf0; color: #c05621; }
+    .badge-done { background: #f0fff4; color: #276749; }
+
+    /* ── Modal ── */
+    .modal {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal.hidden { display: none; }
+    .modal-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.5); }
+    .modal-content {
+      position: relative;
+      background: white;
+      border-radius: 12px;
+      width: 92%;
+      max-width: 820px;
+      max-height: 86vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .modal-header h3 { font-size: 15px; font-weight: 600; }
+    .modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-muted); line-height: 1; padding: 0; }
+    .modal-close:hover { color: var(--text); }
+    .modal-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+    .modal-footer {
+      padding: 12px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      flex-shrink: 0;
+    }
+
+    /* ── Diff viewer ── */
+    .diff-view {
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre;
+      overflow-x: auto;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .diff-add { color: #a6e3a1; background: rgba(166,227,161,0.1); display: block; }
+    .diff-del { color: #f38ba8; background: rgba(243,139,168,0.1); display: block; }
+    .diff-meta { color: #89b4fa; display: block; }
+    .diff-hunk { color: #cba6f7; display: block; }
+
+    /* ── Proposal explanation text ── */
+    .proposal-notes {
+      font-size: 13px;
+      line-height: 1.7;
+      color: #2d3748;
+      background: #f7fafc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .proposal-notes h1, .proposal-notes h2, .proposal-notes h3 {
+      font-size: 13px; font-weight: 700; margin: 8px 0 4px;
+    }
+    .diff-section-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+      margin-top: 12px;
+    }
+
+    /* ── Spinner ── */
+    .spinner {
+      width: 13px; height: 13px;
+      border: 2px solid transparent;
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Toast ── */
+    .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+    .toast {
+      background: #2d3748;
+      color: white;
+      padding: 11px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      max-width: 340px;
+      animation: slideUp 0.2s ease;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    }
+    .toast.success { background: #276749; }
+    .toast.error { background: #c53030; }
+    @keyframes slideUp { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    /* ── Empty state ── */
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+    .empty-state p { font-size: 14px; margin-bottom: 16px; }
+
+    /* ── Done text ── */
+    .done-text { font-size: 12px; color: var(--success); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <h1>국세 법령 변경 모니터링</h1>
+    <span class="subtitle">eHR 세무 코드 영향 분석</span>
+  </div>
+  <div class="header-right">
+    <button class="btn btn-secondary" id="btn-collect" onclick="doCollect()">법령 수집</button>
+    <button class="btn btn-secondary" onclick="loadChanges()">새로고침</button>
+  </div>
+</header>
+
+<main>
+  <div class="stats-bar">
+    <div class="stat-card active" data-status="all" onclick="setFilter('all')">
+      <span class="stat-count" id="count-all">0</span>
+      <span class="stat-label">전체</span>
+    </div>
+    <div class="stat-card" data-status="new" onclick="setFilter('new')">
+      <span class="stat-count" id="count-new">0</span>
+      <span class="stat-label">신규</span>
+    </div>
+    <div class="stat-card" data-status="reviewing" onclick="setFilter('reviewing')">
+      <span class="stat-count" id="count-reviewing">0</span>
+      <span class="stat-label">검토 중</span>
+    </div>
+    <div class="stat-card" data-status="pending_apply" onclick="setFilter('pending_apply')">
+      <span class="stat-count" id="count-pending">0</span>
+      <span class="stat-label">초안 대기</span>
+    </div>
+    <div class="stat-card" data-status="done" onclick="setFilter('done')">
+      <span class="stat-count" id="count-done">0</span>
+      <span class="stat-label">완료</span>
+    </div>
+  </div>
+
+  <div id="changes-list"></div>
+</main>
+
+<!-- Diff Modal -->
+<div id="modal" class="modal hidden">
+  <div class="modal-overlay" onclick="closeModal()"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="modal-title">코드 수정 초안</h3>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer" id="modal-footer"></div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+  let changes = [];
+  let currentFilter = 'all';
+  let currentProposalId = null;
+
+  // ── API helper ──────────────────────────────────────────────────────────
+  async function api(method, path, body) {
+    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (body !== undefined) opts.body = JSON.stringify(body);
+    const res = await fetch(path, opts);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || res.statusText);
+    }
+    return res.json();
+  }
+
+  // ── Toast ───────────────────────────────────────────────────────────────
+  function toast(msg, type = '') {
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = msg;
+    document.getElementById('toast-container').appendChild(el);
+    setTimeout(() => el.remove(), 4000);
+  }
+
+  // ── Data loading ────────────────────────────────────────────────────────
+  async function loadChanges() {
+    try {
+      changes = await api('GET', '/changes');
+      updateStats();
+      renderList();
+    } catch (e) {
+      toast('목록 조회 실패: ' + e.message, 'error');
+    }
+  }
+
+  function updateStats() {
+    const counts = { all: changes.length, new: 0, reviewing: 0, pending_apply: 0, done: 0 };
+    for (const c of changes) {
+      if (counts[c.status] !== undefined) counts[c.status]++;
+    }
+    document.getElementById('count-all').textContent = counts.all;
+    document.getElementById('count-new').textContent = counts.new;
+    document.getElementById('count-reviewing').textContent = counts.reviewing;
+    document.getElementById('count-pending').textContent = counts.pending_apply;
+    document.getElementById('count-done').textContent = counts.done;
+  }
+
+  function setFilter(status) {
+    currentFilter = status;
+    document.querySelectorAll('.stat-card').forEach(el => {
+      el.classList.toggle('active', el.dataset.status === status);
+    });
+    renderList();
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────────
+  function renderList() {
+    const list = document.getElementById('changes-list');
+    const filtered = currentFilter === 'all'
+      ? changes
+      : changes.filter(c => c.status === currentFilter);
+
+    if (filtered.length === 0) {
+      list.innerHTML = `
+        <div class="empty-state">
+          <p>표시할 법령 변경 건이 없습니다.</p>
+          <button class="btn btn-primary" onclick="doCollect()">법령 수집 시작</button>
+        </div>`;
+      return;
+    }
+
+    list.innerHTML = filtered.map(renderCard).join('');
+  }
+
+  function statusBadge(status) {
+    const map = {
+      new: ['신규', 'badge-new'],
+      reviewing: ['검토 중', 'badge-reviewing'],
+      pending_apply: ['초안 대기', 'badge-pending'],
+      done: ['완료', 'badge-done'],
+    };
+    const [label, cls] = map[status] || [status, 'badge-new'];
+    return `<span class="badge ${cls}">${label}</span>`;
+  }
+
+  function fmtDate(d) {
+    if (!d || d.length < 8) return d || '-';
+    return `${d.slice(0,4)}.${d.slice(4,6)}.${d.slice(6,8)}`;
+  }
+
+  function renderActions(c) {
+    if (c.status === 'new' && !c.ai_summary) {
+      return `<button class="btn btn-primary btn-sm" onclick="doAnalyze(event, ${c.id})">분석 요청</button>`;
+    }
+    if (c.status === 'reviewing') {
+      return `
+        <button class="btn btn-outline btn-sm" onclick="doMap(event, ${c.id})">매핑</button>
+        <button class="btn btn-primary btn-sm" onclick="doApply(event, ${c.id})">초안 생성</button>`;
+    }
+    if (c.status === 'pending_apply') {
+      return `<button class="btn btn-warning btn-sm" onclick="openProposals(${c.id})">초안 검토</button>`;
+    }
+    if (c.status === 'done') {
+      return `<span class="done-text">✓ 처리 완료</span>`;
+    }
+    return '';
+  }
+
+  function renderCard(c) {
+    const summary = c.ai_summary
+      ? `<div class="card-summary">${esc(c.ai_summary.slice(0, 240))}${c.ai_summary.length > 240 ? '…' : ''}</div>`
+      : '';
+
+    return `
+      <div class="change-card status-${c.status}" id="card-${c.id}">
+        <div class="card-header">
+          <div>
+            <div class="card-title">${esc(c.law_name)}</div>
+            <div class="card-article">${esc(c.article_no || '-')}</div>
+          </div>
+          ${statusBadge(c.status)}
+        </div>
+        <div class="card-meta">
+          <span>공포일 ${fmtDate(c.promulgation_date)}</span>
+          <span>시행일 ${fmtDate(c.effective_date)}</span>
+        </div>
+        ${summary}
+        <div class="card-actions">${renderActions(c)}</div>
+      </div>`;
+  }
+
+  function esc(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Action handlers ─────────────────────────────────────────────────────
+  async function doCollect() {
+    const btn = document.getElementById('btn-collect');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> 수집 중…';
+    try {
+      const res = await api('POST', '/collect');
+      toast(`수집 완료 — ${res.saved}건 신규 저장 (총 ${res.fetched}건)`, 'success');
+      await loadChanges();
+    } catch (e) {
+      toast('수집 실패: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '법령 수집';
+    }
+  }
+
+  async function doAnalyze(evt, id) {
+    const btn = evt.target;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+    try {
+      await api('POST', `/changes/${id}/analyze`);
+      toast('분석 완료', 'success');
+      await loadChanges();
+    } catch (e) {
+      toast('분석 실패: ' + e.message, 'error');
+      btn.disabled = false;
+      btn.innerHTML = '분석 요청';
+    }
+  }
+
+  async function doMap(evt, id) {
+    const btn = evt.target;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> 매핑 중…';
+    try {
+      const res = await api('POST', `/changes/${id}/map`);
+      toast(`매핑 완료 — ${res.saved}개 코드 위치 저장`, 'success');
+      await loadChanges();
+    } catch (e) {
+      toast('매핑 실패: ' + e.message, 'error');
+      btn.disabled = false;
+      btn.innerHTML = '매핑';
+    }
+  }
+
+  async function doApply(evt, id) {
+    const btn = evt.target;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> 생성 중…';
+    try {
+      await api('POST', `/changes/${id}/apply`);
+      toast('초안 생성 완료', 'success');
+      await loadChanges();
+    } catch (e) {
+      toast('초안 생성 실패: ' + e.message, 'error');
+      btn.disabled = false;
+      btn.innerHTML = '초안 생성';
+    }
+  }
+
+  // ── Proposal modal ───────────────────────────────────────────────────────
+  async function openProposals(changeId) {
+    const modal = document.getElementById('modal');
+    const body = document.getElementById('modal-body');
+    const footer = document.getElementById('modal-footer');
+    const titleEl = document.getElementById('modal-title');
+
+    const change = changes.find(c => c.id === changeId);
+    titleEl.textContent = `코드 수정 초안 — ${change?.law_name ?? ''} ${change?.article_no ?? ''}`;
+    body.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:32px">로딩 중…</p>';
+    footer.innerHTML = '';
+    currentProposalId = null;
+    modal.classList.remove('hidden');
+
+    try {
+      const proposals = await api('GET', `/changes/${changeId}/proposals`);
+      const drafts = proposals.filter(p => p.approval_status === 'draft');
+
+      if (drafts.length === 0) {
+        body.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:32px">검토 대기 초안이 없습니다.</p>';
+        return;
+      }
+
+      const p = drafts[0];
+      currentProposalId = p.id;
+
+      const createdAt = p.created_at ? p.created_at.replace('T', ' ').slice(0, 16) : '-';
+      body.innerHTML = `
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
+          초안 #${p.id} &nbsp;·&nbsp; ${esc(p.model_used ?? '-')} &nbsp;·&nbsp; ${esc(createdAt)}
+        </p>
+        <div class="diff-view">${renderDiff(p.diff)}</div>`;
+
+      footer.innerHTML = `
+        <button class="btn btn-danger" onclick="doReject()">거절</button>
+        <button class="btn btn-success" onclick="doApprove()">승인</button>`;
+    } catch (e) {
+      body.innerHTML = `<p style="color:var(--danger);text-align:center;padding:32px">불러오기 실패: ${esc(e.message)}</p>`;
+    }
+  }
+
+  function renderDiff(raw) {
+    if (!raw) return '<p style="color:var(--text-muted);padding:12px">(내용 없음)</p>';
+
+    const diffBlockRe = /```(?:diff)?\s*\n([\s\S]*?)```/g;
+    const sections = [];
+    let lastIdx = 0;
+    let match;
+
+    while ((match = diffBlockRe.exec(raw)) !== null) {
+      if (match.index > lastIdx) {
+        const txt = raw.slice(lastIdx, match.index).trim();
+        if (txt) sections.push({ type: 'text', content: txt });
+      }
+      sections.push({ type: 'diff', content: match[1] });
+      lastIdx = match.index + match[0].length;
+    }
+    if (lastIdx < raw.length) {
+      const txt = raw.slice(lastIdx).trim();
+      if (txt) sections.push({ type: 'text', content: txt });
+    }
+
+    // diff 블록이 전혀 없으면 순수 diff로 처리
+    if (sections.length === 0 || sections.every(s => s.type === 'text')) {
+      return `<div class="diff-view">${colorDiff(raw)}</div>`;
+    }
+
+    let html = '';
+    let diffCount = 0;
+    for (const s of sections) {
+      if (s.type === 'text') {
+        html += `<div class="proposal-notes">${esc(s.content)}</div>`;
+      } else {
+        diffCount++;
+        html += `<div class="diff-section-label">변경 파일 ${diffCount}</div>`;
+        html += `<div class="diff-view">${colorDiff(s.content)}</div>`;
+      }
+    }
+    return html;
+  }
+
+  function colorDiff(diff) {
+    return diff.split('\n').map(line => {
+      if (line.startsWith('+++') || line.startsWith('---')) return `<span class="diff-meta">${esc(line)}</span>`;
+      if (line.startsWith('@@')) return `<span class="diff-hunk">${esc(line)}</span>`;
+      if (line.startsWith('+')) return `<span class="diff-add">${esc(line)}</span>`;
+      if (line.startsWith('-')) return `<span class="diff-del">${esc(line)}</span>`;
+      return esc(line);
+    }).join('\n');
+  }
+
+  async function doApprove() {
+    if (!currentProposalId) return;
+    const btn = document.querySelector('#modal-footer .btn-success');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> 승인 중…';
+    try {
+      await api('POST', `/proposals/${currentProposalId}/approve`);
+      toast('초안이 승인되었습니다.', 'success');
+      closeModal();
+      await loadChanges();
+    } catch (e) {
+      toast('승인 실패: ' + e.message, 'error');
+      btn.disabled = false;
+      btn.innerHTML = '승인';
+    }
+  }
+
+  async function doReject() {
+    if (!currentProposalId) return;
+    const btn = document.querySelector('#modal-footer .btn-danger');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+    try {
+      await api('POST', `/proposals/${currentProposalId}/reject`);
+      toast('초안이 거절되었습니다.', '');
+      closeModal();
+      await loadChanges();
+    } catch (e) {
+      toast('거절 실패: ' + e.message, 'error');
+      btn.disabled = false;
+      btn.innerHTML = '거절';
+    }
+  }
+
+  function closeModal() {
+    document.getElementById('modal').classList.add('hidden');
+    currentProposalId = null;
+  }
+
+  // ESC key closes modal
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+  // ── Init ─────────────────────────────────────────────────────────────────
+  loadChanges();
+</script>
+</body>
+</html>

@@ -39,6 +39,7 @@ class ClaudeClient(LlmClient):
             "아래 법령 변경에 맞춰 코드를 수정하는 patch(unified diff) 초안을 작성하세요. "
             "확실하지 않은 부분은 주석으로 남기고, 절대 임의로 자동 적용하지 마세요. "
             "사람이 검토할 초안입니다.\n\n"
+            "응답은 반드시 ```diff ... ``` 코드블록 하나만 출력하세요. 설명 텍스트는 diff 안에 주석으로 작성하세요.\n\n"
             f"[법령 변경]\n{law_diff}\n\n[관련 코드 스니펫]\n{joined}"
         )
         resp = self.client.messages.create(
@@ -46,7 +47,17 @@ class ClaudeClient(LlmClient):
             max_tokens=4096,
             messages=[{"role": "user", "content": prompt}],
         )
-        return "".join(b.text for b in resp.content if b.type == "text")
+        text = "".join(b.text for b in resp.content if b.type == "text")
+        return _extract_diff(text)
+
+
+def _extract_diff(text: str) -> str:
+    """응답 텍스트에서 ```diff ... ``` 또는 ``` ... ``` 블록을 추출한다."""
+    m = re.search(r"```(?:diff)?\s*\n(.*?)```", text, re.DOTALL)
+    if m:
+        return m.group(1).rstrip()
+    # 코드블록이 없으면 원문 그대로 (하위 호환)
+    return text.strip()
 
 
 def _parse_json_response(text: str, required: tuple[str, ...] = ()) -> dict:

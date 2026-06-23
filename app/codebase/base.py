@@ -37,3 +37,7 @@ class CodebaseAdapter(ABC):
     def apply_patch(self, proposal_id: int, diff: str) -> str:
         """승인된 patch 반영(PR/commit). 반드시 사람 승인 후에만 호출."""
         raise NotImplementedError
+
+    def find_usages(self, class_name: str, max_results: int = 5) -> list[str]:
+        """class_name을 참조하는 파일 경로 목록. 기본 구현은 빈 리스트."""
+        return []

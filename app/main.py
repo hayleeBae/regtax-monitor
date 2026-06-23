@@ -1,25 +1,73 @@
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.codebase.mock_adapter import MockCodebaseAdapter
+from app.codebase.real_adapter import RealCodebaseAdapter
 from app.collector.law_api import LawApiClient
 from app.db.database import init_db, get_session
 from app.db.models import LawChange, Mapping, PatchProposal, Review, SyncState
 from app.embedding.indexer import CodeIndexer
 from app.llm.claude_client import ClaudeClient
+from config import settings
 
 MOCK_REPO_ROOT = "./mock_repo"
+
+if settings.hf_hub_disable_ssl:
+    import truststore
+    truststore.inject_into_ssl()
+
+
+def _make_adapter(indexer=None):
+    """REPO_ROOT 설정 여부에 따라 Real/Mock 어댑터를 반환한다."""
+    if settings.repo_root:
+        return RealCodebaseAdapter(repo_root=settings.repo_root, indexer=indexer)
+    return MockCodebaseAdapter(repo_root=MOCK_REPO_ROOT, indexer=indexer)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
     _auto_index_if_empty()
+    scheduler = _start_scheduler()
     yield
+    if scheduler:
+        scheduler.shutdown()
+
+
+def _start_scheduler():
+    # .env에서 SCHEDULER_ENABLED=true 로 설정하면 활성화된다.
+    if not settings.scheduler_enabled:
+        return None
+
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from app.db.database import get_session as _get_session
+
+    def _scheduled_collect():
+        db = next(_get_session())
+        try:
+            collect(db)
+            print(f"[스케줄러] 법령 수집 완료")
+        except Exception as e:
+            print(f"[스케줄러] 수집 오류: {e}")
+        finally:
+            db.close()
+
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(
+        _scheduled_collect,
+        "interval",
+        hours=settings.scheduler_interval_hours,
+        id="collect_job",
+    )
+    scheduler.start()
+    print(f"[스케줄러] 시작 — {settings.scheduler_interval_hours}시간 간격으로 법령 수집")
+    return scheduler
 
 
 def _auto_index_if_empty() -> None:
@@ -28,7 +76,7 @@ def _auto_index_if_empty() -> None:
     if indexer.collection.count() > 0:
         return
     print("ChromaDB가 비어 있습니다. 코드베이스 자동 인덱싱을 시작합니다...")
-    adapter = MockCodebaseAdapter(repo_root=MOCK_REPO_ROOT, indexer=indexer)
+    adapter = _make_adapter(indexer=indexer)
     count = indexer.index(adapter)
     print(f"자동 인덱싱 완료: {count}개 청크")
 
@@ -38,6 +86,12 @@ app = FastAPI(
     version="0.0.1",
     lifespan=lifespan,
 )
+
+
+@app.get("/", response_class=HTMLResponse)
+def ui():
+    with open("static/index.html", encoding="utf-8") as f:
+        return HTMLResponse(f.read())
 
 
 @app.get("/health")
@@ -233,7 +287,7 @@ def index_codebase() -> dict:
     실제 코드 연동 시 MOCK_REPO_ROOT를 실제 repo 경로로 교체.
     """
     indexer = CodeIndexer()
-    adapter = MockCodebaseAdapter(repo_root=MOCK_REPO_ROOT, indexer=indexer)
+    adapter = _make_adapter(indexer=indexer)
     count = indexer.index(adapter)
     return {"indexed_chunks": count}
 
@@ -348,7 +402,7 @@ def verify_mapping(
 @app.post("/changes/{change_id}/apply")
 def apply(
     change_id: int,
-    min_confidence: float = 0.2,
+    min_confidence: float = 0.0,
     db: Session = Depends(get_session),
 ) -> dict:
     """
@@ -388,7 +442,7 @@ def apply(
         )
 
     # 매핑된 파일의 실제 코드를 읽어 스니펫 조합
-    adapter = MockCodebaseAdapter(repo_root=MOCK_REPO_ROOT)
+    adapter = _make_adapter()
     seen_paths: set[str] = set()
     snippets: list[str] = []
     for m in mappings:
@@ -400,6 +454,20 @@ def apply(
             snippets.append(f"// {m.path}\n{code}")
         except FileNotFoundError:
             pass
+
+    # 코드 그래프 추적: 매핑된 클래스를 참조하는 Service/DAO 파일 자동 추가
+    from pathlib import Path as _Path
+    for m in mappings:
+        class_name = _Path(m.path).stem
+        for usage_path in adapter.find_usages(class_name, max_results=3):
+            if usage_path in seen_paths:
+                continue
+            seen_paths.add(usage_path)
+            try:
+                code = adapter.read_file(usage_path)
+                snippets.append(f"// {usage_path} [참조: {class_name}]\n{code}")
+            except FileNotFoundError:
+                pass
 
     law_diff = (
         f"[법령] {row.law_name} {row.article_no}\n\n"
@@ -455,6 +523,30 @@ def list_proposals(change_id: int, db: Session = Depends(get_session)) -> list[d
     ]
 
 
+@app.get("/proposals")
+def list_all_proposals(db: Session = Depends(get_session)) -> list[dict]:
+    """전체 patch 초안 목록 조회 (법령 정보 포함)."""
+    proposals = (
+        db.query(PatchProposal)
+        .order_by(PatchProposal.created_at.desc())
+        .all()
+    )
+    result = []
+    for p in proposals:
+        change = db.get(LawChange, p.law_change_id)
+        result.append({
+            "id": p.id,
+            "law_change_id": p.law_change_id,
+            "law_name": change.law_name if change else None,
+            "article_no": change.article_no if change else None,
+            "approval_status": p.approval_status,
+            "model_used": p.model_used,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "diff": p.diff,
+        })
+    return result
+
+
 @app.post("/proposals/{proposal_id}/approve")
 def approve(proposal_id: int, db: Session = Depends(get_session)) -> dict:
     """
@@ -467,7 +559,7 @@ def approve(proposal_id: int, db: Session = Depends(get_session)) -> dict:
     if proposal.approval_status != "draft":
         raise HTTPException(status_code=409, detail=f"이미 처리된 초안입니다: {proposal.approval_status}")
 
-    adapter = MockCodebaseAdapter(repo_root=MOCK_REPO_ROOT)
+    adapter = _make_adapter()
     patch_path = adapter.apply_patch(proposal_id=proposal_id, diff=proposal.diff)
 
     proposal.approval_status = "approved"
