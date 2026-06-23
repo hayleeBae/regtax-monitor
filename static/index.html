@@ -160,6 +160,40 @@
     .badge-pending { background: #fffaf0; color: #c05621; }
     .badge-done { background: #f0fff4; color: #276749; }
 
+    /* ── Mapping panel ── */
+    .btn-link {
+      background: none; border: none; color: var(--primary);
+      font-size: 12px; cursor: pointer; padding: 4px 0; text-decoration: underline;
+    }
+    .btn-link:hover { color: var(--primary-hover); }
+    .card-mappings { margin-top: 10px; }
+    .mapping-empty { font-size: 12px; color: var(--text-muted); padding: 4px 0; }
+    .mapping-group-title {
+      font-size: 11px; font-weight: 700; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: .04em; margin: 8px 0 4px;
+    }
+    .mapping-row {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; padding: 5px 8px; border-radius: 6px; background: #f7fafc;
+      margin-bottom: 4px;
+    }
+    .mapping-badge {
+      flex-shrink: 0; padding: 2px 8px; border-radius: 20px;
+      font-size: 10px; font-weight: 600; white-space: nowrap;
+    }
+    .badge-dict { background: #f0fff4; color: #276749; }   /* 🎯 사전 정확매칭 */
+    .badge-rag  { background: #ebf8ff; color: #2b6cb0; }   /* 🔍 RAG 추정 */
+    .mapping-symbol {
+      flex-shrink: 0; font-family: 'Consolas', 'Monaco', monospace;
+      font-weight: 600; color: var(--text);
+    }
+    .mapping-path {
+      flex: 1; color: var(--text-muted); overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left;
+    }
+    .mapping-conf { flex-shrink: 0; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .mapping-verified { flex-shrink: 0; color: var(--success); font-weight: 600; }
+
     /* ── Modal ── */
     .modal {
       position: fixed;
@@ -468,6 +502,10 @@
         </div>
         ${summary}
         <div class="card-actions">${renderActions(c)}</div>
+        ${['reviewing', 'pending_apply', 'done'].includes(c.status)
+          ? `<button class="btn-link" onclick="toggleMappings(${c.id})" id="map-toggle-${c.id}">🔎 매핑 보기</button>`
+          : ''}
+        <div class="card-mappings" id="mappings-${c.id}"></div>
       </div>`;
   }
 
@@ -513,13 +551,79 @@
     btn.innerHTML = '<span class="spinner"></span> 매핑 중…';
     try {
       const res = await api('POST', `/changes/${id}/map`);
-      toast(`매핑 완료 — ${res.saved}개 코드 위치 저장`, 'success');
+      const dm = res.dict_matches ?? [];
+      const terms = dm.slice(0, 5).map(m => `${m.term}(${m.code})`).join(', ');
+      const extra = dm.length ? ` · 사전매칭: ${terms}${dm.length > 5 ? ' …' : ''}` : '';
+      toast(`매핑 완료 — ${res.saved}개 위치 저장${extra}`, 'success');
       await loadChanges();
+      await showMappings(id);   // 매핑 직후 패널 자동 펼침
     } catch (e) {
       toast('매핑 실패: ' + e.message, 'error');
       btn.disabled = false;
       btn.innerHTML = '매핑';
     }
+  }
+
+  // ── Mapping panel (사전 정확매칭 vs RAG 추정 구분 표시) ────────────────────
+  const DICT_CONF_MIN = 0.7;  // 사전 부트스트랩 시드의 최저 confidence (이 이상이면 정확매칭)
+
+  async function toggleMappings(id) {
+    const panel = document.getElementById(`mappings-${id}`);
+    if (panel.dataset.open === '1') {
+      panel.innerHTML = '';
+      panel.dataset.open = '';
+      const t = document.getElementById(`map-toggle-${id}`);
+      if (t) t.textContent = '🔎 매핑 보기';
+      return;
+    }
+    await showMappings(id);
+  }
+
+  async function showMappings(id) {
+    const panel = document.getElementById(`mappings-${id}`);
+    if (!panel) return;
+    panel.innerHTML = '<div class="mapping-empty">로딩 중…</div>';
+    panel.dataset.open = '1';
+    const toggle = document.getElementById(`map-toggle-${id}`);
+    if (toggle) toggle.textContent = '🔼 매핑 접기';
+    try {
+      const rows = await api('GET', `/changes/${id}/mappings`);
+      panel.innerHTML = renderMappings(rows);
+    } catch (e) {
+      panel.innerHTML = `<div class="mapping-empty">매핑 조회 실패: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function renderMappings(rows) {
+    if (!rows || rows.length === 0) {
+      return '<div class="mapping-empty">저장된 매핑이 없습니다. [매핑] 버튼을 먼저 실행하세요.</div>';
+    }
+    const dict = rows.filter(r => r.confidence >= DICT_CONF_MIN);
+    const rag = rows.filter(r => r.confidence < DICT_CONF_MIN);
+    const row = (r, kind) => {
+      const badge = kind === 'dict'
+        ? '<span class="mapping-badge badge-dict">🎯 사전</span>'
+        : '<span class="mapping-badge badge-rag">🔍 RAG</span>';
+      const verified = r.verified ? '<span class="mapping-verified">✓ 검증</span>' : '';
+      return `
+        <div class="mapping-row">
+          ${badge}
+          <span class="mapping-symbol">${esc(r.symbol || '-')}</span>
+          <span class="mapping-path" title="${esc(r.path)}">${esc(r.path)}</span>
+          <span class="mapping-conf">${Number(r.confidence).toFixed(2)}</span>
+          ${verified}
+        </div>`;
+    };
+    let html = '';
+    if (dict.length) {
+      html += `<div class="mapping-group-title">🎯 사전 정확매칭 (${dict.length})</div>`
+            + dict.map(r => row(r, 'dict')).join('');
+    }
+    if (rag.length) {
+      html += `<div class="mapping-group-title">🔍 RAG 추정 (${rag.length})</div>`
+            + rag.map(r => row(r, 'rag')).join('');
+    }
+    return html;
   }
 
   async function doApply(evt, id) {

@@ -18,6 +18,7 @@ class CodeIndexer:
         self.client = chromadb.PersistentClient(path=persist_dir)
         self.collection = self.client.get_or_create_collection("code")
         self._model = None
+        self._term_dict = None
 
     @property
     def model(self):
@@ -25,6 +26,21 @@ class CodeIndexer:
             from sentence_transformers import SentenceTransformer
             self._model = SentenceTransformer(settings.embedding_model)
         return self._model
+
+    @property
+    def term_dict(self) -> dict:
+        """컬럼코드 → 한글명 사전 (repo_root 비면 빈 사전 → enrich no-op)."""
+        if self._term_dict is None:
+            from app.embedding.term_dict import load
+            self._term_dict = load(settings.repo_root)
+        return self._term_dict
+
+    def _enrich(self, chunk: str) -> str:
+        """암호 컬럼코드(a0121 등)에 한글명 헤더를 붙여 임베딩 검색이 가능하게 한다."""
+        from app.embedding.term_dict import build_header
+
+        header = build_header(chunk, self.term_dict)
+        return f"{header}\n{chunk}" if header else chunk
 
     def index(self, adapter) -> int:
         """CodebaseAdapter의 파일을 청킹 후 임베딩하여 벡터DB에 저장. 청크 수 반환."""
@@ -37,11 +53,12 @@ class CodeIndexer:
             chunks = self._chunk(path, text)
             for i, chunk in enumerate(chunks):
                 chunk_id = f"{path}::{i}"
-                emb = self.model.encode(chunk).tolist()
+                doc = self._enrich(chunk)
+                emb = self.model.encode(doc).tolist()
                 self.collection.upsert(
                     ids=[chunk_id],
                     embeddings=[emb],
-                    documents=[chunk],
+                    documents=[doc],
                     metadatas=[{"path": path, "chunk": i}],
                 )
                 count += 1

@@ -309,8 +309,6 @@ def map_change(change_id: int, k: int = 5, db: Session = Depends(get_session)) -
 
     indexer = CodeIndexer()
     hits = indexer.search(query, k=k)
-    if not hits:
-        return {"mapped": 0, "note": "인덱싱된 코드가 없습니다. POST /index 를 먼저 실행하세요."}
 
     # 같은 파일의 여러 청크가 동일 (path, symbol)로 반환될 수 있으므로
     # 최고 점수 청크만 남긴다 (hits는 이미 score 내림차순).
@@ -320,23 +318,46 @@ def map_change(change_id: int, k: int = 5, db: Session = Depends(get_session)) -
         if key not in best:
             best[key] = hit
 
+    # 후보 = (path, symbol, confidence, source) 통합 목록.
+    candidates: list[tuple[str, str, float, str]] = [
+        (h.path, h.symbol, h.score, "rag") for h in best.values()
+    ]
+
+    # ── 사전 기반 부트스트랩 ──────────────────────────────────────
+    # 법령 텍스트 ↔ 컬럼코드 '정확 어휘 일치' → 컬럼코드를 symbol로 고신뢰 시드.
+    # 암호 컬럼명을 임베딩이 못 잡는 한계를 보완한다.
+    from app.embedding.term_dict import load, load_locations, match_codes, rank_locations
+
+    table = load(settings.repo_root)
+    loc = load_locations(settings.repo_root)
+    dict_matches = match_codes(query, table)
+    for code, term, score in dict_matches:
+        conf = round(min(0.99, 0.7 + score / 100), 3)  # 0.7~0.99 (퍼지 RAG보다 항상 위)
+        for path in rank_locations(loc.get(code, []))[:3]:
+            candidates.append((path, code, conf, "dict"))
+
+    if not candidates:
+        return {"mapped": 0, "note": "인덱싱된 코드도, 사전 매칭도 없습니다. POST /index 를 먼저 실행하세요."}
+
+    repo_name = (settings.repo_root.replace("\\", "/").rstrip("/").split("/")[-1]
+                 or "mock_repo")
     article_id = f"{row.law_id}:{row.article_no}"
     saved = 0
-    for hit in best.values():
+    for path, symbol, conf, _src in candidates:
         exists = (
             db.query(Mapping)
-            .filter_by(article_id=article_id, path=hit.path, symbol=hit.symbol)
+            .filter_by(article_id=article_id, path=path, symbol=symbol)
             .first()
         )
         if exists:
             continue
         db.add(Mapping(
             article_id=article_id,
-            repo="mock_repo",
-            path=hit.path,
-            symbol=hit.symbol,
+            repo=repo_name,
+            path=path,
+            symbol=symbol,
             change_type=row.change_type or "unknown",
-            confidence=hit.score,
+            confidence=conf,
             verified=False,
         ))
         saved += 1
@@ -344,7 +365,10 @@ def map_change(change_id: int, k: int = 5, db: Session = Depends(get_session)) -
     db.commit()
     return {
         "law_change_id": change_id,
-        "hits": [{"path": h.path, "symbol": h.symbol, "score": h.score} for h in hits],
+        "rag_hits": [{"path": h.path, "symbol": h.symbol, "score": h.score} for h in hits],
+        "dict_matches": [
+            {"code": c, "term": t, "score": s} for c, t, s in dict_matches
+        ],
         "saved": saved,
     }
 
