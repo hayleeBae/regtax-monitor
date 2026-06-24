@@ -16,6 +16,7 @@ class LlmClient(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def propose_patch(self, law_diff: str, code_snippets: list[str]) -> str:
-        """법령 변경 + 매핑된 코드 스니펫 -> 수정안(diff 초안) 생성."""
+    def propose_edits(self, law_diff: str, code_snippets: list[str]) -> str:
+        """법령 변경 + 매핑된 코드 스니펫 -> 앵커 기반 검색/치환 편집 블록 생성.
+        서버가 이를 실제 unified diff로 변환한다(build_unified_diff)."""
         raise NotImplementedError

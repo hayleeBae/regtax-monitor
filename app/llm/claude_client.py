@@ -1,3 +1,4 @@
+import difflib
 import json
 import re
 
@@ -33,31 +34,87 @@ class ClaudeClient(LlmClient):
         text = "".join(b.text for b in resp.content if b.type == "text")
         return _parse_json_response(text, required=("summary", "impact"))
 
-    def propose_patch(self, law_diff: str, code_snippets: list[str]) -> str:
+    def propose_edits(self, law_diff: str, code_snippets: list[str]) -> str:
+        """앵커 기반 검색/치환 편집 블록(원문)을 생성한다.
+        줄번호가 아닌 '원본 그대로 복사한 앵커'로 위치를 지정 → 거대 XML에도 적용 가능.
+        실제 unified diff 변환은 서버(build_unified_diff)가 담당한다."""
         joined = "\n\n---\n\n".join(code_snippets)
         prompt = (
-            "아래 법령 변경에 맞춰 코드를 수정하는 patch(unified diff) 초안을 작성하세요. "
-            "확실하지 않은 부분은 주석으로 남기고, 절대 임의로 자동 적용하지 마세요. "
-            "사람이 검토할 초안입니다.\n\n"
-            "응답은 반드시 ```diff ... ``` 코드블록 하나만 출력하세요. 설명 텍스트는 diff 안에 주석으로 작성하세요.\n\n"
-            f"[법령 변경]\n{law_diff}\n\n[관련 코드 스니펫]\n{joined}"
+            "아래 법령 변경에 맞춰 코드를 수정하는 '검색/치환 편집'을 작성하세요. "
+            "줄번호 대신, 원본을 그대로 복사한 앵커로 위치를 지정합니다.\n\n"
+            "규칙:\n"
+            "1. 각 편집은 정확히 다음 형식으로만 출력:\n"
+            "@@@FILE: <파일경로>\n@@@SEARCH\n<원본에서 그대로 복사한 기존 줄(들)>\n"
+            "@@@REPLACE\n<치환할 내용>\n@@@END\n"
+            "2. SEARCH 블록은 제공된 코드에서 공백·들여쓰기까지 '한 글자도 바꾸지 말고' 그대로 복사할 것.\n"
+            "3. 새 항목 추가는 기존 앵커 줄을 SEARCH로 두고, REPLACE에 '그 앵커 줄 + 추가할 새 줄'을 넣어 표현할 것.\n"
+            "4. 되도록 실제 동작하는 코드를 작성하되, 신설 컬럼코드처럼 확정 불가한 값은 "
+            "가장 그럴듯한 값으로 채우고 그 줄 끝에 '-- TODO 확인' 주석을 달 것.\n"
+            "5. 설명 문장은 출력하지 말고 편집 블록만 출력. "
+            "관련된 VO(.java) 필드 선언과 매퍼(XML) 쿼리를 함께 수정할 것.\n\n"
+            f"[법령 변경]\n{law_diff}\n\n[관련 코드 — SEARCH 앵커는 여기서 복사]\n{joined}"
         )
         resp = self.client.messages.create(
             model=self.model,
             max_tokens=4096,
             messages=[{"role": "user", "content": prompt}],
         )
-        text = "".join(b.text for b in resp.content if b.type == "text")
-        return _extract_diff(text)
+        return "".join(b.text for b in resp.content if b.type == "text").strip()
 
 
-def _extract_diff(text: str) -> str:
-    """응답 텍스트에서 ```diff ... ``` 또는 ``` ... ``` 블록을 추출한다."""
-    m = re.search(r"```(?:diff)?\s*\n(.*?)```", text, re.DOTALL)
-    if m:
-        return m.group(1).rstrip()
-    # 코드블록이 없으면 원문 그대로 (하위 호환)
-    return text.strip()
+_EDIT_RE = re.compile(
+    r"@@@FILE:\s*(?P<file>.+?)[ \t]*\n@@@SEARCH\n(?P<search>.*?)\n@@@REPLACE\n"
+    r"(?P<replace>.*?)\n@@@END",
+    re.DOTALL,
+)
+
+
+def parse_edits(text: str) -> list[dict]:
+    """모델 응답에서 @@@FILE/@@@SEARCH/@@@REPLACE/@@@END 편집 블록들을 추출."""
+    return [
+        {"file": m.group("file").strip(),
+         "search": m.group("search"),
+         "replace": m.group("replace")}
+        for m in _EDIT_RE.finditer(text)
+    ]
+
+
+def build_unified_diff(edits: list[dict], read_file) -> tuple[str, list[str], int]:
+    """앵커 편집을 실제 파일에 대입해 줄번호가 정확한 unified diff를 만든다.
+    반환: (diff_text, warnings, applied_count). 앵커를 못 찾으면 경고로 남기고 건너뛴다."""
+    order: list[str] = []
+    groups: dict[str, list[dict]] = {}
+    for e in edits:
+        groups.setdefault(e["file"], [])
+        if e["file"] not in order:
+            order.append(e["file"])
+        groups[e["file"]].append(e)
+
+    sections: list[str] = []
+    warnings: list[str] = []
+    applied = 0
+    for path in order:
+        try:
+            original = read_file(path)
+        except (FileNotFoundError, OSError):
+            warnings.append(f"{path}: 파일을 읽을 수 없음")
+            continue
+        new = original
+        for e in groups[path]:
+            search = e["search"]
+            if search and search in new:
+                new = new.replace(search, e["replace"], 1)
+                applied += 1
+            else:
+                first = (search.strip().splitlines() or [""])[0]
+                warnings.append(f"{path}: 앵커를 찾지 못함 — “{first[:50]}…”")
+        if new != original:
+            diff = difflib.unified_diff(
+                original.splitlines(), new.splitlines(),
+                fromfile=f"a/{path}", tofile=f"b/{path}", lineterm="",
+            )
+            sections.append("\n".join(diff))
+    return "\n".join(sections), warnings, applied
 
 
 def _parse_json_response(text: str, required: tuple[str, ...] = ()) -> dict:

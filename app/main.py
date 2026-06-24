@@ -493,6 +493,22 @@ def apply(
             except FileNotFoundError:
                 pass
 
+    # VO 포함 보강: 매핑된 컬럼코드(symbol=n0200 등)가 '선언된' VO(.java)를 컨텍스트에 강제 포함.
+    # 매핑이 매퍼 XML에 치우쳐 자바 필드 선언이 누락되는 것을 방지한다.
+    from app.embedding.term_dict import CODE_RE as _CODE_RE, load_locations as _load_loc
+    _loc = _load_loc(settings.repo_root)
+    for m in mappings:
+        if not (m.symbol and _CODE_RE.fullmatch(m.symbol)):
+            continue
+        for vo_path in _loc.get(m.symbol, []):
+            if not vo_path.endswith(".java") or vo_path in seen_paths:
+                continue
+            seen_paths.add(vo_path)
+            try:
+                snippets.append(f"// {vo_path} [VO 선언: {m.symbol}]\n{adapter.read_file(vo_path)}")
+            except FileNotFoundError:
+                pass
+
     law_diff = (
         f"[법령] {row.law_name} {row.article_no}\n\n"
         f"[개정 전]\n{row.before_text or '(내용 없음)'}\n\n"
@@ -502,7 +518,23 @@ def apply(
     )
 
     llm = ClaudeClient()
-    diff_text = llm.propose_patch(law_diff=law_diff, code_snippets=snippets)
+    raw_edits = llm.propose_edits(law_diff=law_diff, code_snippets=snippets)
+
+    # 앵커 편집 → 줄번호가 정확한 unified diff로 서버에서 변환 (git apply 가능)
+    from app.llm.claude_client import parse_edits, build_unified_diff
+    edits = parse_edits(raw_edits)
+    diff_text, warnings, applied = build_unified_diff(edits, adapter.read_file)
+    if not diff_text.strip():
+        diff_text = (
+            "# 자동 적용 가능한 변경을 만들지 못했습니다. 모델 제안 원문:\n#\n"
+            + "\n".join("# " + line for line in raw_edits.splitlines())
+        )
+    if warnings:
+        diff_text = (
+            "# ⚠ 적용 경고 — 담당자 확인 필요\n"
+            + "\n".join(f"#   - {w}" for w in warnings)
+            + "\n\n" + diff_text
+        )
 
     proposal = PatchProposal(
         law_change_id=change_id,
@@ -522,6 +554,8 @@ def apply(
         "approval_status": proposal.approval_status,
         "mapping_mode": mapping_mode,   # "verified" | "confidence"
         "snippets_used": list(seen_paths),
+        "edits_applied": applied,
+        "warnings": warnings,
         "diff_preview": diff_text[:400] + ("…" if len(diff_text) > 400 else ""),
     }
 

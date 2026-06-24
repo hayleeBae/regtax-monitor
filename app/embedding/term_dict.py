@@ -148,14 +148,19 @@ def representative_labels(labels: list[str], k: int = 2) -> list[str]:
 # ── 매핑 부트스트랩 (법령조항 → 코드 → 파일) ─────────────────────────
 
 def harvest_locations(repo_root: str) -> dict[str, list[str]]:
-    """{코드: [코드가 등장하는 파일 relpath ...]} 반환. (주석 유무 무관, 코드 출현 기준)"""
-    loc: dict[str, list[str]] = defaultdict(list)
+    """{코드: [코드가 등장하는 파일 relpath ...]} 반환. (주석 유무 무관, 코드 출현 기준)
+    VO(.java) 선언부는 매핑·초안에 꼭 필요하므로 항상 앞쪽에 보존하고, XML 등은 _MAX_LOC로 제한."""
+    java_loc: dict[str, list[str]] = defaultdict(list)
+    other_loc: dict[str, list[str]] = defaultdict(list)
     for path, rel in _iter_source_files(repo_root):
-        codes = set(CODE_RE.findall(_read(path)))
-        for code in codes:
-            if len(loc[code]) < _MAX_LOC:
-                loc[code].append(rel)
-    return dict(loc)
+        bucket = java_loc if path.suffix.lower() == ".java" else other_loc
+        for code in set(CODE_RE.findall(_read(path))):
+            bucket[code].append(rel)
+    loc: dict[str, list[str]] = {}
+    for code in set(java_loc) | set(other_loc):
+        # .java를 먼저 두고 합친 뒤 상한 적용 → VO가 cap에 밀려 잘리지 않는다
+        loc[code] = (java_loc.get(code, []) + other_loc.get(code, []))[:_MAX_LOC]
+    return loc
 
 
 def load_locations(repo_root: str, refresh: bool = False) -> dict[str, list[str]]:
