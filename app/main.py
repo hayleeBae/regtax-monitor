@@ -518,12 +518,11 @@ def apply(
     )
 
     llm = get_llm_client()
-    raw_edits = llm.propose_edits(law_diff=law_diff, code_snippets=snippets)
-
-    # 앵커 편집 → 줄번호가 정확한 unified diff로 서버에서 변환 (git apply 가능)
-    from app.llm.common import parse_edits, build_unified_diff
-    edits = parse_edits(raw_edits)
-    diff_text, warnings, applied = build_unified_diff(edits, adapter.read_file)
+    # 앵커 편집 → unified diff 변환. 앵커 불일치 시 원본 발췌를 보여주며 자동 재시도
+    from app.llm.common import propose_and_build
+    diff_text, warnings, applied, raw_edits = propose_and_build(
+        llm, law_diff=law_diff, code_snippets=snippets, read_file=adapter.read_file,
+    )
     if not diff_text.strip():
         diff_text = (
             "# 자동 적용 가능한 변경을 만들지 못했습니다. 모델 제안 원문:\n#\n"

@@ -20,3 +20,9 @@ class LlmClient(ABC):
         """법령 변경 + 매핑된 코드 스니펫 -> 앵커 기반 검색/치환 편집 블록 생성.
         서버가 이를 실제 unified diff로 변환한다(build_unified_diff)."""
         raise NotImplementedError
+
+    @abstractmethod
+    def complete(self, prompt: str, max_tokens: int = 4096) -> str:
+        """단일 프롬프트 → 텍스트 응답 (기본 생성 모델).
+        앵커 재시도 등 보조 프롬프트 호출에 사용한다."""
+        raise NotImplementedError

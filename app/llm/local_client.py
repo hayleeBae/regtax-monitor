@@ -28,10 +28,10 @@ class LocalClient(LlmClient):
         return common.parse_json_response(text, required=("summary", "impact"))
 
     def propose_edits(self, law_diff: str, code_snippets: list[str]) -> str:
-        return self._chat(
-            common.propose_prompt(law_diff, code_snippets),
-            model=self.model, max_tokens=4096, temperature=0.1,
-        )
+        return self.complete(common.propose_prompt(law_diff, code_snippets))
+
+    def complete(self, prompt: str, max_tokens: int = 4096) -> str:
+        return self._chat(prompt, model=self.model, max_tokens=max_tokens, temperature=0.1)
 
     def _chat(self, prompt: str, model: str, max_tokens: int, temperature: float) -> str:
         try:

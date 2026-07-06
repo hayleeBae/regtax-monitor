@@ -25,9 +25,12 @@ class ClaudeClient(LlmClient):
         return common.parse_json_response(text, required=("summary", "impact"))
 
     def propose_edits(self, law_diff: str, code_snippets: list[str]) -> str:
+        return self.complete(common.propose_prompt(law_diff, code_snippets))
+
+    def complete(self, prompt: str, max_tokens: int = 4096) -> str:
         resp = self.client.messages.create(
             model=self.model,
-            max_tokens=4096,
-            messages=[{"role": "user", "content": common.propose_prompt(law_diff, code_snippets)}],
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": prompt}],
         )
         return "".join(b.text for b in resp.content if b.type == "text").strip()
