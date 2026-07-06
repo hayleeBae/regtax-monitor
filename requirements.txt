@@ -1,6 +1,6 @@
 fastapi>=0.110
 uvicorn[standard]>=0.29
-anthropic>=0.40
+anthropic>=0.40  # LLM_BACKEND=claude 일 때만 필요 (기본 local 모드는 미사용)
 sqlalchemy>=2.0
 pydantic>=2.0
 pydantic-settings>=2.0

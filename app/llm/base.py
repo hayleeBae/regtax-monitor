@@ -5,9 +5,9 @@ class LlmClient(ABC):
     """
     추론 백엔드 추상화 (이음새 1).
 
-    하이브리드에서는 Claude API 구현체(ClaudeClient)를 쓴다.
-    나중에 사내 추론(로컬 모델)으로 바꾸려면 이 인터페이스만
-    새로 구현해서 갈아끼우면 된다. 나머지 코드는 그대로.
+    기본은 로컬 추론 구현체(LocalClient — Ollama/vLLM 등 OpenAI 호환 서버).
+    LLM_BACKEND=claude 로 바꾸면 Claude API 구현체(ClaudeClient)를 쓴다.
+    선택은 app/llm/__init__.py 의 get_llm_client()가 담당. 나머지 코드는 그대로.
     """
 
     @abstractmethod

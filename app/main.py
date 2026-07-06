@@ -13,7 +13,7 @@ from app.collector.law_api import LawApiClient
 from app.db.database import init_db, get_session
 from app.db.models import LawChange, Mapping, PatchProposal, Review, SyncState
 from app.embedding.indexer import CodeIndexer
-from app.llm.claude_client import ClaudeClient
+from app.llm import get_llm_client
 from config import settings
 
 MOCK_REPO_ROOT = "./mock_repo"
@@ -220,7 +220,7 @@ def list_changes(db: Session = Depends(get_session)) -> list[dict]:
 @app.post("/changes/{change_id}/analyze")
 def analyze(change_id: int, force: bool = False, db: Session = Depends(get_session)) -> dict:
     """
-    Claude로 법령 변경 조문을 분석하여 ai_summary, ai_impact를 DB에 저장한다.
+    LLM(설정된 백엔드)으로 법령 변경 조문을 분석하여 ai_summary, ai_impact를 DB에 저장한다.
     이미 분석된 건은 재분석하지 않는다. force=true 로 강제 재분석 가능.
     """
     row = db.get(LawChange, change_id)
@@ -229,7 +229,7 @@ def analyze(change_id: int, force: bool = False, db: Session = Depends(get_sessi
     if row.ai_summary and not force:
         return {"skipped": True, "reason": "이미 분석된 건입니다. 재분석하려면 ?force=true 를 사용하세요.", "id": change_id}
 
-    llm = ClaudeClient()
+    llm = get_llm_client()
     result = llm.analyze_change(
         before=row.before_text or "",
         after=row.after_text or "",
@@ -430,7 +430,7 @@ def apply(
     db: Session = Depends(get_session),
 ) -> dict:
     """
-    매핑된 코드 스니펫 + 법령 변경 diff → Claude Sonnet으로 수정 초안(unified diff) 생성.
+    매핑된 코드 스니펫 + 법령 변경 diff → LLM(설정된 백엔드)으로 수정 초안(unified diff) 생성.
     결과는 PatchProposal(draft)으로 저장되며, 자동 적용되지 않는다.
     사람이 POST /proposals/{id}/approve 를 눌러야 반영된다.
     """
@@ -517,11 +517,11 @@ def apply(
         f"[AI 영향 분석]\n{row.ai_impact or ''}"
     )
 
-    llm = ClaudeClient()
+    llm = get_llm_client()
     raw_edits = llm.propose_edits(law_diff=law_diff, code_snippets=snippets)
 
     # 앵커 편집 → 줄번호가 정확한 unified diff로 서버에서 변환 (git apply 가능)
-    from app.llm.claude_client import parse_edits, build_unified_diff
+    from app.llm.common import parse_edits, build_unified_diff
     edits = parse_edits(raw_edits)
     diff_text, warnings, applied = build_unified_diff(edits, adapter.read_file)
     if not diff_text.strip():
