@@ -75,6 +75,8 @@ class PatchProposal(Base):
     diff = Column(Text)                          # 제안된 unified diff
     model_used = Column(String)
     approval_status = Column(String, default="draft")  # draft/approved/rejected
+    golden_status = Column(String, nullable=True)  # passed/failed/apply_failed/skipped/error (None=미실행)
+    golden_output = Column(Text, nullable=True)    # 골든 테스트 출력 (승인 판단 자료)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

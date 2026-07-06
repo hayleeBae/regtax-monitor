@@ -131,7 +131,9 @@ POST /changes/{id}/map     RAG 검색 + 사전 정확매칭 + 상수 값매칭 �
                            (응답에 rag_hits / dict_matches / const_matches 분리 표기)
 PATCH /mappings/{id}/verify 담당자 매핑 검증 (정확도 향상)
 POST /changes/{id}/apply   LLM으로 patch 초안 생성 (local: 기본 모델 / claude: Sonnet)
-POST /proposals/{id}/approve 사람 승인 → patch 파일 출력
+                           + GOLDEN_TEST_CMD 설정 시 골든 테스트 자동 검증
+POST /proposals/{id}/golden 골든 테스트 재실행 (기대값 갱신 후 재검증용)
+POST /proposals/{id}/approve 사람 승인 → patch 파일 출력 (골든 미통과 시 경고 명시)
 POST /proposals/{id}/reject  거절 → 재작업
 ```
 
@@ -196,10 +198,18 @@ qwen3:8b + Ollama로 가상 개정 시나리오(자녀세액공제 15만원→25
 해법: 매년 개정이 "코드 수정"이 아니라 "파라미터 행 추가"가 되고, LLM의 역할도
 위험한 코드 편집이 아니라 검증 쉬운 데이터 제안으로 바뀐다.
 
-**3. 골든 테스트로 초안 검증** (환각의 구조적 차단)
-국세청이 매년 내는 연말정산 계산 사례·모의계산 값으로 골든 테스트를 만들고, 초안
-patch를 스크래치 워크트리에 적용해 테스트를 돌리는 단계를 파이프라인에 추가한다.
-"그럴듯해 보임"이 "계산이 맞음"으로 바뀐다.
+**3. 골든 테스트로 초안 검증** ✅ 구현됨 (환각의 구조적 차단)
+`app/golden.py`가 초안 diff를 repo **스크래치 사본**에 적용하고 `GOLDEN_TEST_CMD`
+(국세청 모의계산 사례 기대값 대조 등)를 실행한다 — 실제 repo는 절대 건드리지 않는다.
+`/apply` 시 자동 실행되어 결과(passed/failed/apply_failed)가 초안에 저장되고,
+`POST /proposals/{id}/golden`으로 재검증할 수 있다. 골든 테스트가 실패한 초안도
+승인은 가능하지만(사람의 결정) 응답에 경고가 명시된다.
+개정이 계산 결과를 바꾸는 경우 **patch에 골든 케이스 기대값 갱신을 함께 포함**해야
+통과한다 — 기대값 갱신 자체도 승인 게이트에서 검토된다. mock 검증: 세율만 바꾼
+patch는 `failed`(불일치 금액까지 출력), 세율+기대값을 함께 바꾼 patch는 `passed`.
+mock 골든 테스트는 `mock_repo/tests/golden_income_tax.py`(세율표 XML → 산출세액
+계산 → `golden_cases.json` 대조) 참고 — 회사에서는 사내 빌드/테스트 명령을
+`GOLDEN_TEST_CMD`에 지정하면 된다.
 
 **4. 앵커 실패 피드백 루프** ✅ 구현됨
 "앵커를 찾지 못함" 실패를 모델에게 되돌려 자동 재시도한다 (`propose_and_build`,

@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     llm_model: str = "claude-sonnet-4-6"
     llm_model_cheap: str = "claude-haiku-4-5-20251001"
 
+    # 골든 테스트 — 스크래치 repo 루트에서 실행할 명령 (exit 0=통과). 비우면 검증 생략
+    golden_test_cmd: str = ""
+    golden_test_timeout_seconds: int = 300
+
     law_api_oc: str = ""
     database_url: str = "sqlite:///./regtax.db"
     embedding_model: str = "BAAI/bge-m3"

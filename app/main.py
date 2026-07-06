@@ -551,12 +551,24 @@ def apply(
             + "\n\n" + diff_text
         )
 
+    # ── 골든 테스트 검증 (설정된 경우) ─────────────────────────────
+    # 스크래치 사본에 diff를 적용해 계산 기대값 대조 — 실제 repo는 건드리지 않는다.
+    golden = None
+    if settings.golden_test_cmd:
+        from app.golden import run_golden_tests
+        golden = run_golden_tests(
+            settings.repo_root or MOCK_REPO_ROOT, diff_text,
+            settings.golden_test_cmd, settings.golden_test_timeout_seconds,
+        )
+
     proposal = PatchProposal(
         law_change_id=change_id,
         mapping_id=mappings[0].id,
         diff=diff_text,
         model_used=llm.model,
         approval_status="draft",
+        golden_status=golden["status"] if golden else None,
+        golden_output=golden["output"] if golden else None,
     )
     db.add(proposal)
     row.status = "pending_apply"
@@ -571,6 +583,7 @@ def apply(
         "snippets_used": list(seen_paths),
         "edits_applied": applied,
         "warnings": warnings,
+        "golden": golden,               # None=미설정, 아니면 {status, output, duration_s}
         "diff_preview": diff_text[:400] + ("…" if len(diff_text) > 400 else ""),
     }
 
@@ -588,6 +601,7 @@ def list_proposals(change_id: int, db: Session = Depends(get_session)) -> list[d
         {
             "id": p.id,
             "approval_status": p.approval_status,
+            "golden_status": p.golden_status,
             "model_used": p.model_used,
             "created_at": p.created_at.isoformat() if p.created_at else None,
             "diff": p.diff,
@@ -613,11 +627,31 @@ def list_all_proposals(db: Session = Depends(get_session)) -> list[dict]:
             "law_name": change.law_name if change else None,
             "article_no": change.article_no if change else None,
             "approval_status": p.approval_status,
+            "golden_status": p.golden_status,
             "model_used": p.model_used,
             "created_at": p.created_at.isoformat() if p.created_at else None,
             "diff": p.diff,
         })
     return result
+
+
+@app.post("/proposals/{proposal_id}/golden")
+def run_golden(proposal_id: int, db: Session = Depends(get_session)) -> dict:
+    """저장된 초안에 골든 테스트를 실행한다 — 승인 전 계산 검증 (수동 트리거).
+    apply 시 자동 실행되지만, 골든 케이스 갱신 후 재검증할 때 이 엔드포인트를 쓴다."""
+    proposal = db.get(PatchProposal, proposal_id)
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="초안을 찾을 수 없습니다.")
+
+    from app.golden import run_golden_tests
+    result = run_golden_tests(
+        settings.repo_root or MOCK_REPO_ROOT, proposal.diff,
+        settings.golden_test_cmd, settings.golden_test_timeout_seconds,
+    )
+    proposal.golden_status = result["status"]
+    proposal.golden_output = result["output"]
+    db.commit()
+    return {"proposal_id": proposal_id, **result}
 
 
 @app.post("/proposals/{proposal_id}/approve")
@@ -641,11 +675,18 @@ def approve(proposal_id: int, db: Session = Depends(get_session)) -> dict:
         change.status = "done"
     db.commit()
 
-    return {
+    resp = {
         "proposal_id": proposal_id,
         "approval_status": "approved",
         "patch_written_to": patch_path,
     }
+    # 승인은 사람의 결정이므로 막지 않되, 골든 테스트 미통과 사실은 명시한다
+    if proposal.golden_status in ("failed", "apply_failed", "error"):
+        resp["warning"] = (
+            f"골든 테스트 결과가 '{proposal.golden_status}'인 초안을 승인했습니다. "
+            "계산 검증이 통과되지 않았으니 수동 확인을 권장합니다."
+        )
+    return resp
 
 
 @app.post("/proposals/{proposal_id}/reject")
