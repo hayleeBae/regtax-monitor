@@ -9,8 +9,9 @@ chroma_data/
 .DS_Store
 mock_repo/patches/
 
-# 용어 사전 캐시 — eHR 내부 컬럼 의미·경로 파생물(외부 반출 금지) + 자동 재생성
+# 용어 사전·상수 인벤토리 캐시 — eHR 내부 파생물(외부 반출 금지) + 자동 재생성
 term_dict_cache.json
 term_loc_cache.json
+const_inventory_cache.json
 # 검증 로그
 validate_out.log

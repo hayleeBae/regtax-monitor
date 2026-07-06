@@ -336,6 +336,18 @@ def map_change(change_id: int, k: int = 5, db: Session = Depends(get_session)) -
         for path in rank_locations(loc.get(code, []))[:3]:
             candidates.append((path, code, conf, "dict"))
 
+    # ── 상수 인벤토리 부트스트랩 ──────────────────────────────────
+    # 개정문의 금액·세율(연 15만원 → 150000, 100분의 6 → 0.06)을 코드 숫자
+    # 리터럴과 '정확 값 일치'시켜 시드. 수치 개정에서 임베딩보다 정밀하다.
+    from app.embedding.const_inventory import load_inventory, match_constants
+
+    inv = load_inventory(settings.repo_root or "mock_repo")
+    const_matches = match_constants(query, inv)
+    for value, expr, score, files in const_matches:
+        conf = round(min(0.99, 0.75 + score / 40), 3)  # 0.75~0.99
+        for path in rank_locations(files)[:3]:
+            candidates.append((path, value, conf, "const"))
+
     if not candidates:
         return {"mapped": 0, "note": "인덱싱된 코드도, 사전 매칭도 없습니다. POST /index 를 먼저 실행하세요."}
 
@@ -368,6 +380,10 @@ def map_change(change_id: int, k: int = 5, db: Session = Depends(get_session)) -
         "rag_hits": [{"path": h.path, "symbol": h.symbol, "score": h.score} for h in hits],
         "dict_matches": [
             {"code": c, "term": t, "score": s} for c, t, s in dict_matches
+        ],
+        "const_matches": [
+            {"value": v, "expr": e, "score": s, "files": f}
+            for v, e, s, f in const_matches
         ],
         "saved": saved,
     }
