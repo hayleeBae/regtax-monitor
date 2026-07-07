@@ -126,7 +126,10 @@ VO 필드 주석(`private Long l0160; // 대중교통`).
 
 ```
 POST /collect              수집 + 신구대조 자동 조회 (법률+시행령·시행규칙, 응답에 tiers 집계)
-POST /changes/{id}/analyze LLM으로 변경 분석·요약 (local: 경량 모델 / claude: Haiku)
+POST /changes/{id}/analyze LLM으로 변경 분석·요약 + 해설서 발췌 컨텍스트 주입
+                           (JSON 형식 이탈 시 자동 재포맷 1회)
+GET  /refdocs               참고 문서(해설서) 목록 / POST /refdocs/upload 업로드(즉시 인덱싱)
+DELETE /refdocs/{name}      참고 문서 삭제 (파일+인덱스)
 POST /changes/{id}/map     RAG 검색 + 사전 정확매칭 + 상수 값매칭 부트스트랩 → Mapping 저장
                            (응답에 rag_hits / dict_matches / const_matches 분리 표기)
 PATCH /mappings/{id}/verify 담당자 매핑 검증 (정확도 향상)
@@ -184,7 +187,7 @@ qwen3:8b + Ollama로 가상 개정 시나리오(자녀세액공제 15만원→25
 | 2 | 세법 상수 인벤토리 (값 매칭) | ✅ 구현됨 |
 | 3 | 골든 테스트 검증 | ✅ 구현됨 |
 | 4 | 앵커 실패 피드백 루프 | ✅ 구현됨 |
-| 5 | 컨텍스트 소스 확장 | 🔶 부분 구현 — 시행령·시행규칙 수집 ✅, 해설·few-shot ⬜ |
+| 5 | 컨텍스트 소스 확장 | 🔶 부분 구현 — 시행령·시행규칙 ✅, 해설서 업로드 ✅, few-shot ⬜ |
 | 6 | 모델 업그레이드 | ⏸ 보류 — 구조 개선이 우선 |
 | 7 | 세법 파라미터 테이블화 | 📅 장기 과제 — eHR 리팩토링 수반 |
 
@@ -243,8 +246,12 @@ mock 골든 테스트는 `mock_repo/tests/golden_income_tax.py`(세율표 XML �
   (`COLLECT_DECREES=false`로 법률만 수집 가능). `/changes` 응답에 `tier` 표기.
   실API 검증(2026-07): 올해 5개 세법의 **법률 개정 0건, 시행령·시행규칙 개정
   10건** — 법률만 수집하던 기존 방식은 올해 변경을 전부 놓쳤을 상황이었다.
-- **국세청 『개정세법 해설』 RAG 반영** ⬜ — 매년 발간되며 개정 의도·계산 예시까지
-  담겨 있어 analyze 단계 컨텍스트로 최적. PDF 청킹 → ChromaDB 별도 컬렉션.
+- **국세청 『개정세법 해설』 RAG 반영** ✅ 구현됨 — 공식 API가 없고 연 1회 발간이라
+  자동 수집 대신 반자동: 웹 UI의 **📚 해설서 관리**에서 PDF/TXT/MD를 올리면
+  `docs/`에 저장되고 즉시 인덱싱된다 (`app/embedding/docs_index.py`, 코드 인덱스와
+  분리된 `tax_docs` 컬렉션). analyze 시 해당 개정과 유사한 해설 발췌가
+  `[참고 자료]` 컨텍스트로 자동 주입된다. API: `GET/DELETE /refdocs`,
+  `POST /refdocs/upload`. 스캔 이미지 PDF(텍스트 없는)는 미지원.
 - **과거 세법개정 반영 커밋 few-shot** ⬜ — 회사 repo의 지난 개정 커밋이 "이
   코드베이스에서 한도 변경은 이렇게 고친다"는 최고의 예시. propose 프롬프트에
   유사 과거 사례 1~2건을 주입하면 초안 품질이 올라간다. (회사 repo의 git 이력

@@ -13,5 +13,7 @@ mock_repo/patches/
 term_dict_cache.json
 term_loc_cache.json
 const_inventory_cache.json
+# 참고 문서 업로드 폴더 (개정세법 해설 PDF 등 — 용량 큰 발간물, repo에 커밋 안 함)
+docs/
 # 검증 로그
 validate_out.log

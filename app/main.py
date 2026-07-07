@@ -1,8 +1,9 @@
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -226,6 +227,56 @@ def list_changes(db: Session = Depends(get_session)) -> list[dict]:
     ]
 
 
+# ── 참고 문서 (개정세법 해설 등) ────────────────────────────────
+# 경로가 /docs 면 FastAPI 자동 문서(Swagger)와 충돌하므로 /refdocs 사용.
+
+@app.get("/refdocs")
+def list_refdocs() -> list[dict]:
+    """인덱싱된 참고 문서 목록: [{name, chunks}]."""
+    from app.embedding.docs_index import DocsIndexer
+    return DocsIndexer().list_sources()
+
+
+@app.post("/refdocs/upload")
+async def upload_refdoc(file: UploadFile) -> dict:
+    """참고 문서(PDF/TXT/MD) 업로드 → docs/ 저장 → 즉시 인덱싱.
+    국세청 『개정세법 해설』처럼 연 1회 발간 자료를 담당자가 직접 올린다."""
+    from app.embedding.docs_index import ALLOWED_SUFFIXES, DocsIndexer
+
+    name = Path(file.filename or "").name  # 경로 성분 제거
+    if not name or Path(name).suffix.lower() not in ALLOWED_SUFFIXES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"지원 형식: {', '.join(sorted(ALLOWED_SUFFIXES))}",
+        )
+
+    indexer = DocsIndexer()
+    indexer.docs_dir.mkdir(parents=True, exist_ok=True)
+    target = indexer.docs_dir / name
+    target.write_bytes(await file.read())
+
+    try:
+        chunks = indexer.index_file(target)
+    except Exception as e:
+        target.unlink(missing_ok=True)
+        raise HTTPException(status_code=422, detail=f"인덱싱 실패: {e}")
+    if chunks == 0:
+        target.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=422,
+            detail="추출된 텍스트가 없습니다 — 스캔 이미지 PDF는 지원하지 않습니다.",
+        )
+    return {"name": name, "chunks": chunks}
+
+
+@app.delete("/refdocs/{name}")
+def delete_refdoc(name: str) -> dict:
+    """참고 문서와 그 인덱스를 함께 삭제."""
+    from app.embedding.docs_index import DocsIndexer
+    DocsIndexer().delete_source(name)
+    return {"deleted": name}
+
+
 @app.post("/changes/{change_id}/analyze")
 def analyze(change_id: int, force: bool = False, db: Session = Depends(get_session)) -> dict:
     """
@@ -238,11 +289,28 @@ def analyze(change_id: int, force: bool = False, db: Session = Depends(get_sessi
     if row.ai_summary and not force:
         return {"skipped": True, "reason": "이미 분석된 건입니다. 재분석하려면 ?force=true 를 사용하세요.", "id": change_id}
 
+    # 참고 문서(개정세법 해설 등)에서 관련 발췌를 컨텍스트로 주입
+    context = f"{row.law_name} {row.article_no}"
+    try:
+        from app.embedding.docs_index import DocsIndexer
+        doc_hits = DocsIndexer().search(
+            f"{row.law_name} {row.article_no} {(row.before_text or '')[:200]}", k=2,
+        )
+        if doc_hits:
+            context += "\n\n[참고 자료 발췌]\n" + "\n---\n".join(
+                f"({h['source']}) {h['snippet'][:600]}" for h in doc_hits
+            )
+    except Exception:
+        pass  # 참고 문서는 보강일 뿐 — 실패해도 분석은 진행
+
+    from app.llm.common import analyze_with_retry
     llm = get_llm_client()
-    result = llm.analyze_change(
+    # JSON 형식 이탈 시 1회 재포맷 재시도 (로컬 소형 모델 보정)
+    result = analyze_with_retry(
+        llm,
         before=row.before_text or "",
         after=row.after_text or "",
-        context=f"{row.law_name} {row.article_no}",
+        context=context,
     )
 
     if "raw" in result:

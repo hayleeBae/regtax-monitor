@@ -34,6 +34,9 @@ class LocalClient(LlmClient):
         return self._chat(prompt, model=self.model, max_tokens=max_tokens, temperature=0.1)
 
     def _chat(self, prompt: str, model: str, max_tokens: int, temperature: float) -> str:
+        if not settings.local_llm_think:
+            # qwen3 소프트 스위치 — thinking이 max_tokens을 소진해 빈 응답이 되는 것을 방지
+            prompt = prompt + " /no_think"
         try:
             resp = httpx.post(
                 f"{self.base_url}/chat/completions",

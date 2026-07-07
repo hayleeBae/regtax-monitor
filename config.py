@@ -11,11 +11,16 @@ class Settings(BaseSettings):
     local_llm_model: str = "qwen3:8b"
     local_llm_model_cheap: str = ""  # 분석용 경량 모델. 비우면 local_llm_model 사용
     local_llm_timeout_seconds: int = 600  # CPU 추론은 느릴 수 있어 넉넉히
+    # qwen3 등의 thinking 모드 — CPU에서 매우 느리고, 생각이 max_tokens을 소진하면
+    # 최종 답변이 빈 응답이 된다. 기본 비활성(/no_think 소프트 스위치 주입)
+    local_llm_think: bool = False
 
     # Anthropic API (LLM_BACKEND=claude 일 때만 사용)
     anthropic_api_key: str = ""
     llm_model: str = "claude-sonnet-4-6"
     llm_model_cheap: str = "claude-haiku-4-5-20251001"
+
+    docs_dir: str = "docs"  # 참고 문서(개정세법 해설 PDF 등) 업로드 폴더
 
     # 골든 테스트 — 스크래치 repo 루트에서 실행할 명령 (exit 0=통과). 비우면 검증 생략
     golden_test_cmd: str = ""

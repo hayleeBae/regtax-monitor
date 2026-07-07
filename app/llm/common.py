@@ -177,6 +177,32 @@ def propose_and_build(
     return diff_text, warnings, applied, raw
 
 
+def json_retry_prompt(raw: str) -> str:
+    """JSON 형식을 어긴 분석 응답을 형식만 고쳐 다시 출력하게 하는 프롬프트."""
+    return (
+        "다음은 법령 변경 분석 응답인데 JSON 형식을 지키지 않았습니다. "
+        "내용은 그대로 유지하고, 아래 형식의 JSON만 다시 출력하세요. 다른 설명 금지.\n"
+        '{"summary": "<변경 요약>", "impact": "<시스템 영향>"}\n\n'
+        f"[원 응답]\n{raw}"
+    )
+
+
+def analyze_with_retry(llm, before: str, after: str, context: str = "", max_retries: int = 1) -> dict:
+    """analyze_change 후 JSON 파싱 실패 시 원 응답을 재포맷시켜 복구한다.
+    전체 재분석(수 분)이 아니라 형식 교정(수십 초)이라 싸다 — 로컬 소형 모델의
+    형식 이탈 보정 (propose의 앵커 재시도와 같은 원리)."""
+    result = llm.analyze_change(before=before, after=after, context=context)
+    for _ in range(max_retries):
+        if "raw" not in result:
+            break
+        raw = result["raw"]
+        if not raw.strip():
+            break  # 내용 자체가 없으면 재포맷 불가
+        fixed = llm.complete(json_retry_prompt(raw), max_tokens=2048)
+        result = parse_json_response(fixed, required=("summary", "impact"))
+    return result
+
+
 def parse_json_response(text: str, required: tuple[str, ...] = ()) -> dict:
     """모델 응답에서 JSON 블록을 추출하여 파싱한다. 실패하면 raw 키로 반환."""
     # ```json ... ``` 블록 우선 추출
