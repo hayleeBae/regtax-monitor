@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     golden_test_timeout_seconds: int = 300
 
     law_api_oc: str = ""
+    collect_decrees: bool = True  # 시행령·시행규칙 수집 포함 (위임 수치·간이세액표 개정 감지)
     database_url: str = "sqlite:///./regtax.db"
     embedding_model: str = "BAAI/bge-m3"
     repo_root: str = ""  # 비어 있으면 mock_repo 사용, 실제 경로 지정 시 RealCodebaseAdapter 사용

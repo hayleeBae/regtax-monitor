@@ -14,8 +14,28 @@ from config import settings
 
 BASE_URL = "https://www.law.go.kr/DRF"
 
-# 국세 관련 주요 검색어 (법제처 API는 소관부처 필터 미지원 → 키워드로 대체)
-TAX_QUERIES = ["국세기본법", "소득세법", "법인세법", "부가가치세법", "조세특례제한법"]
+# 국세 관련 기본 법률 (법제처 API는 소관부처 필터 미지원 → 법령명으로 대체)
+TAX_LAWS = ["국세기본법", "소득세법", "법인세법", "부가가치세법", "조세특례제한법"]
+
+# 수집 계층. 세법은 위임 구조라 실제 수치·요건(총급여 기준, 간이세액표 등)이
+# 시행령·시행규칙에만 있는 경우가 많다 — 법률만 수집하면 그 개정을 놓친다.
+TIERS = ["", " 시행령", " 시행규칙"]
+
+
+def build_whitelist(include_decrees: bool = True) -> list[str]:
+    """수집 대상 법령명 화이트리스트. 시행령·시행규칙은 개정이 잦아서
+    이 정확 법령명 필터가 없으면 무관한 변경이 노이즈로 쏟아진다."""
+    tiers = TIERS if include_decrees else [""]
+    return [law + tier for law in TAX_LAWS for tier in tiers]
+
+
+def law_tier(law_name: str) -> str:
+    """법령명으로 계층 분류: 법률 / 시행령 / 시행규칙."""
+    if law_name.endswith("시행규칙"):
+        return "시행규칙"
+    if law_name.endswith("시행령"):
+        return "시행령"
+    return "법률"
 
 
 class LawApiClient:
@@ -28,27 +48,18 @@ class LawApiClient:
 
     def search_changed(self, since: str) -> list[dict]:
         """
-        since(YYYYMMDD) 이후 공포된 국세 관련 법령 목록을 반환한다.
-        OC 키가 없으면 mock 데이터를 반환한다.
+        since(YYYYMMDD) 이후 공포된 국세 관련 법령(법률 + 시행령·시행규칙) 목록을
+        반환한다. OC 키가 없으면 mock 데이터를 반환한다.
         """
         if self._mock_mode:
             return self._mock_results(since)
 
+        whitelist = build_whitelist(settings.collect_decrees)
         results: list[dict] = []
-        for query in TAX_QUERIES:
-            items = self._fetch_one_query(query, since)
-            results.extend(items)
+        for query in whitelist:
+            results.extend(self._fetch_one_query(query, since))
 
-        # law_id 기준 중복 제거
-        seen: set[str] = set()
-        unique = []
-        for item in results:
-            key = item["law_id"]
-            if key not in seen:
-                seen.add(key)
-                unique.append(item)
-
-        return unique
+        return dedupe_and_filter(results, whitelist)
 
     def fetch_detail(self, mst: str) -> dict:
         """
@@ -128,7 +139,7 @@ class LawApiClient:
         ]
 
     def _mock_results(self, since: str) -> list[dict]:
-        """OC 키 없을 때 개발용 더미 데이터"""
+        """OC 키 없을 때 개발용 더미 데이터 (법률 1건 + 시행령 1건)"""
         return [
             {
                 "law_id": "MOCK-001",
@@ -139,8 +150,38 @@ class LawApiClient:
                 "article_no": "제55조",
                 "before_text": "종합소득에 대한 소득세는 … 세율을 적용한다.",
                 "after_text": "종합소득에 대한 소득세는 … 개정된 세율을 적용한다.",
-            }
+            },
+            {
+                # 위임 수치 개정의 예 — 법률엔 "대통령령으로 정하는 세율"만 있고
+                # 실제 수치는 시행령에 있어, 시행령 수집 없이는 상수 매칭이 불가한 유형
+                "law_id": "MOCK-002",
+                "law_mst": "",
+                "law_name": "소득세법 시행령",
+                "promulgation_date": since,
+                "effective_date": since,
+                "article_no": "제189조",
+                "before_text": "간이세액표 적용 시 과세표준 1천400만원 이하 구간의 "
+                               "세율은 100분의 6으로 한다.",
+                "after_text": "간이세액표 적용 시 과세표준 1천400만원 이하 구간의 "
+                              "세율은 100분의 7로 한다.",
+            },
         ]
+
+
+def dedupe_and_filter(items: list[dict], whitelist: list[str]) -> list[dict]:
+    """law_id 중복 제거 + 법령명 정확 일치 필터.
+    query 검색은 이름 부분일치라 '소득세법' 검색에 유사 법령이 섞여 들어온다 —
+    화이트리스트에 정확히 있는 법령명만 통과시킨다."""
+    allowed = set(whitelist)
+    seen: set[str] = set()
+    unique: list[dict] = []
+    for item in items:
+        key = item["law_id"]
+        if key in seen or item.get("law_name", "").strip() not in allowed:
+            continue
+        seen.add(key)
+        unique.append(item)
+    return unique
 
 
 def _extract_article_no(text: str) -> str:

@@ -160,9 +160,16 @@ def collect(db: Session = Depends(get_session)) -> dict:
                 detail_fail += 1
         db.commit()
 
+    from app.collector.law_api import law_tier
+    tier_counts: dict[str, int] = {}
+    for item in items:
+        t = law_tier(item["law_name"])
+        tier_counts[t] = tier_counts.get(t, 0) + 1
+
     return {
         "fetched": len(items),
         "saved": len(saved_ids),
+        "tiers": tier_counts,   # 예: {"법률": 2, "시행령": 3, "시행규칙": 1}
         "since": since,
         "mock_mode": client._mock_mode,
         "detail_fetched": detail_ok,
@@ -201,11 +208,13 @@ def fetch_detail(change_id: int, db: Session = Depends(get_session)) -> dict:
 @app.get("/changes")
 def list_changes(db: Session = Depends(get_session)) -> list[dict]:
     """수집된 법령 변경 목록 조회 (Phase 2: 담당자 검토용)"""
+    from app.collector.law_api import law_tier
     rows = db.query(LawChange).order_by(LawChange.promulgation_date.desc()).all()
     return [
         {
             "id": r.id,
             "law_name": r.law_name,
+            "tier": law_tier(r.law_name or ""),   # 법률 / 시행령 / 시행규칙
             "article_no": r.article_no,
             "promulgation_date": r.promulgation_date,
             "effective_date": r.effective_date,
