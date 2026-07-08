@@ -122,12 +122,37 @@ VO 필드 주석(`private Long l0160; // 대중교통`).
 사전은 `term_dict_cache.json`(코드→한글명), `term_loc_cache.json`(코드→파일)에 캐시되며,
 `REPO_ROOT`가 비면(mock 모드) 비활성화된다.
 
+### 도메인 레지스트리 (domains.json)
+
+수집 대상은 도메인 단위로 `domains.json`에서 관리한다 — 연말정산(세법)을 넘어
+인사시스템에 적용되는 법령 전반으로 확장하기 위한 구조다.
+
+```json
+{
+  "tax": { "label": "세법(연말정산)", "laws": ["소득세법", ...], "admin_rule_queries": [] },
+  "hr":  { "label": "노동·인사(급여/근태/4대보험)", "laws": ["근로기준법", "최저임금법", ...],
+           "admin_rule_queries": ["최저임금"] }
+}
+```
+
+- `laws`는 **법제처 등록명과 정확 일치**해야 한다 (시행령·시행규칙은 자동 확장).
+  가운뎃점은 `ㆍ`(U+318D) — 예: '남녀고용평등과 일ㆍ가정 양립 지원에 관한 법률'.
+  기본 hr 목록 11개는 전부 실API로 정확 명칭을 검증해 넣었다.
+- `admin_rule_queries`는 행정규칙(고시) 검색어 — 부분일치 (고시명은 매년 바뀜).
+- 수집 건마다 `LawChange.domain`이 저장되고 `GET /changes?domain=hr`로 필터된다.
+  담당자 라우팅(도메인별 알림)의 기반.
+- 파일이 없으면 기존 동작(세법 5개 + `ADMIN_RULE_QUERIES` 환경변수)으로 폴백.
+- 실검증(2026-07): hr 도메인 올해 개정 **법령 계층 13건**(퇴직급여법, 고용보험·
+  국민건강보험 시행령 등) + 최저임금 고시 — 세법과 마찬가지로 시행령·시행규칙
+  개정이 대부분이라 3계층 수집이 여기서도 유효하다.
+
 ### API 플로우
 
 ```
-POST /collect              수집 + 신구대조 자동 조회 (법률+시행령·시행규칙, 응답에 tiers 집계)
+POST /collect              도메인별 수집 + 상세 자동 조회 (법령 3계층+행정규칙, tiers/domains 집계)
 POST /changes/{id}/analyze LLM으로 변경 분석·요약 + 해설서 발췌 컨텍스트 주입
                            (JSON 형식 이탈 시 자동 재포맷 1회)
+GET  /changes?domain=hr    변경 목록 (도메인 필터)
 GET  /refdocs               참고 문서(해설서) 목록 / POST /refdocs/upload 업로드(즉시 인덱싱)
 DELETE /refdocs/{name}      참고 문서 삭제 (파일+인덱스)
 POST /changes/{id}/map     RAG 검색 + 사전 정확매칭 + 상수 값매칭 부트스트랩 → Mapping 저장
@@ -246,6 +271,24 @@ mock 골든 테스트는 `mock_repo/tests/golden_income_tax.py`(세율표 XML �
   (`COLLECT_DECREES=false`로 법률만 수집 가능). `/changes` 응답에 `tier` 표기.
   실API 검증(2026-07): 올해 5개 세법의 **법률 개정 0건, 시행령·시행규칙 개정
   10건** — 법률만 수집하던 기존 방식은 올해 변경을 전부 놓쳤을 상황이었다.
+- **행정규칙(고시·훈령) 수집** ✅ 구현·실검증됨 — 최저임금(매년 고용노동부 고시)·
+  보험요율처럼 **법령 개정이 아니라 고시로 바뀌는 수치**는 법률/시행령 수집으로는
+  잡히지 않는다. 도메인 레지스트리의 `admin_rule_queries` 검색어로 수집하며,
+  고시명은 매년 바뀌므로('2026년 적용 최저임금 고시') 정확 일치 대신 검색어
+  부분일치 + 발령일 필터. `LawChange.source`에 종류(고시/훈령 등)가 저장되고
+  `/changes`의 `tier`로 표기된다.
+  실검증(2026-07): '최저임금' 검색으로 2026년 적용 최저임금 고시 수집 →
+  **본문이 빈 고시는 PDF 첨부를 자동 추출** — 재개정 이유서에서 "시간급
+  10,030원 → 10,320원" 전후 수치까지 확보 (상수 매칭에 이상적 입력).
+  HWP 등 비PDF 첨부는 미추출(파일명만 기록).
+  ⚠ 법제처 API는 target별 신청제 — OC 키에 **행정규칙 목록/본문을 추가 신청**해야
+  하며(open.law.go.kr), 미신청이면 `/collect` 응답에 `admrul_warning`으로 안내된다.
+  ⚠ 본문 조회의 `ID` 파라미터는 행정규칙ID가 아니라 **행정규칙일련번호**다
+  (행정규칙ID는 `LID`) — 참조 구현(korean-law-mcp)의 문서와 달라 실API로 확인함.
+  확장 유틸리티 2종도 수집기에 포함(파이프라인 미연결): `search_effective`(eflaw,
+  시행일 기준 "곧 시행될 개정" 조회 — 실검증: 소득세법 계열 2027~2028 시행예정 5건),
+  `fetch_three_tier`(thdCmp, 법률→시행령→시행규칙 **위임조문 공식 매핑** — 실검증:
+  소득세법 위임 조문 188건).
 - **국세청 『개정세법 해설』 RAG 반영** ✅ 구현됨 — 공식 API가 없고 연 1회 발간이라
   자동 수집 대신 반자동: 웹 UI의 **📚 해설서 관리**에서 PDF/TXT/MD를 올리면
   `docs/`에 저장되고 즉시 인덱싱된다 (`app/embedding/docs_index.py`, 코드 인덱스와
@@ -337,7 +380,8 @@ git에는 **코드만** 들어 있다. `.env`, `.venv/`, `chroma_data/`, Ollama 
 | `chroma_data/` (벡터 인덱스) | ✗ | 첫 기동 시 자동 재인덱싱 |
 
 1. `python3.10 -m venv .venv && pip install -r requirements.txt`
-   (SSL 프록시 환경이면 `HF_HUB_DISABLE_SSL=true` + pip `--trusted-host` 필요할 수 있음)
+   (SSL 프록시 환경이면 `HF_HUB_DISABLE_SSL=true` + pip `--trusted-host` 필요할 수 있음.
+   법제처 API 호출은 truststore가 OS 인증서 저장소를 신뢰해 프록시 CA 문제 없이 동작)
 2. `cp .env.example .env` 후 `LAW_API_OC`, `REPO_ROOT` 등 입력
 3. 추론 서버 준비 — 셋 중 하나:
    - `brew install ollama && ollama pull qwen3:8b` (외부망 가능 시)
@@ -377,7 +421,8 @@ regtax-monitor/
 │   │   ├── term_dict.py   용어 사전 수확(코드↔한글명) + 매핑 부트스트랩(법령→코드→파일)
 │   │   └── const_inventory.py  세법 상수 수확(값→위치) + 개정문 금액 파싱 + 값매칭
 │   └── collector/
-│       └── law_api.py     법제처 OPEN API 수집 + 신구대조 조회
+│       ├── law_api.py     법제처 OPEN API 수집 (법령·행정규칙) + 신구대조·위임 3단비교 조회
+│       └── registry.py    도메인 레지스트리 로더 (domains.json)
 ```
 
 ## 주요 설계 결정
@@ -389,3 +434,7 @@ regtax-monitor/
 - **Mapping 테이블**: AI 부트스트랩(verified=False) → 담당자 검증(verified=True) → 이후 재변경 시 직행
 - **로컬 추론(OpenAI 호환)**: 특정 런타임에 종속되지 않음 — Ollama/vLLM/llama.cpp 교체 자유
 - **배치 API**: claude 백엔드 사용 시 비실시간 워크로드로 Anthropic Batch API 50% 할인 적용 가능
+- **개발 보조 MCP**: [korean-law-mcp](https://github.com/chrisryugj/korean-law-mcp)(MIT)를
+  Claude Code에 로컬 등록해 개발 중 법령·고시·판례 조회에 활용 (`claude mcp add`,
+  OC 키는 로컬 설정에만 저장). 프로덕션 수집은 법제처 API 직접 호출 — 외부 서버 미경유.
+  admrul/eflaw/thdCmp 파싱은 이 저장소의 검증된 호출 방식을 참조 구현으로 포팅한 것

@@ -28,8 +28,9 @@ class Settings(BaseSettings):
 
     law_api_oc: str = ""
     collect_decrees: bool = True  # 시행령·시행규칙 수집 포함 (위임 수치·간이세액표 개정 감지)
-    # 행정규칙(고시·훈령 등) 수집 검색어 — 쉼표 구분 (예: "최저임금, 고용보험료율").
-    # 최저임금·보험요율처럼 법령이 아니라 고시로 바뀌는 수치를 잡는다. 비우면 수집 안 함.
+    # 도메인 레지스트리 파일 — 도메인별 수집 법령·행정규칙 검색어 (app/collector/registry.py)
+    domains_file: str = "domains.json"
+    # 행정규칙(고시·훈령 등) 수집 검색어 — 쉼표 구분. domains.json이 없을 때의 폴백.
     # 주의: OC 키에 행정규칙 목록/본문 API를 별도 신청해야 한다 (open.law.go.kr).
     admin_rule_queries: str = ""
     database_url: str = "sqlite:///./regtax.db"

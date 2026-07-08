@@ -55,11 +55,13 @@ class ApiNotGrantedError(RuntimeError):
     """OC 키에 해당 target 사용 신청이 안 되어 있음 (법제처 API는 target별 신청제)."""
 
 
-def build_whitelist(include_decrees: bool = True) -> list[str]:
+def build_whitelist(include_decrees: bool = True, laws: list[str] | None = None) -> list[str]:
     """수집 대상 법령명 화이트리스트. 시행령·시행규칙은 개정이 잦아서
-    이 정확 법령명 필터가 없으면 무관한 변경이 노이즈로 쏟아진다."""
+    이 정확 법령명 필터가 없으면 무관한 변경이 노이즈로 쏟아진다.
+    laws 미지정 시 기본 세법 목록(TAX_LAWS)."""
+    base = laws if laws is not None else TAX_LAWS
     tiers = TIERS if include_decrees else [""]
-    return [law + tier for law in TAX_LAWS for tier in tiers]
+    return [law + tier for law in base for tier in tiers]
 
 
 def law_tier(law_name: str, source: str = "law") -> str:
@@ -102,15 +104,15 @@ class LawApiClient:
 
     # ── 법령 (law) ──────────────────────────────────────────────
 
-    def search_changed(self, since: str) -> list[dict]:
+    def search_changed(self, since: str, laws: list[str] | None = None) -> list[dict]:
         """
-        since(YYYYMMDD) 이후 공포된 국세 관련 법령(법률 + 시행령·시행규칙) 목록을
-        반환한다. OC 키가 없으면 mock 데이터를 반환한다.
+        since(YYYYMMDD) 이후 공포된 법령(법률 + 시행령·시행규칙) 목록을 반환한다.
+        laws 미지정 시 기본 세법 목록. OC 키가 없으면 mock 데이터를 반환한다.
         """
         if self._mock_mode:
             return self._mock_results(since)
 
-        whitelist = build_whitelist(settings.collect_decrees)
+        whitelist = build_whitelist(settings.collect_decrees, laws)
         results: list[dict] = []
         for query in whitelist:
             results.extend(self._fetch_one_query(query, since))
@@ -181,14 +183,16 @@ class LawApiClient:
 
     # ── 행정규칙 (admrul) — 고시·훈령·예규·공고 ─────────────────
 
-    def search_admin_rules(self, since: str) -> list[dict]:
-        """ADMIN_RULE_QUERIES의 검색어별로 since 이후 발령된 행정규칙을 조회한다.
+    def search_admin_rules(self, since: str, queries: list[str] | None = None) -> list[dict]:
+        """검색어별로 since 이후 발령된 행정규칙을 조회한다.
+        queries 미지정 시 ADMIN_RULE_QUERIES 설정 사용.
 
         행정규칙은 법령과 달리 이름이 매년 바뀌는 경우가 많아
         ('2026년 적용 최저임금 고시') 정확 일치 화이트리스트 대신
-        검색어 부분일치 + 발령일 필터를 쓴다. 설정이 비어 있으면 수집하지 않는다.
+        검색어 부분일치 + 발령일 필터를 쓴다. 검색어가 비어 있으면 수집하지 않는다.
         """
-        queries = [q.strip() for q in settings.admin_rule_queries.split(",") if q.strip()]
+        if queries is None:
+            queries = [q.strip() for q in settings.admin_rule_queries.split(",") if q.strip()]
         if not queries:
             return []
         if self._mock_mode:

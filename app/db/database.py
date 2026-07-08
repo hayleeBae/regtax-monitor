@@ -27,7 +27,10 @@ def _migrate() -> None:
     insp = inspect(engine)
     table_adds = {
         "patch_proposal": {"golden_status": "VARCHAR", "golden_output": "TEXT"},
-        "law_change": {"source": "VARCHAR DEFAULT 'law'"},
+        "law_change": {
+            "source": "VARCHAR DEFAULT 'law'",
+            "domain": "VARCHAR DEFAULT 'tax'",
+        },
     }
     tables = set(insp.get_table_names())
     with engine.begin() as conn:

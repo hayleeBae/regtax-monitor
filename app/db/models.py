@@ -27,6 +27,8 @@ class LawChange(Base):
     # 출처 구분: "law"(법령) 또는 행정규칙 종류("고시"/"훈령"/"예규"/"공고"/"행정규칙").
     # 행정규칙은 고시명에 종류가 안 드러나는 경우가 많아 수집 시점의 종류를 저장한다.
     source = Column(String, default="law")
+    # 도메인 (domains.json의 키: "tax"/"hr" 등) — 담당자 라우팅·필터용
+    domain = Column(String, index=True, default="tax")
     promulgation_date = Column(String)           # 공포일 (YYYYMMDD) — 알림 트리거
     effective_date = Column(String)              # 시행일 (YYYYMMDD) — 반영 마감
     change_type = Column(String)                 # rate/limit/date/formula/logic

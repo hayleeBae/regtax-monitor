@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.codebase.mock_adapter import MockCodebaseAdapter
 from app.codebase.real_adapter import RealCodebaseAdapter
 from app.collector.law_api import ApiNotGrantedError, LawApiClient
+from app.collector.registry import load_domains
 from app.db.database import init_db, get_session
 from app.db.models import LawChange, Mapping, PatchProposal, Review, SyncState
 from app.embedding.indexer import CodeIndexer
@@ -115,16 +116,33 @@ def collect(db: Session = Depends(get_session)) -> dict:
     since = state.last_sync or datetime.now(timezone.utc).strftime("%Y0101")
 
     client = LawApiClient()
-    items = client.search_changed(since)
+    domains = load_domains()
+    items: list[dict] = []
+    admrul_warnings: list[str] = []
 
-    # 행정규칙(고시 등) — ADMIN_RULE_QUERIES 설정 시에만. 실패해도 법령 수집은 유지.
-    admrul_warning = ""
-    try:
-        items += client.search_admin_rules(since)
-    except ApiNotGrantedError as e:
-        admrul_warning = str(e)
-    except Exception as e:
-        admrul_warning = f"행정규칙 수집 실패: {e}"
+    if client._mock_mode:
+        # mock은 고정 데이터 — 법령은 tax, 행정규칙은 hr(있으면)로 태깅
+        first = next(iter(domains))
+        law_domain = "tax" if "tax" in domains else first
+        adm_domain = "hr" if "hr" in domains else first
+        for it in client.search_changed(since):
+            items.append({**it, "domain": law_domain})
+        for it in client.search_admin_rules(since, domains[adm_domain].admin_rule_queries):
+            items.append({**it, "domain": adm_domain})
+    else:
+        for key, dom in domains.items():
+            for it in client.search_changed(since, dom.laws):
+                items.append({**it, "domain": key})
+            if not dom.admin_rule_queries:
+                continue
+            # 행정규칙 수집 실패는 경고로 남기고 법령 수집은 유지
+            try:
+                for it in client.search_admin_rules(since, dom.admin_rule_queries):
+                    items.append({**it, "domain": key})
+            except ApiNotGrantedError as e:
+                admrul_warnings.append(str(e))
+            except Exception as e:
+                admrul_warnings.append(f"행정규칙 수집 실패({key}): {e}")
 
     saved_ids: list[int] = []
     for item in items:
@@ -145,6 +163,7 @@ def collect(db: Session = Depends(get_session)) -> dict:
             before_text=item["before_text"],
             after_text=item["after_text"],
             source=item.get("source", "law"),
+            domain=item.get("domain", "tax"),
         )
         db.add(row)
         db.flush()  # id 확보
@@ -178,21 +197,25 @@ def collect(db: Session = Depends(get_session)) -> dict:
 
     from app.collector.law_api import law_tier
     tier_counts: dict[str, int] = {}
+    domain_counts: dict[str, int] = {}
     for item in items:
         t = law_tier(item["law_name"], item.get("source", "law"))
         tier_counts[t] = tier_counts.get(t, 0) + 1
+        d = item.get("domain", "tax")
+        domain_counts[d] = domain_counts.get(d, 0) + 1
 
     result = {
         "fetched": len(items),
         "saved": len(saved_ids),
-        "tiers": tier_counts,   # 예: {"법률": 2, "시행령": 3, "고시": 1}
+        "tiers": tier_counts,     # 예: {"법률": 2, "시행령": 3, "고시": 1}
+        "domains": domain_counts,  # 예: {"tax": 4, "hr": 2}
         "since": since,
         "mock_mode": client._mock_mode,
         "detail_fetched": detail_ok,
         "detail_failed": detail_fail,
     }
-    if admrul_warning:
-        result["admrul_warning"] = admrul_warning
+    if admrul_warnings:
+        result["admrul_warning"] = " / ".join(admrul_warnings)
     return result
 
 
@@ -230,14 +253,18 @@ def fetch_detail(change_id: int, db: Session = Depends(get_session)) -> dict:
 
 
 @app.get("/changes")
-def list_changes(db: Session = Depends(get_session)) -> list[dict]:
-    """수집된 법령 변경 목록 조회 (Phase 2: 담당자 검토용)"""
+def list_changes(domain: str | None = None, db: Session = Depends(get_session)) -> list[dict]:
+    """수집된 법령 변경 목록 조회 (Phase 2: 담당자 검토용). ?domain=hr 필터 지원."""
     from app.collector.law_api import law_tier
-    rows = db.query(LawChange).order_by(LawChange.promulgation_date.desc()).all()
+    q = db.query(LawChange)
+    if domain:
+        q = q.filter(LawChange.domain == domain)
+    rows = q.order_by(LawChange.promulgation_date.desc()).all()
     return [
         {
             "id": r.id,
             "law_name": r.law_name,
+            "domain": r.domain or "tax",
             "tier": law_tier(r.law_name or "", r.source or "law"),   # 법률/시행령/시행규칙/고시 등
             "article_no": r.article_no,
             "promulgation_date": r.promulgation_date,
