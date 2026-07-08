@@ -84,7 +84,7 @@ def _auto_index_if_empty() -> None:
 
 
 app = FastAPI(
-    title="국세 법령 변경 모니터링",
+    title="법령 변경 모니터링 (세법·인사)",
     version="0.0.1",
     lifespan=lifespan,
 )
@@ -339,8 +339,17 @@ def analyze(change_id: int, force: bool = False, db: Session = Depends(get_sessi
     if row.ai_summary and not force:
         return {"skipped": True, "reason": "이미 분석된 건입니다. 재분석하려면 ?force=true 를 사용하세요.", "id": change_id}
 
+    # 도메인 라벨(세법/노동·인사 등)을 맥락 첫 줄로 — 프롬프트 자체는 도메인 중립
+    domain_label = ""
+    try:
+        dom = load_domains().get(row.domain or "tax")
+        if dom:
+            domain_label = f"[도메인] {dom.label}\n"
+    except Exception:
+        pass
+
     # 참고 문서(개정세법 해설 등)에서 관련 발췌를 컨텍스트로 주입
-    context = f"{row.law_name} {row.article_no}"
+    context = f"{domain_label}{row.law_name} {row.article_no}"
     try:
         from app.embedding.docs_index import DocsIndexer
         doc_hits = DocsIndexer().search(

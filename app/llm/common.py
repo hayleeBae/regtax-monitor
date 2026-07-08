@@ -10,9 +10,11 @@ import re
 
 
 def analyze_prompt(before: str, after: str, context: str = "") -> str:
+    # 도메인(세법/노동법 등) 명시는 context에 실려 온다 — main.analyze가
+    # 도메인 라벨을 [참고 맥락] 첫 줄로 주입하므로 여기서는 중립 문구를 쓴다.
     return (
-        "다음은 국세 관련 법령 조문의 개정 전후 내용입니다. "
-        "변경의 핵심을 한국어로 요약하고, 시스템에 미칠 영향을 분석하세요.\n\n"
+        "다음은 법령 조문(또는 고시)의 개정 전후 내용입니다. "
+        "변경의 핵심을 한국어로 요약하고, 인사·급여 시스템에 미칠 영향을 분석하세요.\n\n"
         f"[참고 맥락]\n{context}\n\n"
         f"[개정 전]\n{before}\n\n[개정 후]\n{after}\n\n"
         '반드시 JSON으로만 응답: {"summary": "...", "impact": "..."}'
