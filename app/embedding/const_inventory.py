@@ -1,14 +1,16 @@
 """
-세법 상수 인벤토리 — '값'으로 코드 위치를 찾는다 (효율 개선 로드맵 2번).
+법령 상수 인벤토리 — '값'으로 코드 위치를 찾는다 (효율 개선 로드맵 2번).
 
-개정문은 "연 15만원을 25만원으로"처럼 금액·세율을 말하고, 코드에는 그 값이
-숫자 리터럴(150000L, 0.15, upperLimit="14000000")로 박혀 있다. 임베딩·변수명
-매칭은 확률적 추측이지만 숫자는 정확 일치가 가능하다:
+개정문은 "연 15만원을 25만원으로", "시간급 10,030원을 10,320원으로"처럼
+금액·세율·시간을 말하고, 코드에는 그 값이 숫자 리터럴(150000L, 0.15, 10030L,
+upperLimit="14000000")로 박혀 있다. 임베딩·변수명 매칭은 확률적 추측이지만
+숫자는 정확 일치가 가능하다:
 
-  1. harvest: 코드의 세법성 숫자 리터럴(1000원 단위 금액, 소수 세율)을
-     {값: [(파일, 줄번호, 줄내용)...]} 인벤토리로 수확.
-  2. parse_amounts: 개정문의 한국어 금액 표기(15만원, 1천500만원, 100분의 6)를
-     숫자 값으로 변환.
+  1. harvest: 코드의 법령성 숫자 리터럴을 {값: [(파일, 줄번호, 줄내용)...]}
+     인벤토리로 수확 — 10원 단위 금액(최저임금 등)과 소수(세율·요율)는 항상,
+     작은 정수(주 52시간·연차 15일 등)는 단위 힌트가 있는 줄에서만 (오탐 억제).
+  2. parse_amounts: 개정문의 한국어 표기(15만원, 1천500만원, 100분의 6,
+     52시간, 15일의, 만 65세)를 숫자 값으로 변환.
   3. match_constants: 두 결과를 정확 일치시켜 매핑 후보를 만든다.
      값이 희소할수록(등장 파일이 적을수록) 점수가 높다 — term_dict의 IDF와 동일 원리.
 
@@ -31,8 +33,17 @@ _MAX_LOC = 12          # 값당 위치 캐시 상한 (term_dict._MAX_LOC와 동�
 _MAX_VALUE = 1e13      # 이보다 큰 정수는 ID·타임스탬프로 간주
 _EXCERPT_LEN = 160
 
-# 코드의 숫자 리터럴: 정수(뒤에 Java L 접미사 허용) 또는 소수
-_NUM_RE = re.compile(r"(?<![\w.])(\d+\.\d+|\d{4,})[Ll]?(?![\w.])")
+# 코드의 숫자 리터럴: 소수, Java 언더스코어 정수(14_000_000), 일반 정수 (L 접미사 허용)
+_NUM_RE = re.compile(r"(?<![\w.])(\d+\.\d+|\d{1,3}(?:_\d{3})+|\d{4,})[Ll]?(?![\w.])")
+
+# 작은 정수(2~999) — 주 52시간·연차 15일·만 60세처럼 노동법 수치는 작다.
+# 무차별 수확하면 루프 카운터·인덱스가 쏟아지므로 단위 힌트가 있는 줄에서만 수확.
+_SMALL_INT_RE = re.compile(r"(?<![\w.])(\d{1,3})[Ll]?(?![\w.])")
+_UNIT_HINT_RE = re.compile(
+    r"시간|주당|연차|휴가|휴직|일수|개월|나이|연령|임금|수당|연장|야간|근로"
+    r"|hour|week|day|month|age|wage|overtime|annual|leave",
+    re.IGNORECASE,
+)
 
 # 노이즈 소수 (xml version="1.0" 등)
 _DENY = {0.0, 1.0}
@@ -48,6 +59,13 @@ _AMOUNT_RE = re.compile(
 _PCT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:%|퍼센트|프로)")
 _BUNUI_RE = re.compile(r"(\d[\d,]*)\s*분의\s*(\d+(?:\.\d+)?)")  # 100분의 6 → 0.06
 
+# 노동법 수치 표기 — 시간·일수·개월·나이 (작은 정수라 힌트 수확분과만 일치)
+_HOURS_RE = re.compile(r"(\d{1,3})\s*시간")                       # 주 52시간, 1일 8시간
+_DAYS_RE = re.compile(r"(\d{1,3})\s*일(?=의|간|[을를]|\s*(?:이상|이내|이하|미만|초과))")
+#                                    ↑ '1월 1일부터' 같은 날짜와 구분 (조사·범위어가 붙는 일수만)
+_MONTHS_RE = re.compile(r"(\d{1,2})\s*개월")                      # 3개월, 12개월
+_AGE_RE = re.compile(r"만\s*(\d{1,2})\s*세|(\d{1,2})\s*세\s*(?:이상|미만|이하)")
+
 
 def _key(v: float) -> str:
     """값의 정규화 키: 0.0600 → '0.06', 14000000.0 → '14000000'."""
@@ -56,32 +74,48 @@ def _key(v: float) -> str:
     return f"{v:g}"
 
 
-def _is_tax_constant(v: float) -> bool:
-    """세법성 판정: 1000원 단위 금액(반올림 값) 또는 1 미만~100 미만 소수(세율·배율)."""
+def _is_law_constant(v: float) -> bool:
+    """법령성 판정: 10원 단위 금액(공제 한도·최저임금 등) 또는 100 미만 소수(세율·요율).
+    1000원 단위였던 기준을 10원 단위로 완화 — 최저임금(10,320원)이 잡히도록.
+    완화로 통과하게 되는 연도(2020)·날짜(20240110)는 명시적으로 제외한다."""
     if v in _DENY or v <= 0 or v > _MAX_VALUE:
         return False
     if float(v).is_integer():
-        return v >= 1000 and int(v) % 1000 == 0
+        iv = int(v)
+        if 1900 <= iv <= 2100:            # 연도
+            return False
+        if 19000101 <= iv <= 20991231:    # YYYYMMDD 날짜
+            return False
+        return iv >= 1000 and iv % 10 == 0
     return v < 100
 
 
 def harvest(repo_root: str) -> dict[str, list[list]]:
-    """repo의 Java/SQL/XML에서 세법성 숫자 리터럴을 수확.
+    """repo의 Java/SQL/XML에서 법령성 숫자 리터럴을 수확.
     반환: {값키: [[relpath, 줄번호, 줄내용], ...]} (값당 _MAX_LOC 제한)."""
     inv: dict[str, list[list]] = defaultdict(list)
     for path, rel in _iter_source_files(repo_root):
         for lineno, line in enumerate(_read(path).splitlines(), start=1):
             seen_in_line: set[str] = set()
-            for m in _NUM_RE.finditer(line):
-                v = float(m.group(1))
-                if not _is_tax_constant(v):
-                    continue
+
+            def _put(v: float) -> None:
                 key = _key(v)
                 if key in seen_in_line:
-                    continue
+                    return
                 seen_in_line.add(key)
                 if len(inv[key]) < _MAX_LOC:
                     inv[key].append([rel, lineno, line.strip()[:_EXCERPT_LEN]])
+
+            for m in _NUM_RE.finditer(line):
+                v = float(m.group(1).replace("_", ""))
+                if _is_law_constant(v):
+                    _put(v)
+            # 작은 정수(주 52시간·연차 15일 등)는 단위 힌트가 있는 줄에서만
+            if _UNIT_HINT_RE.search(line):
+                for m in _SMALL_INT_RE.finditer(line):
+                    v = float(m.group(1))
+                    if 2 <= v <= 999:
+                        _put(v)
     return dict(inv)
 
 
@@ -138,6 +172,17 @@ def parse_amounts(text: str) -> dict[str, str]:
         den, num = _to_int(m.group(1)), float(m.group(2))
         if den > 0:
             put(num / den, m.group(0))
+
+    # 노동법 수치 (시간·일수·개월·나이) — 인벤토리의 힌트 수확분과 일치할 때만 매핑됨
+    for pattern in (_HOURS_RE, _DAYS_RE, _MONTHS_RE):
+        for m in pattern.finditer(text):
+            v = float(m.group(1))
+            if 2 <= v <= 999:
+                put(v, m.group(0))
+    for m in _AGE_RE.finditer(text):
+        v = float(m.group(1) or m.group(2))
+        if 2 <= v <= 99:
+            put(v, m.group(0))
 
     return found
 
