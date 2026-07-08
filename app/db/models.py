@@ -24,6 +24,9 @@ class LawChange(Base):
     law_mst = Column(String)                     # 법령 MST (상세 조회용)
     law_name = Column(String)                    # 법령명
     article_no = Column(String)                  # 조문 번호
+    # 출처 구분: "law"(법령) 또는 행정규칙 종류("고시"/"훈령"/"예규"/"공고"/"행정규칙").
+    # 행정규칙은 고시명에 종류가 안 드러나는 경우가 많아 수집 시점의 종류를 저장한다.
+    source = Column(String, default="law")
     promulgation_date = Column(String)           # 공포일 (YYYYMMDD) — 알림 트리거
     effective_date = Column(String)              # 시행일 (YYYYMMDD) — 반영 마감
     change_type = Column(String)                 # rate/limit/date/formula/logic

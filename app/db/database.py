@@ -25,14 +25,19 @@ def _migrate() -> None:
     from sqlalchemy import inspect, text
 
     insp = inspect(engine)
-    if "patch_proposal" not in insp.get_table_names():
-        return
-    have = {c["name"] for c in insp.get_columns("patch_proposal")}
-    adds = {"golden_status": "VARCHAR", "golden_output": "TEXT"}
+    table_adds = {
+        "patch_proposal": {"golden_status": "VARCHAR", "golden_output": "TEXT"},
+        "law_change": {"source": "VARCHAR DEFAULT 'law'"},
+    }
+    tables = set(insp.get_table_names())
     with engine.begin() as conn:
-        for name, ddl in adds.items():
-            if name not in have:
-                conn.execute(text(f"ALTER TABLE patch_proposal ADD COLUMN {name} {ddl}"))
+        for table, adds in table_adds.items():
+            if table not in tables:
+                continue
+            have = {c["name"] for c in insp.get_columns(table)}
+            for name, ddl in adds.items():
+                if name not in have:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
 
 
 def get_session():

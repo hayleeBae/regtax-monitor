@@ -28,6 +28,10 @@ class Settings(BaseSettings):
 
     law_api_oc: str = ""
     collect_decrees: bool = True  # 시행령·시행규칙 수집 포함 (위임 수치·간이세액표 개정 감지)
+    # 행정규칙(고시·훈령 등) 수집 검색어 — 쉼표 구분 (예: "최저임금, 고용보험료율").
+    # 최저임금·보험요율처럼 법령이 아니라 고시로 바뀌는 수치를 잡는다. 비우면 수집 안 함.
+    # 주의: OC 키에 행정규칙 목록/본문 API를 별도 신청해야 한다 (open.law.go.kr).
+    admin_rule_queries: str = ""
     database_url: str = "sqlite:///./regtax.db"
     embedding_model: str = "BAAI/bge-m3"
     repo_root: str = ""  # 비어 있으면 mock_repo 사용, 실제 경로 지정 시 RealCodebaseAdapter 사용

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.codebase.mock_adapter import MockCodebaseAdapter
 from app.codebase.real_adapter import RealCodebaseAdapter
-from app.collector.law_api import LawApiClient
+from app.collector.law_api import ApiNotGrantedError, LawApiClient
 from app.db.database import init_db, get_session
 from app.db.models import LawChange, Mapping, PatchProposal, Review, SyncState
 from app.embedding.indexer import CodeIndexer
@@ -117,6 +117,15 @@ def collect(db: Session = Depends(get_session)) -> dict:
     client = LawApiClient()
     items = client.search_changed(since)
 
+    # 행정규칙(고시 등) — ADMIN_RULE_QUERIES 설정 시에만. 실패해도 법령 수집은 유지.
+    admrul_warning = ""
+    try:
+        items += client.search_admin_rules(since)
+    except ApiNotGrantedError as e:
+        admrul_warning = str(e)
+    except Exception as e:
+        admrul_warning = f"행정규칙 수집 실패: {e}"
+
     saved_ids: list[int] = []
     for item in items:
         exists = (
@@ -135,6 +144,7 @@ def collect(db: Session = Depends(get_session)) -> dict:
             effective_date=item["effective_date"],
             before_text=item["before_text"],
             after_text=item["after_text"],
+            source=item.get("source", "law"),
         )
         db.add(row)
         db.flush()  # id 확보
@@ -144,15 +154,20 @@ def collect(db: Session = Depends(get_session)) -> dict:
     state.last_run_at = datetime.now(timezone.utc)
     db.commit()
 
-    # 신규 건에 한해 신구대조 자동 조회 (mock 모드 또는 MST 없으면 건너뜀)
+    # 신규 건에 한해 상세 자동 조회 — 법령은 신구대조(개정문), 행정규칙은 본문 전문
     detail_ok, detail_fail = 0, 0
     if not client._mock_mode:
         for change_id in saved_ids:
             row = db.get(LawChange, change_id)
-            if not row or not row.law_mst:
+            if not row:
                 continue
             try:
-                detail = client.fetch_detail(row.law_mst)
+                if row.source and row.source != "law":
+                    detail = client.fetch_admin_rule_detail(row.law_mst, row.law_id)
+                elif row.law_mst:
+                    detail = client.fetch_detail(row.law_mst)
+                else:
+                    continue
                 row.article_no = detail["article_no"]
                 row.before_text = detail["before_text"]
                 row.after_text = detail["after_text"]
@@ -164,18 +179,21 @@ def collect(db: Session = Depends(get_session)) -> dict:
     from app.collector.law_api import law_tier
     tier_counts: dict[str, int] = {}
     for item in items:
-        t = law_tier(item["law_name"])
+        t = law_tier(item["law_name"], item.get("source", "law"))
         tier_counts[t] = tier_counts.get(t, 0) + 1
 
-    return {
+    result = {
         "fetched": len(items),
         "saved": len(saved_ids),
-        "tiers": tier_counts,   # 예: {"법률": 2, "시행령": 3, "시행규칙": 1}
+        "tiers": tier_counts,   # 예: {"법률": 2, "시행령": 3, "고시": 1}
         "since": since,
         "mock_mode": client._mock_mode,
         "detail_fetched": detail_ok,
         "detail_failed": detail_fail,
     }
+    if admrul_warning:
+        result["admrul_warning"] = admrul_warning
+    return result
 
 
 @app.post("/changes/{change_id}/fetch-detail")
@@ -187,11 +205,16 @@ def fetch_detail(change_id: int, db: Session = Depends(get_session)) -> dict:
     row = db.get(LawChange, change_id)
     if row is None:
         raise HTTPException(status_code=404, detail="변경 건을 찾을 수 없습니다.")
-    if not row.law_mst:
-        raise HTTPException(status_code=422, detail="법령 MST가 없습니다. mock 데이터이거나 수집 오류입니다.")
 
     client = LawApiClient()
-    detail = client.fetch_detail(row.law_mst)
+    if client._mock_mode:
+        raise HTTPException(status_code=422, detail="mock 모드에서는 상세 조회를 지원하지 않습니다.")
+    if row.source and row.source != "law":
+        detail = client.fetch_admin_rule_detail(row.law_mst, row.law_id)
+    elif row.law_mst:
+        detail = client.fetch_detail(row.law_mst)
+    else:
+        raise HTTPException(status_code=422, detail="법령 MST가 없습니다. mock 데이터이거나 수집 오류입니다.")
 
     row.article_no = detail["article_no"]
     row.before_text = detail["before_text"]
@@ -215,7 +238,7 @@ def list_changes(db: Session = Depends(get_session)) -> list[dict]:
         {
             "id": r.id,
             "law_name": r.law_name,
-            "tier": law_tier(r.law_name or ""),   # 법률 / 시행령 / 시행규칙
+            "tier": law_tier(r.law_name or "", r.source or "law"),   # 법률/시행령/시행규칙/고시 등
             "article_no": r.article_no,
             "promulgation_date": r.promulgation_date,
             "effective_date": r.effective_date,
