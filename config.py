@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     local_llm_model: str = "qwen3:8b"
     local_llm_model_cheap: str = ""  # 분석용 경량 모델. 비우면 local_llm_model 사용
     local_llm_timeout_seconds: int = 600  # CPU 추론은 느릴 수 있어 넉넉히
+    # 컨텍스트 창 크기 — Ollama options.num_ctx로 전달. 기본 4096이면 RAG 프롬프트가
+    # 잘려 오해석·할루시네이션의 원인이 된다 (.harness/failures/F-20260712-0001)
+    local_llm_num_ctx: int = 16384
     # qwen3 등의 thinking 모드 — CPU에서 매우 느리고, 생각이 max_tokens을 소진하면
     # 최종 답변이 빈 응답이 된다. 기본 비활성(/no_think 소프트 스위치 주입)
     local_llm_think: bool = False

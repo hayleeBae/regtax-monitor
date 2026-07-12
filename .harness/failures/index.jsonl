@@ -1,0 +1,1 @@
+{"failure_id": "F-20260712-0001", "ts": "2026-07-12T16:57:11+0900", "run_id": null, "stage": "test", "category": "spec_mismatch", "cause_code": "env_config", "status": "resolved", "summary": "초안 생성 실패(qwen3:8b, num_ctx 4096) — ①법인세 손금 산입을 세율 구간 추가로 오해석 ②법인세 개정을 소득세 테이블에 적용+무관 컬럼 생성(할루시네이션) ③XML/SQL 문법 깨짐으로 자동 적용 불가"}

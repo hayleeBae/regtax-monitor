@@ -1,0 +1,26 @@
+{
+  "failure_id": "F-20260712-0001",
+  "ts": "2026-07-12T16:57:11+0900",
+  "run_id": null,
+  "stage": "test",
+  "step": null,
+  "trace_refs": [],
+  "symptom": {
+    "category": "spec_mismatch",
+    "signal": "자동 적용 가능한 변경을 만들지 못했습니다. 증상: ① 도메인 오해석 — 손금 산입(과세표준 차감)을 corporateTax 세율표 bracket 추가(rate=0.00)로 해석 ② 할루시네이션 — 법인세법 개정을 income_tax_rates(소득세)에 적용, deferred_tax/voucher_exemption 등 무관 컬럼 생성 ③ 출력 형식 위반 — XML 태그 미닫힘·속성 뒤 '-- TODO 확인', SQL VALUES 괄호/세미콜론 누락. 조건: LLM_BACKEND=local qwen3:8b, num_ctx 기본값 4096",
+    "artifact": "artifacts/model_proposal.txt"
+  },
+  "verified_cause": {
+    "cause_code": "env_config",
+    "description": "num_ctx 기본값 4096 초과 시 llama-server가 context shift로 프롬프트 앞부분을 유실(n_discard=2045, truncated=1 로그 확보). 검증: OLLAMA_CONTEXT_LENGTH=16384 적용 후 동일 건 재현 — context shift 소멸, truncated=0 확인. 해소된 증상: 출력 형식 위반(llm_format_violation) — 1차 재시도에서 XML/SQL 문법 정상화. 잔존 증상: 도메인 오해석(llm_domain_misread) — 손금 산입→세율 구간 오해석은 num_ctx와 무관하게 지속 (모델 능력 한계로 추정, 별도 추적 필요).",
+    "verified_by": "human",
+    "causal_chain": []
+  },
+  "resolution": {
+    "action": "fixed",
+    "description": "LOCAL_LLM_NUM_CTX 설정 도입(기본 16384, config.py) + local_client가 options.num_ctx 전달 + 프롬프트 근사 토큰 로깅·num_ctx 초과 경고 추가. 서버 측은 OLLAMA_CONTEXT_LENGTH=16384. 잔존 증상(도메인 오해석)은 이 원인과 무관 — 재발 시 별도 레코드로 기록할 것.",
+    "commit": null
+  },
+  "status": "resolved",
+  "recurrence_of": null
+}

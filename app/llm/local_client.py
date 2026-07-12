@@ -19,6 +19,7 @@ class LocalClient(LlmClient):
         self.model = model or settings.local_llm_model
         self.model_cheap = settings.local_llm_model_cheap or self.model
         self.timeout = settings.local_llm_timeout_seconds
+        self.num_ctx = settings.local_llm_num_ctx
 
     def analyze_change(self, before: str, after: str, context: str = "") -> dict:
         text = self._chat(
@@ -37,6 +38,14 @@ class LocalClient(LlmClient):
         if not settings.local_llm_think:
             # qwen3 소프트 스위치 — thinking이 max_tokens을 소진해 빈 응답이 되는 것을 방지
             prompt = prompt + " /no_think"
+        # 한국어+코드 혼합 기준 문자수/2 근사 — 컨텍스트 창(num_ctx) 초과 진단용
+        approx_tokens = len(prompt) // 2
+        print(f"[LLM] {model} 호출 — 프롬프트 {len(prompt):,}자 (약 {approx_tokens:,} 토큰), "
+              f"max_tokens={max_tokens}, num_ctx={self.num_ctx}", flush=True)
+        if approx_tokens + max_tokens > self.num_ctx:
+            print(f"[LLM] ⚠ 프롬프트(약 {approx_tokens:,}) + max_tokens({max_tokens:,})가 "
+                  f"num_ctx({self.num_ctx:,})를 초과 — 프롬프트 앞부분이 잘리거나 응답이 "
+                  "중단될 수 있습니다. LOCAL_LLM_NUM_CTX를 늘리세요.", flush=True)
         try:
             resp = httpx.post(
                 f"{self.base_url}/chat/completions",
@@ -45,6 +54,9 @@ class LocalClient(LlmClient):
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": max_tokens,
                     "temperature": temperature,
+                    # Ollama 확장 — OpenAI 표준 외 필드. vLLM 등 다른 서버는 무시하거나
+                    # 거부할 수 있다 (거부 시 LOCAL_LLM_NUM_CTX 조정이 아니라 서버 설정 사용)
+                    "options": {"num_ctx": self.num_ctx},
                 },
                 timeout=self.timeout,
             )
