@@ -22,6 +22,15 @@ MODE="${1:-full}"
 
 quick() {
   ruff check .
+  python -c "
+import yaml, glob, sys
+for f in glob.glob('.harness/*.yml') + glob.glob('.harness/*.yaml'):
+    try:
+        yaml.safe_load(open(f))
+    except yaml.YAMLError as e:
+        print(f'YAML 문법 오류: {f}\n{e}', file=sys.stderr)
+        sys.exit(1)
+"
 }
 
 full() {

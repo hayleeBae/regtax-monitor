@@ -34,4 +34,7 @@ cause_codes:
 # 예:
 #   nexacro_deploy_config: Nexacro 배포 산출물 설정 오류 (.xadl.js 등)
 #   sp_result_mismatch:    저장 프로시저 결과셋 불일치
-project_cause_codes: {}
+project_cause_codes:
+  llm_domain_misread:    "도메인 개념 오해석 (예: 손금 산입→세율 구간)"
+  llm_hallucination:     "원문에 없는 대상/속성 생성 (예: 무관 테이블·컬럼)"
+  llm_format_violation:  "출력 스키마/문법 위반 (예: XML 미닫힘, SQL 문법)"
