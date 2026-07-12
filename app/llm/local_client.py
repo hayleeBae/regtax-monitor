@@ -45,7 +45,9 @@ class LocalClient(LlmClient):
         if approx_tokens + max_tokens > self.num_ctx:
             print(f"[LLM] ⚠ 프롬프트(약 {approx_tokens:,}) + max_tokens({max_tokens:,})가 "
                   f"num_ctx({self.num_ctx:,})를 초과 — 프롬프트 앞부분이 잘리거나 응답이 "
-                  "중단될 수 있습니다. LOCAL_LLM_NUM_CTX를 늘리세요.", flush=True)
+                  "중단될 수 있습니다. 서버 컨텍스트를 늘리세요 "
+                  "(Ollama: OLLAMA_CONTEXT_LENGTH=<값> ollama serve) 후 "
+                  "LOCAL_LLM_NUM_CTX도 같은 값으로.", flush=True)
         try:
             resp = httpx.post(
                 f"{self.base_url}/chat/completions",
@@ -54,8 +56,11 @@ class LocalClient(LlmClient):
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": max_tokens,
                     "temperature": temperature,
-                    # Ollama 확장 — OpenAI 표준 외 필드. vLLM 등 다른 서버는 무시하거나
-                    # 거부할 수 있다 (거부 시 LOCAL_LLM_NUM_CTX 조정이 아니라 서버 설정 사용)
+                    # 주의: Ollama의 OpenAI 호환 레이어(/v1)는 이 필드를 무시한다
+                    # (0.31.1 확인, CLAUDE.md 환경 제약). Ollama의 실효 컨텍스트는
+                    # 서버 기동 시 OLLAMA_CONTEXT_LENGTH로 설정. 이 필드는 options를
+                    # 지원하는 다른 OpenAI 호환 서버용으로 유지하며, LOCAL_LLM_NUM_CTX는
+                    # 위 초과 경고의 기준값 역할이 주 목적이다.
                     "options": {"num_ctx": self.num_ctx},
                 },
                 timeout=self.timeout,

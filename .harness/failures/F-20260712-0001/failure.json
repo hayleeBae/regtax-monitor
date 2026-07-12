@@ -18,8 +18,8 @@
   },
   "resolution": {
     "action": "fixed",
-    "description": "LOCAL_LLM_NUM_CTX 설정 도입(기본 16384, config.py) + local_client가 options.num_ctx 전달 + 프롬프트 근사 토큰 로깅·num_ctx 초과 경고 추가. 서버 측은 OLLAMA_CONTEXT_LENGTH=16384. 잔존 증상(도메인 오해석)은 이 원인과 무관 — 재발 시 별도 레코드로 기록할 것.",
-    "commit": null
+    "description": "LOCAL_LLM_NUM_CTX 설정 도입(기본 16384, config.py) + local_client가 options.num_ctx 전달 + 프롬프트 근사 토큰 로깅·num_ctx 초과 경고 추가. 서버 측은 OLLAMA_CONTEXT_LENGTH=16384. 잔존 증상(도메인 오해석)은 이 원인과 무관 — 재발 시 별도 레코드로 기록할 것. 잔여 리스크 — LOCAL_LLM_NUM_CTX(경고 기준)와 서버 OLLAMA_CONTEXT_LENGTH(실효 값)의 수동 동기화 구조. 서버만 4096으로 기동 시 경고 없이 context shift 재발 가능. 개선 후보: 기동 시 /api/show로 실제 컨텍스트 조회해 불일치 감지.",
+    "commit": "b2f4822"
   },
   "status": "resolved",
   "recurrence_of": null

@@ -1,0 +1,26 @@
+{
+  "failure_id": "F-20260712-0002",
+  "ts": "2026-07-12T19:43:34+0900",
+  "run_id": null,
+  "stage": "test",
+  "step": null,
+  "trace_refs": [],
+  "symptom": {
+    "category": "spec_mismatch",
+    "signal": "주 증상: 생성이 max_tokens=4096 상한 도달로 EOS 미도달 절단(serve 로그 n_decoded=4096, truncated=0 — 컨텍스트 초과 아님). 파서가 완결된 @@@FILE 블록을 찾지 못해 제안 원문 공백 반환. 부가 증상: 1차 시도 httpx 600초 타임아웃으로 500([GIN] 500 | 10m0s — 생성 소요 10분+). 조건: qwen3:8b, M1 약 5-8 t/s. 원인 가설(미검증)과 후속 조치는 아티팩트 참조",
+    "artifact": "artifacts/serve_log_excerpt.txt"
+  },
+  "verified_cause": {
+    "cause_code": "unknown",
+    "description": "",
+    "verified_by": "unverified",
+    "causal_chain": []
+  },
+  "resolution": {
+    "action": null,
+    "description": "",
+    "commit": null
+  },
+  "status": "open",
+  "recurrence_of": null
+}

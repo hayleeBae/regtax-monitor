@@ -48,11 +48,19 @@ python run.py                    # 개발 서버 (= uvicorn app.main:app --reloa
 - 테스트는 `pytest`(pyproject.toml 설정: testpaths=tests,scripts)로 실행. 무거운 의존성(임베딩 모델 로드, ChromaDB 인덱싱, LLM 호출)을 테스트에서 직접 트리거하지 않는다.
 - 서버 첫 기동 시 `chroma_data/`가 비어 있으면 자동 인덱싱(CPU, 수십 분). 코드/사전 변경을 검색에 반영하려면 `rm -rf chroma_data/` 후 재기동.
 
+## 환경 제약
+
+- 두 실행 환경: 집 PC(macOS, M1/16GB) ↔ 회사 PC(macOS, M3급 — 사양 미확정). 환경별 차이는 전부 `.env`로 흡수한다 — 코드 분기·`verify=False` 하드코딩 금지.
+- `REPO_ROOT` 비어 있으면 `mock_repo/`(집), 지정 시 실제 eHR repo(회사).
+- 회사망: SSL 제약으로 HuggingFace 직접 다운로드 불가(`HF_HUB_DISABLE_SSL` + pip `--trusted-host`로 대응). Ollama는 설치되어 있음.
+- 분석·초안 생성은 Ollama 서버(127.0.0.1:11434) 기동을 전제로 한다. 미기동 시 해당 API는 500.
+- CRITICAL: Ollama OpenAI 호환 레이어(`/v1`)는 `options.num_ctx`를 **무시한다**(0.31.1 확인). 컨텍스트 창은 서버 기동 시 설정한다: `OLLAMA_CONTEXT_LENGTH=16384 ollama serve`. serve 로그의 "context shift"는 프롬프트 유실 신호로 간주한다(`.harness/failures/F-20260712-0001`).
+- M1 생성 속도 약 5–8 t/s. LLM 타임아웃(600초)과 max_tokens는 출력 형식 설계와 연동해 판단할 것 (`F-20260712-0002` — 출력 토큰 폭발로 상한 절단·타임아웃).
+
 ## 도메인 컨텍스트
 
 - **목적**: 법령(세법·노동법) 개정을 자동 수집·감지 → 관련 eHR 코드 위치에 매핑 → git apply 가능한 patch 초안 생성. 가장 비싼 실패는 "잘못 고친 것"이 아니라 **"개정을 놓친 것"** — 수집·감지의 재현율이 초안 품질보다 우선한다.
 - **도메인 레지스트리** (`domains.json`): 수집 대상을 도메인(tax/hr) 단위로 관리. `laws`는 법제처 등록명과 **정확 일치**해야 하며 가운뎃점은 `ㆍ`(U+318D). `admin_rule_queries`는 고시 검색어(부분일치 — 고시명이 매년 바뀜).
 - **법제처 API 함정**: OC 키는 target별 신청제 — 행정규칙 목록/본문은 별도 신청 필요. 행정규칙 본문 조회의 `ID` 파라미터는 행정규칙ID가 아니라 **행정규칙일련번호**(행정규칙ID는 `LID`). 시행령·시행규칙은 개정이 잦아 정확 법령명 필터로 노이즈를 차단한다.
 - **eHR 레거시 특성**: 컬럼명이 `a0121`/`n0200` 같은 암호 코드 — 용어 사전(`term_dict.py`, 주석에서 자동 수확)과 상수 인벤토리(`const_inventory.py`, 값 매칭)로 보완한다. 캐시 파일들(`*_cache.json`)은 gitignore + 자동 재생성 — 커밋 금지(eHR 내부 파생물, 외부 반출 금지).
-- **환경 이원화**: `REPO_ROOT` 비어 있으면 `mock_repo/`(집 개발), 지정 시 실제 repo(회사). 회사 PC는 SSL 프록시 환경 — `verify=False` 하드코딩 금지(truststore/`HF_HUB_DISABLE_SSL` 사용).
 - **개정 유형별 효용 한계**: 수치 개정(한도·세율)은 초안 자동화 ◎, 요건 개정은 매핑까지 △, 구조 개정은 감지·알림까지 ✗ — 이 격차를 코드로 무리하게 메우려 하지 말 것(로드맵 문서 참조).
