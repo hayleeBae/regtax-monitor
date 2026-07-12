@@ -1,406 +1,124 @@
-# 법령 변경 모니터링 & 코드 반영 시스템 (세법·인사)
+# regtax-monitor — 법령 변경 모니터링 & 코드 반영 시스템 (세법·인사)
 
-연말정산은 매년 세법이 개정되고, 그때마다 eHR 연말정산 로직(공제 한도·공제율·
-적용 요건 등)을 수정해야 한다. 근로기준법·최저임금 고시 등 인사시스템에 적용되는
-법령 전반도 마찬가지다 (도메인 레지스트리로 관리 — domains.json). 이 시스템은
-그 사이클을 지원한다:
+연말정산은 매년 세법이 개정되고, 그때마다 eHR의 연말정산 로직(공제 한도·공제율·적용
+요건)을 수정해야 한다. 근로기준법·최저임금 고시 등 인사시스템에 적용되는 법령 전반도
+마찬가지다. 이 시스템은 그 사이클을 지원한다:
 
-1. 국세청 소관 법령의 변경을 **자동 수집·감지**하여 담당자에게 알리고,
-2. 변경 조문을 **관련 코드 위치에 매핑**하고,
-3. 담당자가 "반영"을 누르면 **수정안 초안(git apply 가능한 patch)** 을 생성한다.
+1. **수집·감지** — 법제처 API로 소관 법령의 변경을 자동 수집하여 담당자에게 알리고,
+2. **분석·매핑** — 변경 조문을 요약하고 관련 코드 위치에 매핑하고,
+3. **초안 생성** — 담당자가 "반영"을 누르면 git apply 가능한 patch 초안을 만든다.
 
-연말정산 실무에서 가장 비싼 실패는 "잘못 고친 것"이 아니라 **"개정을 놓친 것"**이다.
-초안 품질과 별개로, 수집→요약→매핑 파이프라인만으로도 이 리스크를 줄인다.
-
-## 핵심 원칙
-
-- **코드는 외부로 나가지 않는다.** 임베딩·검색·생성 모두 로컬에서 수행한다(기본).
-- **두 개의 이음새(seam)** 만 환경에 따라 바뀐다:
-  - `app/llm/`      — `LlmClient` (로컬 모델 ↔ API 교체 지점, `get_llm_client()`)
-  - `app/codebase/` — `CodebaseAdapter` (mock repo ↔ 실제 repo 교체 지점)
-- **사람 승인 게이트.** AI는 초안만 생성, 자동 적용 금지. 승인 게이트가 최후
-  방어선이므로 잘못된 코드가 자동 적용되는 일은 없다.
+> **왜 만들었나**: 연말정산 실무에서 가장 비싼 실패는 "잘못 고친 것"이 아니라
+> **"개정을 놓친 것"**이다. 초안 품질과 별개로, 수집→요약→매핑 파이프라인만으로도
+> 이 리스크를 줄인다. 실제로 2026년 세법 5종은 **법률 개정 0건, 시행령·시행규칙
+> 개정 10건**이었다 — 법률만 지켜보는 방식으로는 올해 변경을 전부 놓쳤다.
 
 ---
 
-## 아키텍처: 기존(하이브리드) → 현재(완전 로컬)
+## 핵심 설계 원칙과 근거
 
-### 기존 방식 — 하이브리드 (Claude API)
+상세한 결정 기록은 [docs/ADR.md](docs/ADR.md) 참조. 요약:
 
-초기 구조는 **로컬 임베딩 + 외부 API 생성**의 하이브리드였다.
+### 1. 코드는 외부로 나가지 않는다 (완전 로컬, ADR-001)
 
-- 인덱싱·검색은 로컬(bge-m3 + ChromaDB)에서 수행하고,
-- 생성(분석·초안)만 RAG로 좁혀진 스니펫을 **Claude API**로 전송했다.
-  분석은 Haiku(저비용), 초안 생성은 Sonnet(고품질)으로 분리.
-- 전체 코드는 절대 반출되지 않고, 검색으로 좁혀진 함수 몇 개만 나가는 설계였지만
-  "스니펫 단위 외부 전송"에 대한 보안 검토가 필요했다.
-
-이 구현은 `app/llm/claude_client.py`로 남아 있으며 `LLM_BACKEND=claude`로 언제든
-되돌릴 수 있다 (`ANTHROPIC_API_KEY` 필요).
-
-### 현재 방식 — 완전 로컬 (기본)
-
-생성 단계까지 로컬 추론 서버로 옮겨 **코드가 한 줄도 외부로 나가지 않는다.**
-
-- `app/llm/local_client.py`가 OpenAI 호환 `chat/completions` 엔드포인트를 호출한다.
-  → **Ollama / vLLM / llama.cpp server / LM Studio** 어느 것이든 붙는다
-  (`LOCAL_LLM_BASE_URL`만 지정, 추가 의존성 없음).
-- 프롬프트와 응답 파싱(JSON 추출, 앵커 편집 블록 → unified diff 변환)은
-  `app/llm/common.py`로 분리되어 **양 백엔드가 동일한 로직을 공유**한다.
-  백엔드를 바꿔도 편집 형식·후처리·승인 플로우는 변하지 않는다.
-- `app/llm/__init__.py`의 `get_llm_client()`가 `LLM_BACKEND` 설정에 따라
-  구현체를 선택한다. local 모드에서는 anthropic 패키지가 없어도 동작한다(지연 import).
-- qwen3 계열의 `<think>...</think>` 추론 블록은 자동 제거된다.
-
-### 백엔드 비교
-
-| 백엔드 | 설정 | 생성 모델 | 코드 반출 | 보안 검토 |
-|---|---|---|---|---|
-| **local** (기본) | `LLM_BACKEND=local` | Ollama/vLLM 등의 로컬 모델 | 없음 | 불필요 |
-| claude (기존) | `LLM_BACKEND=claude` | Claude Sonnet(초안) + Haiku(분석) | RAG 스니펫만 | 스니펫 반출 승인 필요 |
-
----
-
-## 동작 방식
-
-### RAG 파이프라인
-
-ChromaDB는 SQLite처럼 **파일 기반 임베디드 DB**로, 별도 서버 없이 pip 설치만으로
-동작한다. 벡터는 `chroma_data/`에 저장된다.
-
-**① 인덱싱 (최초 1회, 완전 로컬)**
-
-```
-코드 파일 (Java / SQL / XML …)
-    ↓ 용어 사전으로 청크 보강 (암호 컬럼명 → 한글명 헤더 주입)
-    ↓ bge-m3 (로컬 임베딩 모델, CPU 동작)
-벡터 → chroma_data/ 에 저장
-```
-
-서버 시작 시 `chroma_data/`가 비어 있으면 자동 인덱싱된다. CPU라 느리다(수십 분).
-코드/사전 변경을 검색에 반영하려면 `rm -rf chroma_data/` 후 재기동.
-
-**② 검색 (map 호출 시, 완전 로컬)**
-
-```
-법령 변경 텍스트 (개정문 + AI 요약)
-    ↓ bge-m3로 벡터 변환 → ChromaDB 유사도 검색
-관련 코드 스니펫 (벡터가 가장 가까운 청크들)
-```
-
-**③ 생성 (apply 호출 시)**
-
-```
-법령 변경 내용 + 관련 코드 스니펫 (RAG로 좁힌 것만)
-    ↓ 로컬 추론 서버 (기본) 또는 Claude API (LLM_BACKEND=claude)
-앵커 기반 검색/치환 편집 → 서버가 unified diff로 변환 (git apply 가능)
-```
-
-**단계별 코드 반출 여부**
+임베딩·검색·생성 전부 로컬에서 수행한다. 초기 설계는 "로컬 임베딩 + Claude API
+생성" 하이브리드였지만, RAG로 좁힌 스니펫이라도 외부 전송에는 보안 검토가 필요했다.
+생성까지 로컬 추론 서버로 옮기면 **검토 자체가 불필요**해진다 — 사내 이식의 최대
+장벽을 설계로 제거한 것.
 
 | 단계 | 실행 위치 | 코드 외부 반출 |
 |---|---|---|
 | 임베딩 (bge-m3) | 로컬 | ✗ |
 | 벡터 저장·검색 (ChromaDB) | 로컬 `chroma_data/` | ✗ |
-| patch 생성 — local 백엔드 (기본) | 로컬 추론 서버 | ✗ |
-| patch 생성 — claude 백엔드 | 외부 API | RAG로 좁힌 스니펫만 ✓ |
+| patch 생성 — **local 백엔드 (기본)** | 로컬 추론 서버 | ✗ |
+| patch 생성 — claude 백엔드 (옵션) | 외부 API | RAG로 좁힌 스니펫만 |
 
-### 암호 컬럼명 대응 (용어 사전)
+Claude 하이브리드 구현은 `app/llm/claude_client.py`로 보존되어 있어
+`LLM_BACKEND=claude`로 언제든 되돌릴 수 있다 (비실시간 워크로드라 Anthropic
+Batch API 50% 할인 적용 가능).
 
-eHR 레거시는 컬럼명이 `a0121` / `b0181` / `n0200` 같은 암호 코드라, "자녀세액공제"로
-검색해도 임베딩이 코드와 연결하지 못한다. 그런데 **코드↔한글명 사전이 이미 코드 안에
-흩어져 있다** — SQL mapper 인라인 주석(`AS n0200  -- 자녀세액공제 공제대상자녀`)과
-VO 필드 주석(`private Long l0160; // 대중교통`).
+### 2. 사람 승인 게이트 — 자동 적용은 영구 제외 (ADR-002)
 
-`app/embedding/term_dict.py`가 이 주석을 regex로 긁어 `{코드: [한글명...]}` 사전을
-자동 생성한다(수작업 0, 코드 원본 변경 0, 언제든 재생성 가능). 이 사전을 두 곳에서 쓴다:
+AI는 초안 생성까지만 하고, 승인 시에만 patch 파일이 출력된다. 로컬 소형 모델은
+환각(제공되지 않은 파일의 편집을 지어냄)이 실제로 관측되었지만, diff 변환기가
+걸러내고 승인 게이트가 최후 방어선이 되어 **잘못된 코드가 자동 적용되는 일은
+구조적으로 없다**. 모델 성능에 기대지 않고 구조로 안전을 확보하는 선택.
 
-1. **인덱싱 보강** — 청크 앞에 `[관련 항목] b0181=자녀세액공제대상수` 헤더를 붙여
-   임베딩한다. 코드만 있던 청크도 한글 의미로 검색된다.
-2. **매핑 부트스트랩** — `/map`에서 법령 텍스트와 사전의 한글 토큰을 정확 어휘 일치시켜
-   (IDF×길이 점수, 흔한 토큰은 자동으로 낮게) 해당 컬럼코드를 가리키는 파일을
-   고신뢰 `Mapping`으로 시드한다. 퍼지 RAG가 못 잡는 암호 컬럼을 보완한다.
+### 3. 환경에 따라 바뀌는 지점은 두 개의 이음새(seam)뿐 (ADR-003)
 
-사전은 `term_dict_cache.json`(코드→한글명), `term_loc_cache.json`(코드→파일)에 캐시되며,
-`REPO_ROOT`가 비면(mock 모드) 비활성화된다.
+- `app/llm/` — `LlmClient` (로컬 모델 ↔ Claude API, `get_llm_client()`가 선택)
+- `app/codebase/` — `CodebaseAdapter` (mock repo ↔ 실제 eHR repo, `REPO_ROOT`로 선택)
 
-### 도메인 레지스트리 (domains.json)
+집 개발(mock, API 키 없음)과 회사 운영(실 repo, SSL 프록시)의 차이가 **코드 분기
+없이 `.env` 설정만으로** 흡수된다. 프롬프트·파싱·diff 변환은 `app/llm/common.py`에
+공유되어 백엔드를 바꿔도 편집 형식과 승인 플로우는 변하지 않는다.
 
-수집 대상은 도메인 단위로 `domains.json`에서 관리한다 — 연말정산(세법)을 넘어
-인사시스템에 적용되는 법령 전반으로 확장하기 위한 구조다.
+### 4. 확률적 매칭의 천장은 3중 부트스트랩 + 검증 자산으로 넘는다 (ADR-005)
 
-```json
-{
-  "tax": { "label": "세법(연말정산)", "laws": ["소득세법", ...], "admin_rule_queries": [] },
-  "hr":  { "label": "노동·인사(급여/근태/4대보험)", "laws": ["근로기준법", "최저임금법", ...],
-           "admin_rule_queries": ["최저임금"] }
-}
-```
+임베딩 유사도만으로는 eHR 레거시의 암호 컬럼명(`a0121`, `n0200`)과 법령 용어를
+연결할 수 없다. 그래서 매핑을 세 갈래로 부트스트랩한다:
 
-- `laws`는 **법제처 등록명과 정확 일치**해야 한다 (시행령·시행규칙은 자동 확장).
-  가운뎃점은 `ㆍ`(U+318D) — 예: '남녀고용평등과 일ㆍ가정 양립 지원에 관한 법률'.
-  기본 hr 목록 11개는 전부 실API로 정확 명칭을 검증해 넣었다.
-- `admin_rule_queries`는 행정규칙(고시) 검색어 — 부분일치 (고시명은 매년 바뀜).
-- 수집 건마다 `LawChange.domain`이 저장되고 `GET /changes?domain=hr`로 필터된다.
-  담당자 라우팅(도메인별 알림)의 기반.
-- 파일이 없으면 기존 동작(세법 5개 + `ADMIN_RULE_QUERIES` 환경변수)으로 폴백.
-- 실검증(2026-07): hr 도메인 올해 개정 **법령 계층 13건**(퇴직급여법, 고용보험·
-  국민건강보험 시행령 등) + 최저임금 고시 — 세법과 마찬가지로 시행령·시행규칙
-  개정이 대부분이라 3계층 수집이 여기서도 유효하다.
+| 방법 | 원리 | 커버하는 것 |
+|---|---|---|
+| RAG 퍼지 검색 | bge-m3 벡터 유사도 | 일반적인 의미 매칭 |
+| 용어 사전 정확매칭 | SQL/VO 주석에서 `{코드: 한글명}` 자동 수확 | 암호 컬럼명 (`AS n0200 -- 자녀세액공제`) |
+| 상수 값매칭 | 코드의 수치 리터럴 인벤토리 × 개정문 금액 파싱 | "15만원→25만원" 같은 수치 개정 |
 
-### API 플로우
+셋 다 첫 부트스트랩용이고, **진짜 자산은 담당자 검증(verified) Mapping의 누적**이다.
+연말정산 세법은 매년 같은 자리(소득세법 제50~59조 부근)가 바뀌므로, 한 시즌만
+검증을 투자하면 이듬해부터 추측 없이 직행한다.
 
-```
-POST /collect              도메인별 수집 + 상세 자동 조회 (법령 3계층+행정규칙, tiers/domains 집계)
-POST /changes/{id}/analyze LLM으로 변경 분석·요약 + 해설서 발췌 컨텍스트 주입
-                           (JSON 형식 이탈 시 자동 재포맷 1회)
-GET  /changes?domain=hr    변경 목록 (도메인 필터)
-GET  /refdocs               참고 문서(해설서) 목록 / POST /refdocs/upload 업로드(즉시 인덱싱)
-DELETE /refdocs/{name}      참고 문서 삭제 (파일+인덱스)
-POST /changes/{id}/map     RAG 검색 + 사전 정확매칭 + 상수 값매칭 부트스트랩 → Mapping 저장
-                           (응답에 rag_hits / dict_matches / const_matches 분리 표기)
-PATCH /mappings/{id}/verify 담당자 매핑 검증 (정확도 향상)
-POST /changes/{id}/apply   LLM으로 patch 초안 생성 (local: 기본 모델 / claude: Sonnet)
-                           + GOLDEN_TEST_CMD 설정 시 골든 테스트 자동 검증
-POST /proposals/{id}/golden 골든 테스트 재실행 (기대값 갱신 후 재검증용)
-POST /proposals/{id}/approve 사람 승인 → patch 파일 출력 (골든 미통과 시 경고 명시)
-POST /proposals/{id}/reject  거절 → 재작업
-```
+### 5. 골든 테스트 — 환각의 구조적 차단 (ADR-006)
 
-> 매핑 검증(`verify`)을 하지 않아도 플로우는 진행된다. 이 경우 RAG confidence
-> 기반으로 자동 선택되며, 모델이 스니펫 불일치 시 초안에 경고를 명시한다.
+초안 diff를 repo **스크래치 사본**에 적용하고 `GOLDEN_TEST_CMD`(국세청 모의계산
+기대값 대조 등)를 실행한다. 실제 repo는 절대 건드리지 않는다. 개정이 계산 결과를
+바꾸면 patch에 기대값 갱신까지 포함되어야 통과하고, 그 갱신 자체도 승인 게이트에서
+검토된다. 실패한 초안도 승인은 가능하다(사람의 결정) — 다만 경고가 명시된다.
+
+### 6. 수집 대상은 도메인 레지스트리로 관리 (ADR-007)
+
+`domains.json`이 도메인(tax/hr)별 수집 법령·고시 검색어를 정의한다. 연말정산(세법
+5종)을 넘어 노동·인사 법령 11종으로 확장했고, 수집 건마다 `domain`이 태깅되어
+도메인별 담당자 라우팅의 기반이 된다. 법령은 3계층(법률/시행령/시행규칙)을
+수집한다 — 실제 수치·요건은 시행령에만 있는 경우가 많고("대통령령으로 정하는 금액"),
+최저임금처럼 **법령이 아니라 고시로 바뀌는 수치**는 행정규칙 수집으로 잡는다.
+
+### 7. 기반 기술 선택 근거
+
+- **ChromaDB**: SQLite처럼 파일 기반 임베디드 — 별도 서버 없이 pip 설치만으로 동작. 사내 이식 장벽 최소화 (ADR-004)
+- **bge-m3**: 한국어 강점 + CPU/M1에서 GPU 없이 동작
+- **OpenAI 호환 로컬 추론**: 특정 런타임 비종속 — Ollama/vLLM/llama.cpp/LM Studio를 `LOCAL_LLM_BASE_URL`만 바꿔 교체
+- **청킹**: Java는 메서드, SQL은 문장, XML은 쿼리/resultMap 단위 — 매핑 결과가 "파일"이 아니라 "수정 지점"을 가리키도록
 
 ---
 
-## 실동작 검증 결과 (2026-07-07, M시리즈 맥북 · CPU 추론)
+## 동작 방식
 
-qwen3:8b + Ollama로 가상 개정 시나리오(자녀세액공제 15만원→25만원) 전체 파이프라인 검증:
-
-| 단계 | 소요 시간 | 결과 |
-|---|---|---|
-| `analyze_change` (요약·영향 분석) | 약 1.5분 | JSON 파싱 정상, 요약 정확 |
-| `propose_edits` → unified diff | 약 4.5분 | 앵커를 원본과 동일하게 복사, `git apply` 가능한 diff 생성 |
-
-- 모델이 제공되지 않은 파일(VO/XML)의 편집을 지어내는 환각이 있었으나,
-  `build_unified_diff`가 "파일을 읽을 수 없음" 경고로 걸러내고 실제 파일 편집만
-  적용했다. **로컬 소형 모델의 약점이 기존 승인 게이트 안전장치로 상쇄됨을 확인.**
-- CPU 추론이라 초안 생성이 수 분 걸린다. 비실시간 워크플로(담당자 승인 대기)라
-  실용 범위이며, 응답이 `LOCAL_LLM_TIMEOUT_SECONDS`(기본 600초)를 넘으면 값을 늘릴 것.
-
-### 효용 평가 — 개정 유형별
-
-세법 개정을 유형별로 나누면 현재 시스템의 효용이 명확해진다:
-
-| 개정 유형 | 예 | 현재 효용 |
-|---|---|---|
-| **수치 개정** | 공제 한도·공제율·세율표 변경 (15만원→25만원) | ◎ git apply 가능한 초안까지 자동. 매년 개정의 상당수가 이 유형 |
-| **요건 개정** | 적용 대상·소득 기준 조건 변경 | △ 초안 품질은 낮으나 "어느 파일·어느 메서드"를 짚는 매핑 가치 유지 |
-| **구조 개정** | 공제 항목 신설·통합, 계산 체계 변경 | ✗ 자동 초안 무리. 놓치지 않고 감지 + 영향 범위 알림까지가 가치 |
-
-요약: **"탐지·알림 + 수치 개정의 초안 자동화" 수준에서 실질 효용이 있고,
-복잡한 개정에는 보조 도구.** 이 격차는 모델 크기보다 아래 로드맵(도메인 구조의
-시스템화)으로 줄이는 것이 효과적이다.
-
----
-
-## 효율 개선 로드맵
-
-임베딩·변수명 매칭은 확률적 추측이라 천장이 있다. 레버리지가 큰 순서로 정리했고,
-즉시 구현 가능했던 2·3·4번은 완료됐다:
-
-| # | 항목 | 상태 |
-|---|---|---|
-| 1 | 조문→코드 매핑 자산 축적 | 🔄 운영 과제 — 매 시즌 반복 |
-| 2 | 세법 상수 인벤토리 (값 매칭) | ✅ 구현됨 |
-| 3 | 골든 테스트 검증 | ✅ 구현됨 |
-| 4 | 앵커 실패 피드백 루프 | ✅ 구현됨 |
-| 5 | 컨텍스트 소스 확장 | 🔶 부분 구현 — 시행령·시행규칙 ✅, 해설서 업로드 ✅, few-shot ⬜ |
-| 6 | 모델 업그레이드 | ⏸ 보류 — 구조 개선이 우선 |
-| 7 | 세법 파라미터 테이블화 | 📅 장기 과제 — eHR 리팩토링 수반 |
-
-### 구현 완료
-
-**2. 세법 상수 인벤토리** ✅ 구현됨 (변수명이 아니라 '값'으로 매칭)
-`app/embedding/const_inventory.py`가 코드의 세법성 숫자 리터럴(1000원 단위 금액,
-소수 세율 — `150000L`, `0.15`, `upperLimit="14000000"`)을 {값: [(파일, 줄번호,
-줄내용)]} 인벤토리로 수확한다. 개정문의 한국어 금액 표기(`15만원`, `1천500만원`,
-`100분의 6`, `15퍼센트`)를 숫자로 변환해 **정확 값 일치**로 코드 위치를 찾고,
-`/map`에서 세 번째 부트스트랩(`const_matches`)으로 Mapping을 시드한다(conf 0.75~0.99).
-값이 희소할수록 점수가 높다(IDF — `1000` 같은 흔한 값은 자동으로 낮게).
-연도·날짜(2024, 20240101)는 세법성 필터로 제외되고, `0.0600`(SQL)과 `0.06`(XML)은
-같은 키로 정규화된다. 캐시는 `const_inventory_cache.json`(gitignore, 자동 재생성).
-검증: "과세표준 1천400만원 이하 구간의 세율을 100분의 6에서…" → `14000000`·`0.06`·
-`840000`이 세율표 XML/SQL 정확 위치로 매칭됨. (근본 해법인 파라미터 테이블화는
-장기 과제 7번 참고.)
-**노동법 수치로 일반화됨(2026-07)**: 금액 기준을 10원 단위로 완화(최저임금
-10,320원 대응, 연도·YYYYMMDD 날짜는 명시 제외), 주 52시간·연차 15일 같은 작은
-정수는 단위 힌트(시간/연차/주당 등)가 있는 줄에서만 수확해 오탐을 억제, 개정문
-파싱에 시간·일수·개월·나이 표기 추가, Java 언더스코어 리터럴(`14_000_000`) 지원.
-검증: "시간급 10,030원에서 10,320원으로" → `salary/MinimumWageValidator.java`
-정확 매칭 + 기존 세법 사례 회귀 통과.
-
-**3. 골든 테스트로 초안 검증** ✅ 구현됨 (환각의 구조적 차단)
-`app/golden.py`가 초안 diff를 repo **스크래치 사본**에 적용하고 `GOLDEN_TEST_CMD`
-(국세청 모의계산 사례 기대값 대조 등)를 실행한다 — 실제 repo는 절대 건드리지 않는다.
-`/apply` 시 자동 실행되어 결과(passed/failed/apply_failed)가 초안에 저장되고,
-`POST /proposals/{id}/golden`으로 재검증할 수 있다. 골든 테스트가 실패한 초안도
-승인은 가능하지만(사람의 결정) 응답에 경고가 명시된다.
-개정이 계산 결과를 바꾸는 경우 **patch에 골든 케이스 기대값 갱신을 함께 포함**해야
-통과한다 — 기대값 갱신 자체도 승인 게이트에서 검토된다. mock 검증: 세율만 바꾼
-patch는 `failed`(불일치 금액까지 출력), 세율+기대값을 함께 바꾼 patch는 `passed`.
-mock 골든 테스트는 `mock_repo/tests/golden_income_tax.py`(세율표 XML → 산출세액
-계산 → `golden_cases.json` 대조) 참고 — 회사에서는 사내 빌드/테스트 명령을
-`GOLDEN_TEST_CMD`에 지정하면 된다.
-
-**4. 앵커 실패 피드백 루프** ✅ 구현됨
-"앵커를 찾지 못함" 실패를 모델에게 되돌려 자동 재시도한다 (`propose_and_build`,
-최대 2회). 실패한 SEARCH와 가장 비슷한 **실제 원본 발췌**(fuzzy 매칭으로 주변
-±25줄)를 보여주며 재작성시키므로, 파일 전체를 보내지 않고도 로컬 소형 모델의
-복사 실수를 보정한다. 존재하지 않는 파일(환각)은 재시도 대상에서 제외하고 경고만
-남긴다. qwen3:8b 실검증: 공백·주석이 다른 불일치 앵커를 1회 재시도로 정확 복사,
-적용 가능한 diff 생성 확인.
-
-### 남은 로드맵
-
-**1. 조문→코드 매핑을 자산으로 축적** 🔄 운영 과제 (비용 최소 — 구조는 이미 있음)
-연말정산 세법은 매년 **같은 자리**(소득세법 제50~59조 부근)가 바뀐다. `Mapping`
-테이블(verified 플래그)에 한 시즌만 담당자 검증(`PATCH /mappings/{id}/verify`)을
-투자하면, 이듬해부터는 RAG 추측 없이 검증된 매핑으로 직행한다. 퍼지 검색·사전·상수
-매칭은 첫 부트스트랩용이고, 진짜 자산은 검증된 매핑의 누적이다. 구현이 아니라
-운영 방침의 문제 — **첫 회사 적용 시즌에 반드시 실행할 것.**
-
-**5. 컨텍스트 소스 확장** 🔶 부분 구현 (시행령·시행규칙 완료)
-법률 본문만으로는 부족하다. 우선순위 순으로:
-- **시행령·시행규칙 수집** ✅ 구현됨 — 세법은 위임 구조라 실제 수치·요건(총급여
-  기준, 간이세액표 등)이 시행령에만 있는 경우가 많다. 법률은 "대통령령으로 정하는
-  금액"이라고만 써서 **상수 매칭이 시행령 텍스트 없이는 성립하지 않는다.**
-  5개 세법 × 3계층(법률/시행령/시행규칙) 화이트리스트를 수집하되, 시행령류는
-  개정이 잦아 **정확 법령명 필터**로 유사 법령·부칙 노이즈를 차단한다
-  (`COLLECT_DECREES=false`로 법률만 수집 가능). `/changes` 응답에 `tier` 표기.
-  실API 검증(2026-07): 올해 5개 세법의 **법률 개정 0건, 시행령·시행규칙 개정
-  10건** — 법률만 수집하던 기존 방식은 올해 변경을 전부 놓쳤을 상황이었다.
-- **행정규칙(고시·훈령) 수집** ✅ 구현·실검증됨 — 최저임금(매년 고용노동부 고시)·
-  보험요율처럼 **법령 개정이 아니라 고시로 바뀌는 수치**는 법률/시행령 수집으로는
-  잡히지 않는다. 도메인 레지스트리의 `admin_rule_queries` 검색어로 수집하며,
-  고시명은 매년 바뀌므로('2026년 적용 최저임금 고시') 정확 일치 대신 검색어
-  부분일치 + 발령일 필터. `LawChange.source`에 종류(고시/훈령 등)가 저장되고
-  `/changes`의 `tier`로 표기된다.
-  실검증(2026-07): '최저임금' 검색으로 2026년 적용 최저임금 고시 수집 →
-  **본문이 빈 고시는 PDF 첨부를 자동 추출** — 재개정 이유서에서 "시간급
-  10,030원 → 10,320원" 전후 수치까지 확보 (상수 매칭에 이상적 입력).
-  HWP 등 비PDF 첨부는 미추출(파일명만 기록).
-  ⚠ 법제처 API는 target별 신청제 — OC 키에 **행정규칙 목록/본문을 추가 신청**해야
-  하며(open.law.go.kr), 미신청이면 `/collect` 응답에 `admrul_warning`으로 안내된다.
-  ⚠ 본문 조회의 `ID` 파라미터는 행정규칙ID가 아니라 **행정규칙일련번호**다
-  (행정규칙ID는 `LID`) — 참조 구현(korean-law-mcp)의 문서와 달라 실API로 확인함.
-  확장 유틸리티 2종도 수집기에 포함(파이프라인 미연결): `search_effective`(eflaw,
-  시행일 기준 "곧 시행될 개정" 조회 — 실검증: 소득세법 계열 2027~2028 시행예정 5건),
-  `fetch_three_tier`(thdCmp, 법률→시행령→시행규칙 **위임조문 공식 매핑** — 실검증:
-  소득세법 위임 조문 188건).
-- **국세청 『개정세법 해설』 RAG 반영** ✅ 구현됨 — 공식 API가 없고 연 1회 발간이라
-  자동 수집 대신 반자동: 웹 UI의 **📚 해설서 관리**에서 PDF/TXT/MD를 올리면
-  `data/uploads/`(`DOCS_DIR`)에 저장되고 즉시 인덱싱된다 (`app/embedding/docs_index.py`, 코드 인덱스와
-  분리된 `tax_docs` 컬렉션). analyze 시 해당 개정과 유사한 해설 발췌가
-  `[참고 자료]` 컨텍스트로 자동 주입된다. API: `GET/DELETE /refdocs`,
-  `POST /refdocs/upload`. 스캔 이미지 PDF(텍스트 없는)는 미지원.
-- **과거 세법개정 반영 커밋 few-shot** ⬜ — 회사 repo의 지난 개정 커밋이 "이
-  코드베이스에서 한도 변경은 이렇게 고친다"는 최고의 예시. propose 프롬프트에
-  유사 과거 사례 1~2건을 주입하면 초안 품질이 올라간다. (회사 repo의 git 이력
-  필요 — 회사 이식 후 진행)
-
-**6. 모델 업그레이드** ⏸ 보류 — 구조 개선이 우선
-qwen3:14b/32b로 올리면 나아지지만, 구조 개선 없이 모델만 키우는 건 추측의 정확도를
-올리는 것에 그친다. 매핑 자산(1)·컨텍스트 확장(5)이 갖춰진 뒤에도 요건 개정 초안
-품질이 아쉬우면 그때 `LOCAL_LLM_MODEL`만 바꿔서 올린다(재인덱싱 불필요 —
-"모델 업그레이드 / 교체" 절 참고).
-
-**7. 세법 파라미터 테이블화** 📅 장기 과제 (eHR 리팩토링 수반)
-코드에 박힌 세법 상수를 **연도 버전 파라미터 테이블**로 빼는 근본 해법. 매년 개정이
-"코드 수정"이 아니라 "파라미터 행 추가"가 되고, LLM의 역할도 위험한 코드 편집이
-아니라 검증 쉬운 데이터 제안으로 바뀐다. 상수 인벤토리(2)가 이미 "어떤 값이 어디에
-박혀 있는지"를 수확하므로, 그 결과가 곧 리팩토링 대상 목록이다. eHR 코드 변경이
-필요해 이 시스템 단독으로는 못 하고, 유지보수 조직의 합의가 필요하다.
-
----
-
-## 로컬 모델 운영
-
-### 설치 (Ollama 기준, macOS)
-
-```bash
-brew install ollama
-ollama serve                 # http://localhost:11434 (상시 구동: brew services start ollama)
-ollama pull qwen3:8b         # 기본 모델 (한국어·코드 모두 무난, 약 5GB)
-# 대안: exaone3.5:7.8b (한국어 특화), qwen3:14b (품질↑, 메모리↑)
+```
+법제처 API → collect (LawChange 저장, domain/tier 태깅, 고시는 PDF 첨부 자동 추출)
+  → analyze (LLM 요약·영향 분석 + 해설서 RAG 컨텍스트 주입)
+  → map     (RAG + 사전 정확매칭 + 상수 값매칭 → Mapping, 담당자 verify로 자산화)
+  → apply   (LLM 앵커 편집 → unified diff → 골든 테스트 자동 검증 → Proposal)
+  → approve/reject (사람 승인 게이트 → patch 파일 출력)
 ```
 
-### 모델 업그레이드 / 교체
+- **인덱싱**: 서버 첫 기동 시 `chroma_data/`가 비어 있으면 자동 인덱싱된다 (CPU라
+  수십 분). 코드/사전 변경을 검색에 반영하려면 `rm -rf chroma_data/` 후 재기동.
+  생성 모델 교체는 재인덱싱 불필요 — `EMBEDDING_MODEL`을 바꿀 때만 재구축.
+- **앵커 실패 피드백 루프**: 모델이 SEARCH 앵커를 원본과 다르게 복사하면, 가장
+  비슷한 실제 원본 발췌(±25줄)를 보여주며 최대 2회 자동 재작성시킨다. 파일 전체를
+  보내지 않고 로컬 소형 모델의 복사 실수를 보정한다.
 
-```bash
-ollama pull qwen3:14b                # 새 모델 받기
-# .env 에서 LOCAL_LLM_MODEL=qwen3:14b 로 변경 후 서버 재시작 — 그게 전부
-```
+### 실동작 검증 (2026-07, M1 · qwen3:8b · CPU 추론)
 
-- **재인덱싱 불필요.** 생성 LLM 교체는 임베딩과 무관하다. `chroma_data/` 재구축은
-  `EMBEDDING_MODEL`(bge-m3)을 바꿀 때만 필요하다.
-- 초안 품질이 아쉬우면 `qwen3:14b`(약 9GB), 속도가 아쉬우면 분석 단계만
-  `LOCAL_LLM_MODEL_CHEAP=qwen3:4b` 로 분리.
-- Ollama가 아닌 사내 vLLM 등을 쓰려면 모델 설치 없이 `LOCAL_LLM_BASE_URL`만
-  해당 서버의 OpenAI 호환 엔드포인트로 지정.
-- Claude API로 되돌리기: `.env`에 `LLM_BACKEND=claude` + `ANTHROPIC_API_KEY` 입력.
-
----
-
-## 시작하기
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate        # (Windows) .venv\Scripts\activate
-pip install -r requirements.txt
-
-cp .env.example .env             # LAW_API_OC 입력 (claude 백엔드 사용 시 ANTHROPIC_API_KEY도)
-
-# 로컬 추론 서버 준비 (기본 백엔드)
-ollama serve &
-ollama pull qwen3:8b
-
-uvicorn app.main:app --reload    # http://127.0.0.1:8000/health
-# 서버 시작 시 ChromaDB가 비어 있으면 mock_repo 자동 인덱싱
-```
-
-## 환경별 이식
-
-### 집 개발 (현재)
-- `MockCodebaseAdapter` + `mock_repo/` 사용
-- `LAW_API_OC` 없으면 mock 법령 데이터로 동작
-
-### 회사 PC 이식
-
-git에는 **코드만** 들어 있다. `.env`, `.venv/`, `chroma_data/`, Ollama 모델은
-모두 gitignore 대상이라 pull 후 머신마다 다시 준비해야 한다:
-
-| 항목 | git으로 옮겨지나 | 회사에서 할 일 |
+| 단계 | 소요 | 결과 |
 |---|---|---|
-| 코드 (LocalClient, 팩토리 등) | ✓ | pull만 하면 됨 |
-| `.env` | ✗ | `.env.example` 복사 후 작성 |
-| `.venv/` | ✗ | venv 재생성 + pip install |
-| Ollama + 모델 | ✗ | 아래 3번 참고 |
-| `chroma_data/` (벡터 인덱스) | ✗ | 첫 기동 시 자동 재인덱싱 |
+| analyze (요약·영향 분석) | 약 1.5분 | JSON 파싱 정상, 요약 정확 |
+| propose → unified diff | 약 4.5분 | `git apply` 가능한 diff 생성 |
 
-1. `python3.10 -m venv .venv && pip install -r requirements.txt`
-   (SSL 프록시 환경이면 `HF_HUB_DISABLE_SSL=true` + pip `--trusted-host` 필요할 수 있음.
-   법제처 API 호출은 truststore가 OS 인증서 저장소를 신뢰해 프록시 CA 문제 없이 동작)
-2. `cp .env.example .env` 후 `LAW_API_OC`, `REPO_ROOT` 등 입력
-3. 추론 서버 준비 — 셋 중 하나:
-   - `brew install ollama && ollama pull qwen3:8b` (외부망 가능 시)
-   - 프록시가 ollama.com을 막으면 집에서 받은 `~/.ollama/models/` 폴더를 통째로
-     복사해도 동작한다 (모델 저장소는 단순 파일)
-   - 사내 vLLM 등이 있으면 설치 없이 `LOCAL_LLM_BASE_URL`만 지정
-4. `REPO_ROOT`를 실제 repo 경로로 지정 → 첫 기동 시 자동 인덱싱(수십 분)
-5. 초기 1회 담당자 매핑 검증 (`PATCH /mappings/{id}/verify`) 권장 — 개선 로드맵 1번
-
-기본 local 백엔드면 코드 외부 반출이 없으므로 보안 검토가 단순해진다.
-claude 백엔드를 쓰려면 보안팀에 "RAG로 좁힌 스니펫 단위 외부 전송 가능 여부" 확인.
+가상 개정(자녀세액공제 15만원→25만원)과 노동법 사례(최저임금 시간급 10,030→10,320원)
+모두 정확한 코드 위치로 매칭됐다. 비실시간 워크플로(담당자 승인 대기)라 수 분의
+생성 시간은 실용 범위.
 
 ---
 
@@ -408,41 +126,176 @@ claude 백엔드를 쓰려면 보안팀에 "RAG로 좁힌 스니펫 단위 외�
 
 ```
 regtax-monitor/
-├── config.py              설정 (.env 로드)
-├── mock_repo/             개발용 mock 코드베이스 (Java/SQL/XML)
+├── config.py              모든 설정의 단일 진입점 (.env 로드, pydantic-settings)
+├── domains.json           수집 도메인 레지스트리 (tax/hr — 법령명·고시 검색어)
+├── run.py                 uvicorn 런처 (:8000)
+├── static/index.html      대시보드 UI (단일 파일, 바닐라 JS)
+├── mock_repo/             집 개발용 mock eHR (Java/SQL/XML + 골든 테스트)
+├── data/uploads/          해설서 업로드 폴더 (gitignore)
 ├── app/
-│   ├── main.py            FastAPI 엔트리
-│   ├── db/                저장 레이어 (SQLite → 추후 Postgres)
-│   │   ├── database.py
-│   │   └── models.py      LawChange / Mapping / Review / PatchProposal / SyncState
-│   ├── llm/               [이음새 1] 추론
-│   │   ├── __init__.py    get_llm_client() — LLM_BACKEND에 따라 백엔드 선택
-│   │   ├── base.py        LlmClient 인터페이스
-│   │   ├── common.py      공용 프롬프트 + 응답 파싱(JSON/편집 블록/diff 변환)
-│   │   ├── local_client.py   로컬 추론 (Ollama/vLLM 등 OpenAI 호환) — 기본
-│   │   └── claude_client.py  Claude Haiku(분석) + Sonnet(patch) — 기존 하이브리드
-│   ├── codebase/          [이음새 2] 코드 분석
-│   │   ├── base.py        CodebaseAdapter 인터페이스
-│   │   └── mock_adapter.py   mock_repo 대상 구현체
-│   ├── embedding/
-│   │   ├── indexer.py     bge-m3 로컬 임베딩 + ChromaDB + 청킹(Java/SQL/XML) + 사전 보강
-│   │   ├── term_dict.py   용어 사전 수확(코드↔한글명) + 매핑 부트스트랩(법령→코드→파일)
-│   │   └── const_inventory.py  세법 상수 수확(값→위치) + 개정문 금액 파싱 + 값매칭
-│   └── collector/
-│       ├── law_api.py     법제처 OPEN API 수집 (법령·행정규칙) + 신구대조·위임 3단비교 조회
-│       └── registry.py    도메인 레지스트리 로더 (domains.json)
+│   ├── main.py            FastAPI 엔트리 + 전체 API 라우트
+│   ├── golden.py          골든 테스트 (스크래치 사본에 diff 적용·검증)
+│   ├── db/                SQLAlchemy 모델 (LawChange/Mapping/PatchProposal …) + SQLite
+│   ├── llm/               [이음새 1] LlmClient — local_client(기본)/claude_client + common(공유 프롬프트·파싱)
+│   ├── codebase/          [이음새 2] CodebaseAdapter — mock_adapter/real_adapter
+│   ├── embedding/         indexer(코드 RAG) · docs_index(해설서 RAG) · term_dict(용어 사전) · const_inventory(상수 값매칭)
+│   └── collector/         law_api(법제처 API — 법령 3계층·행정규칙·PDF 첨부) + registry(도메인 로더)
+├── tests/                 앱 테스트 (pytest)
+├── scripts/               개발 하네스 (verify.sh, execute.py, trace.py)
+└── docs/                  PRD · ARCHITECTURE · ADR · UI_GUIDE · OBSERVABILITY
 ```
 
-## 주요 설계 결정
+레이어 규칙 등 상세: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
-- **ChromaDB**: 별도 서버 불필요, 파일 기반 임베디드 동작
-- **bge-m3**: 한국어 강점, CPU/M1에서 GPU 없이 동작
-- **청킹**: Java는 메서드 단위, SQL은 문장 단위, XML은 쿼리/resultMap 단위
-- **용어 사전**: 암호 컬럼명(a0121 등)을 SQL/VO 주석에서 자동 수확 → 인덱싱 보강 + 매핑 부트스트랩
-- **Mapping 테이블**: AI 부트스트랩(verified=False) → 담당자 검증(verified=True) → 이후 재변경 시 직행
-- **로컬 추론(OpenAI 호환)**: 특정 런타임에 종속되지 않음 — Ollama/vLLM/llama.cpp 교체 자유
-- **배치 API**: claude 백엔드 사용 시 비실시간 워크로드로 Anthropic Batch API 50% 할인 적용 가능
-- **개발 보조 MCP**: [korean-law-mcp](https://github.com/chrisryugj/korean-law-mcp)(MIT)를
-  Claude Code에 로컬 등록해 개발 중 법령·고시·판례 조회에 활용 (`claude mcp add`,
-  OC 키는 로컬 설정에만 저장). 프로덕션 수집은 법제처 API 직접 호출 — 외부 서버 미경유.
-  admrul/eflaw/thdCmp 파싱은 이 저장소의 검증된 호출 방식을 참조 구현으로 포팅한 것
+---
+
+## 시작하기
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt          # 개발 도구까지: -r requirements-dev.txt 추가
+
+cp .env.example .env                     # LAW_API_OC 입력 (없으면 mock 법령 데이터로 동작)
+
+# 로컬 추론 서버 (기본 백엔드) — 컨텍스트 창을 반드시 함께 지정할 것 (아래 주의사항)
+brew install ollama
+ollama pull qwen3:8b
+OLLAMA_CONTEXT_LENGTH=16384 ollama serve
+
+python run.py                            # http://127.0.0.1:8000 (첫 기동 시 자동 인덱싱)
+```
+
+### ⚠ 컨텍스트 창 주의사항 (실패 사례에서 얻은 것)
+
+- Ollama의 OpenAI 호환 레이어(`/v1`)는 요청의 `options.num_ctx`를 **무시한다**
+  (0.31.1 확인). 컨텍스트 창은 서버 기동 시 `OLLAMA_CONTEXT_LENGTH`로 설정해야 한다.
+- 기본 4096으로 기동하면 RAG 프롬프트가 잘려(context shift) **오해석·할루시네이션**의
+  원인이 된다. serve 로그에 "context shift"가 보이면 프롬프트 유실 신호다.
+- 앱은 호출마다 프롬프트 근사 토큰을 로그로 출력하고, `LOCAL_LLM_NUM_CTX`(기본
+  16384)를 넘으면 경고한다 — 서버의 `OLLAMA_CONTEXT_LENGTH`와 같은 값으로 맞출 것.
+- 근거 기록: `.harness/failures/F-20260712-0001`(컨텍스트 유실),
+  `F-20260712-0002`(출력 토큰 상한 절단).
+
+---
+
+## 활용 방법
+
+### 웹 UI 워크플로 (대시보드: http://127.0.0.1:8000)
+
+1. **수집** 버튼 → 도메인별 법령·고시 변경이 목록에 쌓인다 (도메인 필터 지원)
+2. 변경 건 선택 → **분석** → LLM 요약·영향 분석 확인
+3. **매핑** → 관련 코드 위치 목록 (rag_hits / dict_matches / const_matches 출처 표기)
+   → 맞는 매핑은 **검증** 체크 (다음 시즌부터 이 매핑으로 직행)
+4. **반영** → patch 초안 생성 + 골든 테스트 자동 실행
+5. 초안 검토 → **승인**(patch 파일 출력) 또는 **거절**(재작업)
+6. **📚 해설서 관리** → 국세청 『개정세법 해설』 PDF 업로드 (즉시 인덱싱되어
+   analyze 컨텍스트로 자동 주입)
+
+### API로 직접 (자동화·스크립팅)
+
+```
+POST  /collect                     도메인별 수집 (법령 3계층 + 행정규칙)
+GET   /changes?domain=hr           변경 목록 (도메인 필터)
+POST  /changes/{id}/analyze        LLM 분석·요약
+POST  /changes/{id}/map            매핑 부트스트랩 (RAG+사전+상수)
+PATCH /mappings/{id}/verify        담당자 매핑 검증 ★ 자산화의 핵심
+POST  /changes/{id}/apply          patch 초안 생성 + 골든 테스트
+POST  /proposals/{id}/golden       골든 테스트 재실행
+POST  /proposals/{id}/approve      승인 → patch 파일 출력
+POST  /proposals/{id}/reject       거절
+GET/POST/DELETE /refdocs…          해설서 목록/업로드/삭제
+```
+
+매핑 검증을 건너뛰어도 플로우는 진행된다(RAG confidence 기반 자동 선택). 주기 수집은
+`SCHEDULER_ENABLED=true`(기본 24시간 간격).
+
+### 어디까지 기대할 수 있나 — 개정 유형별 효용
+
+| 개정 유형 | 예 | 효용 |
+|---|---|---|
+| **수치 개정** | 공제 한도·세율표 변경 (15만원→25만원) | ◎ git apply 가능한 초안까지 자동. 매년 개정의 상당수 |
+| **요건 개정** | 적용 대상·소득 기준 변경 | △ 초안 품질은 낮으나 "어느 파일·어느 메서드" 매핑 가치 유지 |
+| **구조 개정** | 공제 항목 신설·계산 체계 변경 | ✗ 자동 초안 무리. 감지 + 영향 범위 알림까지가 가치 |
+
+**"탐지·알림 + 수치 개정의 초안 자동화"가 실질 효용 범위**이고, 복잡한 개정에는
+보조 도구다. 이 격차는 모델 크기가 아니라 구조(매핑 자산 축적, 컨텍스트 확장,
+장기적으로 파라미터 테이블화)로 줄인다.
+
+### 골든 테스트 설정
+
+`.env`의 `GOLDEN_TEST_CMD`에 스크래치 repo 루트에서 실행할 검증 명령을 지정한다
+(exit 0=통과, 비우면 검증 생략).
+
+- mock 개발: `python3 tests/golden_income_tax.py` (세율표 XML→산출세액→기대값 대조)
+- 회사: 사내 빌드/테스트 명령 (예: `mvn -q test -Dtest=YearEndGoldenTest`)
+
+### 모델 업그레이드 / 교체
+
+```bash
+ollama pull qwen3:14b        # .env에서 LOCAL_LLM_MODEL=qwen3:14b 변경 후 재시작 — 그게 전부
+```
+
+- 재인덱싱 불필요 (생성 모델과 임베딩은 무관)
+- 속도가 아쉬우면 분석 단계만 `LOCAL_LLM_MODEL_CHEAP=qwen3:4b`로 분리
+- 사내 vLLM 등은 `LOCAL_LLM_BASE_URL`만 해당 서버로 지정
+- Claude API 복귀: `LLM_BACKEND=claude` + `ANTHROPIC_API_KEY`
+
+---
+
+## 환경 이식
+
+git에는 **코드만** 들어 있다. `.env`, `.venv/`, `chroma_data/`, Ollama 모델은 모두
+gitignore 대상이라 머신마다 준비한다:
+
+| 항목 | git으로 옮겨지나 | 회사에서 할 일 |
+|---|---|---|
+| 코드 전체 | ✓ | pull만 하면 됨 |
+| `.env` | ✗ | `.env.example` 복사 후 `LAW_API_OC`, `REPO_ROOT` 등 입력 |
+| `.venv/` | ✗ | venv 재생성 + pip install |
+| Ollama + 모델 | ✗ | 사내망이 ollama.com을 막으면 `~/.ollama/models/` 폴더를 통째로 복사해도 동작. 사내 vLLM이 있으면 `LOCAL_LLM_BASE_URL`만 지정 |
+| `chroma_data/` | ✗ | `REPO_ROOT` 지정 후 첫 기동 시 자동 인덱싱 (수십 분) |
+
+- SSL 프록시 환경: `HF_HUB_DISABLE_SSL=true` + pip `--trusted-host`. 법제처 API는
+  truststore가 OS 인증서 저장소를 신뢰해 프록시 CA 문제 없이 동작. **코드에
+  `verify=False` 하드코딩 금지.**
+- 법제처 OC 키는 **target별 신청제** — 행정규칙 목록/본문은 별도 신청 필요
+  (미신청 시 `/collect` 응답의 `admrul_warning`으로 안내).
+- 이식 후 첫 시즌에 담당자 매핑 검증(`PATCH /mappings/{id}/verify`)을 반드시 실행
+  — 이것이 이듬해부터의 정확도를 결정한다.
+
+---
+
+## 개발
+
+```bash
+bash scripts/verify.sh quick     # lint (ruff) — 수 초
+bash scripts/verify.sh full      # quick + pytest (tests/ + scripts/)
+bash scripts/verify.sh security  # 시크릿 스캔 + pip-audit
+```
+
+- 개발 규칙·CRITICAL 제약: [CLAUDE.md](CLAUDE.md) / 설계 결정: [docs/ADR.md](docs/ADR.md)
+- 실패 이력은 `.harness/failures/`에 구조화 기록된다 (원인 검증 후 resolved 처리,
+  삭제 금지 — [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md))
+- 개발 보조로 [korean-law-mcp](https://github.com/chrisryugj/korean-law-mcp)(MIT)를
+  Claude Code에 로컬 등록해 법령·고시 조회에 활용. 프로덕션 수집은 법제처 API 직접
+  호출(외부 서버 미경유)이며, admrul/eflaw/thdCmp 파싱은 이 저장소의 검증된 호출
+  방식을 참조 구현으로 포팅한 것.
+
+## 로드맵
+
+레버리지 큰 순서. 즉시 구현 가능했던 것은 완료됐고, 남은 것은 운영·장기 과제:
+
+| # | 항목 | 상태 |
+|---|---|---|
+| 1 | 조문→코드 매핑 자산 축적 | 🔄 운영 과제 — 매 시즌 검증 반복 (구조는 완성) |
+| 2 | 상수 인벤토리 값매칭 (세법+노동법 수치) | ✅ |
+| 3 | 골든 테스트 검증 | ✅ |
+| 4 | 앵커 실패 피드백 루프 | ✅ |
+| 5 | 컨텍스트 소스 확장 — 시행령·시행규칙 ✅ / 행정규칙(고시) ✅ / 해설서 RAG ✅ / 과거 개정 커밋 few-shot ⬜(회사 repo 이력 필요) | 🔶 |
+| 6 | 모델 업그레이드 | ⏸ 보류 — 구조 개선(1·5)이 우선, 필요 시 `LOCAL_LLM_MODEL`만 교체 |
+| 7 | 세법 파라미터 테이블화 — 개정을 "코드 수정"이 아니라 "파라미터 행 추가"로 | 📅 장기 (eHR 리팩토링 수반). 상수 인벤토리(2)의 수확 결과가 곧 리팩토링 대상 목록 |
+
+수집기에는 확장 유틸리티 2종이 파이프라인 미연결 상태로 포함되어 있다:
+`search_effective`(시행일 기준 "곧 시행될 개정" 조회), `fetch_three_tier`(법률→시행령
+→시행규칙 위임조문 공식 매핑 — 소득세법 188건 실검증).
