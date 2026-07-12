@@ -1,0 +1,37 @@
+# 실패 분류 코드 정의 (사람이 관리하는 고정 파일)
+#
+# 규칙:
+#   1. failure 레코드의 category / cause_code는 이 파일에 정의된 값만 사용한다.
+#   2. 새 코드가 필요하면 이 파일에 먼저 추가한다 (에이전트는 이 파일을 수정할 수 없다).
+#   3. 이 파일은 추후 옵티마이저 층(docs/OPTIMIZER_DESIGN.md)의 불변 표면에 속한다.
+
+# 증상 분류 — "무엇이 관측되었나" (자동 기록 가능)
+symptom_categories:
+  build_error:        컴파일/빌드 실패
+  test_failure:       테스트 실패
+  validation_failure: 하네스 검증 게이트(AC, verify.sh) 불통과
+  tool_error:         도구 호출 실패 (bash 에러, API 오류 등)
+  timeout:            시간/예산 초과
+  env_error:          환경 문제 (의존성, 권한, 인증, 네트워크)
+  spec_mismatch:      결과물이 요구사항/원본 동작과 불일치
+  regression:         기존 동작 파괴
+
+# 원인 분류 — "왜 일어났나" (검증 후에만 부여, verified_by와 짝)
+cause_codes:
+  assumption_stale_api:  낡은/잘못된 API·스키마·컬럼명 가정
+  drift_from_plan:       계획한 방식 대신 익숙한 해법으로 이탈
+  context_loss:          긴 작업 중 맥락 유실
+  false_success_claim:   노이즈 결과를 성공으로 판정
+  missing_validation:    검증 단계 자체가 없었음
+  unbounded_retry:       무한/과도 재시도
+  env_config:            환경 설정 문제
+  flaky_external:        외부 요인 (네트워크, 서드파티 불안정)
+  human_spec_ambiguity:  요구사항 자체가 모호했음
+  gaming_attempt:        검증 우회 시도 (보호 파일 수정, 테스트 약화 등)
+  unknown:               원인 미상 (verified_by가 unverified일 때만 허용)
+
+# 프로젝트별 확장 — 운영하며 고유 패턴이 보이면 아래에 추가
+# 예:
+#   nexacro_deploy_config: Nexacro 배포 산출물 설정 오류 (.xadl.js 등)
+#   sp_result_mismatch:    저장 프로시저 결과셋 불일치
+project_cause_codes: {}
