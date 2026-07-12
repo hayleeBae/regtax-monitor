@@ -70,7 +70,7 @@ for query, gold, bad in CASES:
     print(f"{query[:33]:<34} {gold:>7} {s_raw:>8.3f} {s_enr:>9.3f} {delta:>+7.3f} {s_bad:>8.3f} {flag}")
 
 print("-" * 82)
-print(f"\n정답 코드의 enriched 헤더 (검증용):")
+print("\n정답 코드의 enriched 헤더 (검증용):")
 for _, gold, _ in CASES:
     print(f"  {gold}: {build_header(raw_chunk(gold), table)}")
 print(f"\n결과: {wins}/{len(CASES)} 케이스에서 "

@@ -1,0 +1,4 @@
+# 개발·검증 도구 (운영 런타임에는 불필요) — scripts/verify.sh가 사용
+ruff>=0.5
+pytest>=8.0
+pip-audit>=2.7

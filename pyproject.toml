@@ -1,0 +1,13 @@
+[tool.ruff]
+target-version = "py310"
+extend-exclude = ["mock_repo", "chroma_data", ".harness"]
+
+[tool.ruff.lint.per-file-ignores]
+# truststore.inject_into_ssl() / stdout 인코딩 래핑을 import보다 먼저 실행해야 하는 스크립트
+"validate_enrich.py" = ["E402"]
+"microbench_enrich.py" = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "scripts"]
+pythonpath = ["."]
+addopts = "-q"

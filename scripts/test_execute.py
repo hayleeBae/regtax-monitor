@@ -4,11 +4,8 @@ execute.py 리팩터링 안전망 테스트.
 """
 
 import json
-import os
-import subprocess
 import sys
-import textwrap
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -430,7 +427,7 @@ class TestInvokeClaude:
         preamble = "PREAMBLE\n"
 
         with patch("subprocess.run", return_value=mock_result) as mock_run:
-            output = executor._invoke_claude(step, preamble)
+            executor._invoke_claude(step, preamble)
 
         cmd = mock_run.call_args[0][0]
         assert cmd[0] == "claude"

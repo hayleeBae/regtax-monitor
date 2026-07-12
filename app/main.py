@@ -1,4 +1,3 @@
-import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -54,7 +53,7 @@ def _start_scheduler():
         db = next(_get_session())
         try:
             collect(db)
-            print(f"[스케줄러] 법령 수집 완료")
+            print("[스케줄러] 법령 수집 완료")
         except Exception as e:
             print(f"[스케줄러] 수집 오류: {e}")
         finally:

@@ -20,7 +20,8 @@ class Settings(BaseSettings):
     llm_model: str = "claude-sonnet-4-6"
     llm_model_cheap: str = "claude-haiku-4-5-20251001"
 
-    docs_dir: str = "docs"  # 참고 문서(개정세법 해설 PDF 등) 업로드 폴더
+    # 참고 문서(개정세법 해설 PDF 등) 업로드 폴더 — 프로젝트 문서(docs/)와 분리
+    docs_dir: str = "data/uploads"
 
     # 골든 테스트 — 스크래치 repo 루트에서 실행할 명령 (exit 0=통과). 비우면 검증 생략
     golden_test_cmd: str = ""

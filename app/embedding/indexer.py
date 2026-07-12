@@ -212,7 +212,7 @@ def _chunk_xml(text: str) -> list[str]:
     id 속성을 청크 앞에 붙여 임베딩이 쿼리 식별자를 인식하게 한다."""
     chunks = []
     for m in _XML_STMT.finditer(text):
-        tag, attrs, body = m.group(1), m.group(2), m.group(3)
+        tag, attrs = m.group(1), m.group(2)
         id_match = _XML_ID.search(attrs)
         label = f"[{tag} id={id_match.group(1)}]\n" if id_match else f"[{tag}]\n"
         chunk = (label + m.group(0)).strip()

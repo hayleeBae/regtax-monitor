@@ -1,26 +1,25 @@
-# 프로젝트: {프로젝트명}
+# 프로젝트: regtax-monitor — 법령 변경 모니터링 & 코드 반영 시스템 (세법·인사)
 
 ## 프로젝트 유형
 
-{하나 선택하고 나머지는 삭제}
-
-- **신규 개발** — 처음부터 만드는 프로젝트. TDD 기본.
 - **기존 코드 유지보수** — 동작 중인 코드 수정. 회귀 방지 최우선.
-- **마이그레이션 (동작 보존)** — 기술 스택/UI 교체, 비즈니스 로직 보존. 원본 대비 검증 필수.
 
 ## 기술 스택
 
-{`profiles/<스택>.md`의 "기술 스택" 섹션을 복사해 붙이고 프로젝트에 맞게 수정}
-
-- {프레임워크}
-- {언어 및 버전}
-- {DB / 주요 라이브러리}
+- Python 3.10 (`.venv/` 가상환경 — 회사 PC 기준 버전, 3.11+ 문법 사용 금지)
+- FastAPI + uvicorn (단일 서버, `static/index.html` 대시보드 서빙)
+- SQLite (`regtax.db`) + SQLAlchemy 2.x
+- ChromaDB (임베디드, `chroma_data/`) + bge-m3 (sentence-transformers, 로컬 CPU 임베딩)
+- LLM: `LLM_BACKEND=local`(기본, OpenAI 호환 로컬 추론 서버 — Ollama/vLLM 등) ↔ `claude`(Anthropic API)
+- APScheduler (주기 수집, 기본 비활성) / pydantic-settings (`config.py` + `.env`)
 
 ## 아키텍처 규칙
 
-- CRITICAL: {절대 규칙 1 — 예: 모든 DB 접근은 repository 레이어에서만}
-- CRITICAL: {절대 규칙 2 — 예: 원본 시스템의 계산 로직을 임의로 "개선"하지 말 것}
-- {일반 규칙 — 예: 디렉토리 구조는 docs/ARCHITECTURE.md를 따를 것}
+- CRITICAL: **코드는 외부로 나가지 않는다.** 기본(local) 모드에서 인덱싱·검색·생성 전부 로컬 수행. 외부 API 전송 코드는 `LLM_BACKEND=claude` 경로(`app/llm/claude_client.py`)에만 둔다. local 모드는 anthropic 패키지 없이 동작해야 한다(지연 import 유지).
+- CRITICAL: **사람 승인 게이트를 우회하는 경로를 만들지 않는다.** AI는 patch 초안 생성까지만. 자동 적용 기능 추가 금지. 골든 테스트는 스크래치 사본에서만 실행하고 실제 repo는 절대 수정하지 않는다(`app/golden.py`).
+- CRITICAL: 두 개의 교체 이음새(seam)를 통해서만 접근한다 — LLM 호출은 `app/llm/`의 `LlmClient`(`get_llm_client()`), 대상 코드베이스 접근은 `app/codebase/`의 `CodebaseAdapter`. 다른 모듈에서 직접 HTTP/파일 접근 금지.
+- 설정·시크릿은 `config.py`의 `Settings`(.env)로만 관리. 하드코딩 금지. 의존성은 `requirements.txt`(런타임)/`requirements-dev.txt`(검증 도구)에만 추가.
+- 프롬프트·응답 파싱(JSON 추출, 앵커 편집 → unified diff)은 `app/llm/common.py`에 공유 — 백엔드별로 분기 로직을 복제하지 않는다.
 
 ## 개발 프로세스 (공통 — 프로젝트마다 수정하지 않음)
 
@@ -37,21 +36,23 @@
 ## 명령어
 
 ```bash
-bash scripts/verify.sh quick   # 빠른 검증 (lint + 컴파일/타입체크) — Stop hook용
-bash scripts/verify.sh full    # 전체 검증 (quick + 테스트/빌드) — step AC/리뷰용
+bash scripts/verify.sh quick     # 빠른 검증 (ruff lint) — Stop hook용
+bash scripts/verify.sh full      # 전체 검증 (quick + pytest: tests/ + scripts/) — step AC/리뷰용
+bash scripts/verify.sh security  # 시크릿 스캔 + pip-audit
+
+source .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+python run.py                    # 개발 서버 (= uvicorn app.main:app --reload, :8000)
 ```
 
-{프로파일의 개별 명령어를 아래에 추가 — 예: npm run dev, ./gradlew bootRun, uvicorn main:app 등}
+- 테스트는 `pytest`(pyproject.toml 설정: testpaths=tests,scripts)로 실행. 무거운 의존성(임베딩 모델 로드, ChromaDB 인덱싱, LLM 호출)을 테스트에서 직접 트리거하지 않는다.
+- 서버 첫 기동 시 `chroma_data/`가 비어 있으면 자동 인덱싱(CPU, 수십 분). 코드/사전 변경을 검색에 반영하려면 `rm -rf chroma_data/` 후 재기동.
 
-## 팀 협업 (팀 프로젝트인 경우 — 1인 프로젝트면 섹션 삭제)
+## 도메인 컨텍스트
 
-- 브랜치: `feat-{phase}` / `fix-*` 등 작업 브랜치 → dev → main. main 직접 push 금지.
-- 머지는 PR로만. 머지 조건: CI 그린 + 리뷰어 1인 이상 승인.
-- phase 1개 = 소유자 1명. 다른 사람의 phases/ 디렉토리를 수정하지 않는다.
-- CI(.github/workflows/ci.yml)와 로컬은 동일한 scripts/verify.sh를 사용한다.
-
-## 도메인 컨텍스트 (선택)
-
-{이 프로젝트만의 도메인 지식. 없으면 섹션 삭제.
-예: 다계열사(multi-company) 구조 — company_id에 따라 화면/로직 분기.
-예: 급여 계산은 원단위 절사, 세액은 십원단위 절사.}
+- **목적**: 법령(세법·노동법) 개정을 자동 수집·감지 → 관련 eHR 코드 위치에 매핑 → git apply 가능한 patch 초안 생성. 가장 비싼 실패는 "잘못 고친 것"이 아니라 **"개정을 놓친 것"** — 수집·감지의 재현율이 초안 품질보다 우선한다.
+- **도메인 레지스트리** (`domains.json`): 수집 대상을 도메인(tax/hr) 단위로 관리. `laws`는 법제처 등록명과 **정확 일치**해야 하며 가운뎃점은 `ㆍ`(U+318D). `admin_rule_queries`는 고시 검색어(부분일치 — 고시명이 매년 바뀜).
+- **법제처 API 함정**: OC 키는 target별 신청제 — 행정규칙 목록/본문은 별도 신청 필요. 행정규칙 본문 조회의 `ID` 파라미터는 행정규칙ID가 아니라 **행정규칙일련번호**(행정규칙ID는 `LID`). 시행령·시행규칙은 개정이 잦아 정확 법령명 필터로 노이즈를 차단한다.
+- **eHR 레거시 특성**: 컬럼명이 `a0121`/`n0200` 같은 암호 코드 — 용어 사전(`term_dict.py`, 주석에서 자동 수확)과 상수 인벤토리(`const_inventory.py`, 값 매칭)로 보완한다. 캐시 파일들(`*_cache.json`)은 gitignore + 자동 재생성 — 커밋 금지(eHR 내부 파생물, 외부 반출 금지).
+- **환경 이원화**: `REPO_ROOT` 비어 있으면 `mock_repo/`(집 개발), 지정 시 실제 repo(회사). 회사 PC는 SSL 프록시 환경 — `verify=False` 하드코딩 금지(truststore/`HF_HUB_DISABLE_SSL` 사용).
+- **개정 유형별 효용 한계**: 수치 개정(한도·세율)은 초안 자동화 ◎, 요건 개정은 매핑까지 △, 구조 개정은 감지·알림까지 ✗ — 이 격차를 코드로 무리하게 메우려 하지 말 것(로드맵 문서 참조).

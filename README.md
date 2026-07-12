@@ -299,7 +299,7 @@ mock 골든 테스트는 `mock_repo/tests/golden_income_tax.py`(세율표 XML �
   소득세법 위임 조문 188건).
 - **국세청 『개정세법 해설』 RAG 반영** ✅ 구현됨 — 공식 API가 없고 연 1회 발간이라
   자동 수집 대신 반자동: 웹 UI의 **📚 해설서 관리**에서 PDF/TXT/MD를 올리면
-  `docs/`에 저장되고 즉시 인덱싱된다 (`app/embedding/docs_index.py`, 코드 인덱스와
+  `data/uploads/`(`DOCS_DIR`)에 저장되고 즉시 인덱싱된다 (`app/embedding/docs_index.py`, 코드 인덱스와
   분리된 `tax_docs` 컬렉션). analyze 시 해당 개정과 유사한 해설 발췌가
   `[참고 자료]` 컨텍스트로 자동 주입된다. API: `GET/DELETE /refdocs`,
   `POST /refdocs/upload`. 스캔 이미지 PDF(텍스트 없는)는 미지원.

@@ -130,7 +130,7 @@ def representative_labels(labels: list[str], k: int = 2) -> list[str]:
     한글이 풍부한 순으로 보되, 이미 고른 라벨과 의미가 겹치면(한글 60%+ 중복) 건너뛴다.
     → 다의어 코드(예: l0160=전통시장/대중교통)는 둘 다, 동의어 변형은 1개만 남는다."""
     ranked = sorted(
-        (l for l in labels if _HANGUL.search(l)),
+        (lb for lb in labels if _HANGUL.search(lb)),
         key=lambda s: (len(_HANGUL.findall(s)), len(s)),
         reverse=True,
     )

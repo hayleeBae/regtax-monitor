@@ -1,27 +1,58 @@
 # 아키텍처
 
-## 디렉토리 구조
+## 디렉토리 구조 (현재 구조 — 2026-07 기준)
 ```
-{실제 구조를 스택에 맞게 기록. 기존 프로젝트라면 "현재 구조"를 사실대로 적는다.
+app/
+├── main.py              # FastAPI 앱 + 전체 API 라우트 (단일 파일, static/index.html 서빙)
+├── golden.py            # 골든 테스트 — 초안 diff를 스크래치 사본에 적용·검증
+├── collector/           # 법령 수집
+│   ├── law_api.py       #   법제처 API 클라이언트 (법령 3계층 + 행정규칙 + PDF 첨부 추출)
+│   └── registry.py      #   도메인 레지스트리 로더 (domains.json)
+├── llm/                 # [seam 1] LLM 백엔드 교체 지점
+│   ├── base.py          #   LlmClient 인터페이스
+│   ├── __init__.py      #   get_llm_client() 팩토리 (LLM_BACKEND 설정으로 선택)
+│   ├── local_client.py  #   LocalClient — OpenAI 호환 로컬 추론 서버 (기본)
+│   ├── claude_client.py #   Anthropic API (LLM_BACKEND=claude, 지연 import)
+│   └── common.py        #   양 백엔드 공유: 프롬프트, JSON 추출, 앵커 편집→unified diff
+├── codebase/            # [seam 2] 대상 코드베이스 교체 지점
+│   ├── base.py          #   CodebaseAdapter 인터페이스
+│   ├── mock_adapter.py  #   mock_repo/ (REPO_ROOT 미설정 시)
+│   └── real_adapter.py  #   실제 eHR repo (REPO_ROOT 설정 시)
+├── embedding/           # 로컬 RAG
+│   ├── indexer.py       #   코드 청킹(Java/SQL/XML) + bge-m3 → chroma_data/
+│   ├── docs_index.py    #   참고 문서(해설서) 별도 컬렉션(tax_docs) 인덱싱
+│   ├── term_dict.py     #   암호 컬럼코드↔한글명 사전 (주석에서 자동 수확)
+│   └── const_inventory.py #  법령 수치 리터럴 인벤토리 (값 매칭)
+└── db/
+    ├── database.py      #   SQLAlchemy 엔진/세션 (SQLite regtax.db)
+    └── models.py        #   LawChange / Mapping / Proposal 등
 
-예 (React):            예 (Spring):              예 (Python):
-src/                   src/main/java/...         app/
-├── pages/             ├── controller/           ├── api/
-├── components/        ├── service/              ├── services/
-├── services/          ├── repository(dao)/      ├── models/
-├── types/             └── dto/                  └── core/
-└── lib/               src/main/resources/sql/
-}
+config.py                # pydantic-settings Settings (.env) — 모든 설정의 단일 진입점
+domains.json             # 수집 도메인 레지스트리 (tax/hr)
+run.py                   # uvicorn 런처 (:8000)
+static/index.html        # 대시보드 UI (단일 파일, 바닐라 JS)
+mock_repo/               # 집 개발용 가짜 eHR (Java/SQL/XML + 골든 테스트)
+tests/                   # 앱 테스트 (pytest)
+scripts/                 # 하네스 (verify.sh, execute.py, trace.py + 자체 테스트)
 ```
 
 ## 레이어 규칙
-{어느 레이어가 어느 레이어만 호출할 수 있는지.
-예: controller → service → repository. 역방향/건너뛰기 금지.}
+- `main.py`(라우트) → `collector`/`llm`/`codebase`/`embedding`/`db` 를 호출한다. 역방향 금지.
+- LLM 호출은 반드시 `get_llm_client()`가 반환한 `LlmClient`를 통해서만 — 라우트나 다른 모듈에서 추론 서버/Anthropic에 직접 HTTP 호출 금지.
+- 대상 코드베이스 파일 접근은 반드시 `CodebaseAdapter`를 통해서만.
+- 백엔드 공통 로직(프롬프트·파싱·diff 변환)은 `llm/common.py`에만 — 클라이언트별 복제 금지.
+- 설정 접근은 `config.settings` 단일 인스턴스로만.
 
 ## 데이터 흐름
 ```
-{입력 → 처리 → 저장/출력이 어떻게 흐르는지 한 줄 다이어그램}
+법제처 API → collect(LawChange 저장, domain/tier 태깅)
+  → analyze(LLM 요약 + 해설서 RAG 컨텍스트)
+  → map(RAG + 사전 정확매칭 + 상수 값매칭 → Mapping, 담당자 verify로 정확도 축적)
+  → apply(LLM 앵커 편집 → unified diff → 골든 테스트 자동 검증 → Proposal)
+  → approve/reject(사람 승인 게이트 → patch 파일 출력)
 ```
 
 ## 외부 연동
-{연동하는 시스템/API 목록과 계약(스펙 문서 위치). 없으면 섹션 삭제.}
+- **법제처 국가법령정보 공동활용 API** (open.law.go.kr) — 법령 목록/본문(law/eflaw), 행정규칙(admrul), 위임조문(thdCmp). OC 키는 target별 신청제. 행정규칙 본문의 `ID` 파라미터는 행정규칙일련번호(행정규칙ID는 `LID`).
+- **로컬 추론 서버** (기본) — OpenAI 호환 `chat/completions` (Ollama/vLLM/llama.cpp/LM Studio, `LOCAL_LLM_BASE_URL`).
+- **Anthropic API** (옵션) — `LLM_BACKEND=claude` 시에만. RAG로 좁힌 스니펫만 전송.
