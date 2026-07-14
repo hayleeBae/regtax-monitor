@@ -64,3 +64,18 @@ python run.py                    # 개발 서버 (= uvicorn app.main:app --reloa
 - **법제처 API 함정**: OC 키는 target별 신청제 — 행정규칙 목록/본문은 별도 신청 필요. 행정규칙 본문 조회의 `ID` 파라미터는 행정규칙ID가 아니라 **행정규칙일련번호**(행정규칙ID는 `LID`). 시행령·시행규칙은 개정이 잦아 정확 법령명 필터로 노이즈를 차단한다.
 - **eHR 레거시 특성**: 컬럼명이 `a0121`/`n0200` 같은 암호 코드 — 용어 사전(`term_dict.py`, 주석에서 자동 수확)과 상수 인벤토리(`const_inventory.py`, 값 매칭)로 보완한다. 캐시 파일들(`*_cache.json`)은 gitignore + 자동 재생성 — 커밋 금지(eHR 내부 파생물, 외부 반출 금지).
 - **개정 유형별 효용 한계**: 수치 개정(한도·세율)은 초안 자동화 ◎, 요건 개정은 매핑까지 △, 구조 개정은 감지·알림까지 ✗ — 이 격차를 코드로 무리하게 메우려 하지 말 것(로드맵 문서 참조).
+
+## Documentation
+
+Before implementing new features, read the project documentation in the following order.
+
+1. docs/product/PRD.md
+2. docs/architecture/ARCHITECTURE.md
+3. docs/architecture/ARCHITECTURE_V2.md
+4. docs/architecture/ADR.md
+5. docs/specifications/*
+6. docs/roadmap/IMPLEMENTATION_ROADMAP.md
+
+The documentation under docs/specifications is the implementation contract.
+
+Do not implement functionality that is not defined by the specification.
