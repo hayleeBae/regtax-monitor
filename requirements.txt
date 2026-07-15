@@ -12,3 +12,4 @@ truststore>=0.9
 apscheduler>=3.10
 pypdf>=6.0            # 참고 문서(개정세법 해설) PDF 텍스트 추출
 python-multipart>=0.0.20  # FastAPI 파일 업로드
+pyyaml>=6.0               # 평가 데이터셋 YAML 로드 (app.evaluation)

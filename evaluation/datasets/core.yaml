@@ -1,0 +1,601 @@
+# regtax-monitor 핵심 평가 데이터셋
+# EVALUATION_SPEC.md §16 최소 core dataset 기준
+# schema_version: "1"
+
+cases:
+
+  # -----------------------------------------------------------------------
+  # VALUE_CHANGE (5건)
+  # -----------------------------------------------------------------------
+
+  - schema_version: "1"
+    case_id: "tax_child_credit_value_001"
+    title: "자녀세액공제 금액 변경"
+    domain: "tax"
+    tags: ["value_change", "java", "tax_credit"]
+
+    law:
+      law_name: "소득세법"
+      tier: "law"
+      article: "제59조의2"
+      before_text: "자녀 1명당 연 15만원을 공제한다."
+      after_text: "자녀 1명당 연 25만원을 공제한다."
+      effective_date: "2026-01-01"
+
+    expected:
+      change_type: "value_change"
+      automation_decision: "draft_allowed"
+      retrieval:
+        relevant_files:
+          - "tax/TaxConstants.java"
+        primary_files:
+          - "tax/TaxConstants.java"
+        relevant_symbols:
+          - "TaxConstants.CHILD_TAX_CREDIT"
+      patch:
+        expected_replacements:
+          - path: "tax/TaxConstants.java"
+            before: "150000L"
+            after: "250000L"
+            match_mode: "exact"
+        forbidden_files: []
+        require_git_apply: false
+        require_golden_pass: false
+
+    repository:
+      fixture_type: "directory"
+      path: "evaluation/fixtures/repositories/mock_tax"
+
+    execution:
+      evaluate_classification: true
+      evaluate_retrieval: true
+      evaluate_patch: true
+      top_k: [1, 3, 5, 10]
+      timeout_seconds: 600
+
+    metadata:
+      source: "synthetic"
+      reviewed: true
+
+  # -----------------------------------------------------------------------
+
+  - schema_version: "1"
+    case_id: "tax_dependent_deduction_value_002"
+    title: "부양가족 기본공제 금액 변경"
+    domain: "tax"
+    tags: ["value_change", "java", "basic_deduction"]
+
+    law:
+      law_name: "소득세법"
+      tier: "law"
+      article: "제50조"
+      before_text: "1명당 연 150만원을 공제한다."
+      after_text: "1명당 연 200만원을 공제한다."
+      effective_date: "2026-01-01"
+
+    expected:
+      change_type: "value_change"
+      automation_decision: "draft_allowed"
+      retrieval:
+        relevant_files:
+          - "tax/TaxConstants.java"
+        primary_files:
+          - "tax/TaxConstants.java"
+        relevant_symbols:
+          - "TaxConstants.DEPENDENT_DEDUCTION"
+      patch:
+        expected_replacements:
+          - path: "tax/TaxConstants.java"
+            before: "1500000L"
+            after: "2000000L"
+            match_mode: "exact"
+        forbidden_files: []
+        require_git_apply: false
+        require_golden_pass: false
+
+    repository:
+      fixture_type: "directory"
+      path: "evaluation/fixtures/repositories/mock_tax"
+
+    execution:
+      evaluate_classification: true
+      evaluate_retrieval: true
+      evaluate_patch: true
+      top_k: [1, 3, 5, 10]
+      timeout_seconds: 600
+
+    metadata:
+      source: "synthetic"
+      reviewed: true
+
+  # -----------------------------------------------------------------------
+
+  - schema_version: "1"
+    case_id: "tax_earned_income_credit_value_003"
+    title: "근로소득세액공제 한도 변경"
+    domain: "tax"
+    tags: ["value_change", "java", "earned_income_credit"]
+
+    law:
+      law_name: "소득세법"
+      tier: "law"
+      article: "제47조의2"
+      before_text: "세액공제 한도는 50만원으로 한다."
+      after_text: "세액공제 한도는 70만원으로 한다."
+      effective_date: "2026-01-01"
+
+    expected:
+      change_type: "value_change"
+      automation_decision: "draft_allowed"
+      retrieval:
+        relevant_files:
+          - "tax/TaxConstants.java"
+        primary_files:
+          - "tax/TaxConstants.java"
+        relevant_symbols:
+          - "TaxConstants.EARNED_INCOME_CREDIT_LIMIT"
+      patch:
+        expected_replacements:
+          - path: "tax/TaxConstants.java"
+            before: "500000L"
+            after: "700000L"
+            match_mode: "exact"
+        forbidden_files: []
+        require_git_apply: false
+        require_golden_pass: false
+
+    repository:
+      fixture_type: "directory"
+      path: "evaluation/fixtures/repositories/mock_tax"
+
+    execution:
+      evaluate_classification: true
+      evaluate_retrieval: true
+      evaluate_patch: true
+      top_k: [1, 3, 5, 10]
+      timeout_seconds: 600
+
+    metadata:
+      source: "synthetic"
+      reviewed: true
+
+  # -----------------------------------------------------------------------
+
+  - schema_version: "1"
+    case_id: "tax_pension_credit_value_004"
+    title: "연금보험료 세액공제 한도 변경"
+    domain: "tax"
+    tags: ["value_change", "java", "pension_credit"]
+
+    law:
+      law_name: "소득세법"
+      tier: "law"
+      article: "제59조의3"
+      before_text: "세액공제 대상 한도는 900만원으로 한다."
+      after_text: "세액공제 대상 한도는 1000만원으로 한다."
+      effective_date: "2026-01-01"
+
+    expected:
+      change_type: "value_change"
+      automation_decision: "draft_allowed"
+      retrieval:
+        relevant_files:
+          - "tax/TaxConstants.java"
+        primary_files:
+          - "tax/TaxConstants.java"
+        relevant_symbols:
+          - "TaxConstants.PENSION_CREDIT_LIMIT"
+      patch:
+        expected_replacements:
+          - path: "tax/TaxConstants.java"
+            before: "9000000L"
+            after: "10000000L"
+            match_mode: "exact"
+        forbidden_files: []
+        require_git_apply: false
+        require_golden_pass: false
+
+    repository:
+      fixture_type: "directory"
+      path: "evaluation/fixtures/repositories/mock_tax"
+
+    execution:
+      evaluate_classification: true
+      evaluate_retrieval: true
+      evaluate_patch: true
+      top_k: [1, 3, 5, 10]
+      timeout_seconds: 600
+
+    metadata:
+      source: "synthetic"
+      reviewed: true
+
+  # -----------------------------------------------------------------------
+
+  - schema_version: "1"
+    case_id: "tax_housing_deduction_value_005"
+    title: "주택청약 소득공제 한도 변경"
+    domain: "tax"
+    tags: ["value_change", "java", "housing_deduction"]
+
+    law:
+      law_name: "소득세법"
+      tier: "law"
+      article: "제87조"
+      before_text: "납입액 중 240만원을 한도로 공제한다."
+      after_text: "납입액 중 300만원을 한도로 공제한다."
+      effective_date: "2026-01-01"
+
+    expected:
+      change_type: "value_change"
+      automation_decision: "draft_allowed"
+      retrieval:
+        relevant_files:
+          - "tax/TaxConstants.java"
+        primary_files:
+          - "tax/TaxConstants.java"
+        relevant_symbols:
+          - "TaxConstants.HOUSING_SUBSCRIPTION_DEDUCTION_LIMIT"
+      patch:
+        expected_replacements:
+          - path: "tax/TaxConstants.java"
+            before: "2400000L"
+            after: "3000000L"
+            match_mode: "exact"
+        forbidden_files: []
+        require_git_apply: false
+        require_golden_pass: false
+
+    repository:
+      fixture_type: "directory"
+      path: "evaluation/fixtures/repositories/mock_tax"
+
+    execution:
+      evaluate_classification: true
+      evaluate_retrieval: true
+      evaluate_patch: true
+      top_k: [1, 3, 5, 10]
+      timeout_seconds: 600
+
+    metadata:
+      source: "synthetic"
+      reviewed: true
+
+  # -----------------------------------------------------------------------
+  # RATE_CHANGE (3건)
+  # -----------------------------------------------------------------------
+
+  - schema_version: "1"
+    case_id: "tax_capital_gains_rate_001"
+    title: "양도소득세 중기 보유 세율 변경"
+    domain: "tax"
+    tags: ["rate_change", "java", "capital_gains"]
+
+    law:
+      law_name: "소득세법"
+      tier: "law"
+      article: "제104조"
+      before_text: "2년 미만 보유 자산의 양도소득세율은 100분의 20으로 한다."
+      after_text: "2년 미만 보유 자산의 양도소득세율은 100분의 25로 한다."
+      effective_date: "2026-01-01"
+
+    expected:
+      change_type: "rate_change"
+      automation_decision: "draft_allowed"
+      retrieval:
+        relevant_files:
+          - "tax/TaxConstants.java"
+        primary_files:
+          - "tax/TaxConstants.java"
+        relevant_symbols:
+          - "TaxConstants.CAPITAL_GAINS_RATE_MID"
+      patch:
+        expected_replacements:
+          - path: "tax/TaxConstants.java"
+            before: "0.20"
+            after: "0.25"
+            match_mode: "normalized_text"
+        forbidden_files: []
+        require_git_apply: false
+        require_golden_pass: false
+
+    repository:
+      fixture_type: "directory"
+      path: "evaluation/fixtures/repositories/mock_tax"
+
+    execution:
+      evaluate_classification: true
+      evaluate_retrieval: true
+      evaluate_patch: true
+      top_k: [1, 3, 5, 10]
+      timeout_seconds: 600
+
+    metadata:
+      source: "synthetic"
+      reviewed: true
+
+  # -----------------------------------------------------------------------
+
+  - schema_version: "1"
+    case_id: "hr_minimum_wage_rate_002"
+    title: "최저임금 시간급 변경"
+    domain: "hr"
+    tags: ["rate_change", "java", "minimum_wage"]
+
+    law:
+      law_name: "최저임금법"
+      tier: "admin_rule"
+      article: null
+      before_text: "시간급 최저임금을 10,030원으로 고시한다."
+      after_text: "시간급 최저임금을 10,320원으로 고시한다."
+      effective_date: "2026-01-01"
+
+    expected:
+      change_type: "rate_change"
+      automation_decision: "draft_allowed"
+      retrieval:
+        relevant_files:
+          - "salary/HrConstants.java"
+        primary_files:
+          - "salary/HrConstants.java"
+        relevant_symbols:
+          - "HrConstants.MINIMUM_HOURLY_WAGE"
+      patch:
+        expected_replacements:
+          - path: "salary/HrConstants.java"
+            before: "10030L"
+            after: "10320L"
+            match_mode: "exact"
+        forbidden_files: []
+        require_git_apply: false
+        require_golden_pass: false
+
+    repository:
+      fixture_type: "directory"
+      path: "evaluation/fixtures/repositories/mock_tax"
+
+    execution:
+      evaluate_classification: true
+      evaluate_retrieval: true
+      evaluate_patch: true
+      top_k: [1, 3, 5, 10]
+      timeout_seconds: 600
+
+    metadata:
+      source: "synthetic"
+      reviewed: true
+
+  # -----------------------------------------------------------------------
+
+  - schema_version: "1"
+    case_id: "tax_short_term_capital_gains_rate_003"
+    title: "단기 양도소득세율 변경"
+    domain: "tax"
+    tags: ["rate_change", "java", "capital_gains"]
+
+    law:
+      law_name: "소득세법"
+      tier: "law"
+      article: "제104조"
+      before_text: "1년 미만 보유 자산의 양도소득세율은 100분의 40으로 한다."
+      after_text: "1년 미만 보유 자산의 양도소득세율은 100분의 45로 한다."
+      effective_date: "2026-07-01"
+
+    expected:
+      change_type: "rate_change"
+      automation_decision: "draft_allowed"
+      retrieval:
+        relevant_files:
+          - "tax/TaxConstants.java"
+        primary_files:
+          - "tax/TaxConstants.java"
+        relevant_symbols:
+          - "TaxConstants.CAPITAL_GAINS_RATE_SHORT"
+      patch:
+        expected_replacements:
+          - path: "tax/TaxConstants.java"
+            before: "0.40"
+            after: "0.45"
+            match_mode: "normalized_text"
+        forbidden_files: []
+        require_git_apply: false
+        require_golden_pass: false
+
+    repository:
+      fixture_type: "directory"
+      path: "evaluation/fixtures/repositories/mock_tax"
+
+    execution:
+      evaluate_classification: true
+      evaluate_retrieval: true
+      evaluate_patch: true
+      top_k: [1, 3, 5, 10]
+      timeout_seconds: 600
+
+    metadata:
+      source: "synthetic"
+      reviewed: true
+
+  # -----------------------------------------------------------------------
+  # DATE_CHANGE (2건)
+  # -----------------------------------------------------------------------
+
+  - schema_version: "1"
+    case_id: "tax_year_end_deadline_date_001"
+    title: "연말정산 자료 제출기한 변경"
+    domain: "tax"
+    tags: ["date_change", "java", "year_end_settlement"]
+
+    law:
+      law_name: "소득세법"
+      tier: "law"
+      article: "제140조"
+      before_text: "2월 말일까지 제출하여야 한다."
+      after_text: "3월 10일까지 제출하여야 한다."
+      effective_date: "2026-01-01"
+
+    expected:
+      change_type: "date_change"
+      automation_decision: "draft_allowed"
+      retrieval:
+        relevant_files:
+          - "tax/TaxConstants.java"
+        primary_files:
+          - "tax/TaxConstants.java"
+        relevant_symbols:
+          - "TaxConstants.YEAR_END_SUBMISSION_DEADLINE"
+      patch:
+        expected_replacements:
+          - path: "tax/TaxConstants.java"
+            before: "02-28"
+            after: "03-10"
+            match_mode: "exact"
+        forbidden_files: []
+        require_git_apply: false
+        require_golden_pass: false
+
+    repository:
+      fixture_type: "directory"
+      path: "evaluation/fixtures/repositories/mock_tax"
+
+    execution:
+      evaluate_classification: true
+      evaluate_retrieval: true
+      evaluate_patch: true
+      top_k: [1, 3, 5, 10]
+      timeout_seconds: 600
+
+    metadata:
+      source: "synthetic"
+      reviewed: true
+
+  # -----------------------------------------------------------------------
+
+  - schema_version: "1"
+    case_id: "hr_annual_leave_base_year_date_002"
+    title: "연차유급휴가 기준 연도 변경"
+    domain: "hr"
+    tags: ["date_change", "java", "annual_leave"]
+
+    law:
+      law_name: "근로기준법"
+      tier: "law"
+      article: "제60조"
+      before_text: "2025년 1월 1일부터 시행한다."
+      after_text: "2026년 1월 1일부터 시행한다."
+      effective_date: "2026-01-01"
+
+    expected:
+      change_type: "date_change"
+      automation_decision: "draft_allowed"
+      retrieval:
+        relevant_files:
+          - "salary/HrConstants.java"
+        primary_files:
+          - "salary/HrConstants.java"
+        relevant_symbols:
+          - "HrConstants.ANNUAL_LEAVE_BASE_YEAR"
+      patch:
+        expected_replacements:
+          - path: "salary/HrConstants.java"
+            before: "2025"
+            after: "2026"
+            match_mode: "exact"
+        forbidden_files: []
+        require_git_apply: false
+        require_golden_pass: false
+
+    repository:
+      fixture_type: "directory"
+      path: "evaluation/fixtures/repositories/mock_tax"
+
+    execution:
+      evaluate_classification: true
+      evaluate_retrieval: true
+      evaluate_patch: true
+      top_k: [1, 3, 5, 10]
+      timeout_seconds: 600
+
+    metadata:
+      source: "synthetic"
+      reviewed: true
+
+  # -----------------------------------------------------------------------
+  # CONDITION_CHANGE (1건 — 추가)
+  # -----------------------------------------------------------------------
+
+  - schema_version: "1"
+    case_id: "tax_income_condition_change_001"
+    title: "근로소득세액공제 소득 기준 변경"
+    domain: "tax"
+    tags: ["condition_change", "java", "income_condition"]
+
+    law:
+      law_name: "소득세법"
+      tier: "law"
+      article: "제59조"
+      before_text: "총급여액이 7천만원 이하인 경우에 적용한다."
+      after_text: "총급여액이 8천만원 이하인 경우에 적용한다."
+      effective_date: "2026-01-01"
+
+    expected:
+      change_type: "condition_change"
+      automation_decision: "manual_review_required"
+      retrieval:
+        relevant_files:
+          - "tax/TaxConstants.java"
+        primary_files:
+          - "tax/TaxConstants.java"
+        relevant_symbols: []
+
+    repository:
+      fixture_type: "directory"
+      path: "evaluation/fixtures/repositories/mock_tax"
+
+    execution:
+      evaluate_classification: true
+      evaluate_retrieval: true
+      evaluate_patch: false
+      top_k: [1, 3, 5, 10]
+      timeout_seconds: 600
+
+    metadata:
+      source: "synthetic"
+      reviewed: false
+
+  # -----------------------------------------------------------------------
+  # NO_CODE_IMPACT (1건 — 추가)
+  # -----------------------------------------------------------------------
+
+  - schema_version: "1"
+    case_id: "tax_reporting_format_no_impact_001"
+    title: "서식 번호 변경 (코드 영향 없음)"
+    domain: "tax"
+    tags: ["no_code_impact"]
+
+    law:
+      law_name: "소득세법 시행규칙"
+      tier: "enforcement_rule"
+      article: "제100조"
+      before_text: "별지 제40호 서식에 의한다."
+      after_text: "별지 제41호 서식에 의한다."
+      effective_date: "2026-01-01"
+
+    expected:
+      change_type: "no_code_impact"
+      automation_decision: "analysis_only"
+
+    repository:
+      fixture_type: "directory"
+      path: "evaluation/fixtures/repositories/mock_tax"
+
+    execution:
+      evaluate_classification: true
+      evaluate_retrieval: false
+      evaluate_patch: false
+      top_k: [1, 3, 5]
+      timeout_seconds: 300
+
+    metadata:
+      source: "synthetic"
+      reviewed: true

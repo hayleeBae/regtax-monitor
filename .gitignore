@@ -17,3 +17,6 @@ const_inventory_cache.json
 data/uploads/
 # 검증 로그
 validate_out.log
+
+# 평가 결과 — EVALUATION_SPEC.md §19 / §3
+evaluation/results/
