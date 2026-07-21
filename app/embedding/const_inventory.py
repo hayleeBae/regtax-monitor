@@ -140,6 +140,62 @@ def _to_int(s: str) -> int:
     return int(s.replace(",", ""))
 
 
+def parse_typed_values(text: str) -> dict[str, list[dict[str, str]]]:
+    """법령 문구의 수치를 종류·단위와 함께 추출한다.
+
+    ChangeNormalizer와 상수 매칭이 같은 정규식을 공유하기 위한 공용 진입점이다.
+    반환 순서는 원문 등장 순서를 보존한다.
+    """
+    found: dict[str, list[dict[str, str]]] = {
+        "money": [],
+        "rate": [],
+        "duration": [],
+        "age": [],
+    }
+
+    def put(kind: str, value: float, raw: str, unit: str) -> None:
+        found[kind].append({"raw": raw.strip(), "value": _key(value), "unit": unit})
+
+    for m in _AMOUNT_RE.finditer(text):
+        g = m.groupdict()
+        if g["a_eok"]:
+            value = _to_int(g["a_eok"]) * 10**8
+            if g["a_cheonman"]:
+                value += _to_int(g["a_cheonman"]) * 10**7
+        elif g["b_cheon"]:
+            value = (_to_int(g["b_cheon"]) * 1000 + _to_int(g["b_man"])) * 10**4
+        elif g["c_cheonman"]:
+            value = _to_int(g["c_cheonman"]) * 10**7
+        elif g["d_man"]:
+            value = _to_int(g["d_man"]) * 10**4
+        else:
+            value = _to_int(g["e_won"])
+        put("money", value, m.group(0), "KRW")
+
+    for m in _PCT_RE.finditer(text):
+        put("rate", float(m.group(1)) / 100, m.group(0), "ratio")
+    for m in _BUNUI_RE.finditer(text):
+        denominator, numerator = _to_int(m.group(1)), float(m.group(2))
+        if denominator > 0:
+            put("rate", numerator / denominator, m.group(0), "ratio")
+
+    duration_patterns = (
+        (_HOURS_RE, "hour"),
+        (_DAYS_RE, "day"),
+        (_MONTHS_RE, "month"),
+    )
+    for pattern, unit in duration_patterns:
+        for m in pattern.finditer(text):
+            value = float(m.group(1))
+            if 2 <= value <= 999:
+                put("duration", value, m.group(0), unit)
+    for m in _AGE_RE.finditer(text):
+        value = float(m.group(1) or m.group(2))
+        if 2 <= value <= 99:
+            put("age", value, m.group(0), "year")
+    return found
+
+
 def parse_amounts(text: str) -> dict[str, str]:
     """개정문에서 금액·세율 표기를 추출해 {값키: 원문표현} 반환."""
     found: dict[str, str] = {}
@@ -147,42 +203,14 @@ def parse_amounts(text: str) -> dict[str, str]:
     def put(v: float, expr: str) -> None:
         found.setdefault(_key(v), expr.strip())
 
-    for m in _AMOUNT_RE.finditer(text):
-        g = m.groupdict()
-        if g["a_eok"]:
-            v = _to_int(g["a_eok"]) * 10**8
-            if g["a_cheonman"]:
-                v += _to_int(g["a_cheonman"]) * 10**7
-        elif g["b_cheon"]:
-            v = (_to_int(g["b_cheon"]) * 1000 + _to_int(g["b_man"])) * 10**4
-        elif g["c_cheonman"]:
-            v = _to_int(g["c_cheonman"]) * 10**7
-        elif g["d_man"]:
-            v = _to_int(g["d_man"]) * 10**4
-        else:
-            v = _to_int(g["e_won"])
-        put(v, m.group(0))
+    typed = parse_typed_values(text)
+    for values in typed.values():
+        for value in values:
+            put(float(value["value"]), value["raw"])
 
+    # 기존 상수 매칭은 rate="15" 형태도 찾으므로 퍼센트 원 숫자 키를 유지한다.
     for m in _PCT_RE.finditer(text):
-        pct = float(m.group(1))
-        put(pct / 100, m.group(0))   # 코드는 0.15 형태가 일반적
-        put(pct, m.group(0))         # rate="15" 형태 대비
-
-    for m in _BUNUI_RE.finditer(text):
-        den, num = _to_int(m.group(1)), float(m.group(2))
-        if den > 0:
-            put(num / den, m.group(0))
-
-    # 노동법 수치 (시간·일수·개월·나이) — 인벤토리의 힌트 수확분과 일치할 때만 매핑됨
-    for pattern in (_HOURS_RE, _DAYS_RE, _MONTHS_RE):
-        for m in pattern.finditer(text):
-            v = float(m.group(1))
-            if 2 <= v <= 999:
-                put(v, m.group(0))
-    for m in _AGE_RE.finditer(text):
-        v = float(m.group(1) or m.group(2))
-        if 2 <= v <= 99:
-            put(v, m.group(0))
+        put(float(m.group(1)), m.group(0))
 
     return found
 
