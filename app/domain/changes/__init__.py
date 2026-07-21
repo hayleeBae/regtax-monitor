@@ -6,6 +6,16 @@ from app.domain.changes.normalization import (
     NormalizedValue,
     ValueDelta,
 )
+from app.domain.changes.classification import (
+    ChangeClassification,
+    ClassificationSignal,
+    ClassificationSource,
+    HybridChangeClassifier,
+    RuleChangeClassifier,
+)
 
-__all__ = ["ChangeNormalizer", "NormalizedChange", "NormalizedValue", "ValueDelta"]
-
+__all__ = [
+    "ChangeClassification", "ChangeNormalizer", "ClassificationSignal",
+    "ClassificationSource", "HybridChangeClassifier", "NormalizedChange",
+    "NormalizedValue", "RuleChangeClassifier", "ValueDelta",
+]

@@ -27,6 +27,12 @@ class ClaudeClient(LlmClient):
     def propose_edits(self, law_diff: str, code_snippets: list[str]) -> str:
         return self.complete(common.propose_prompt(law_diff, code_snippets))
 
+    def classify_change(self, before: str, after: str, normalized: dict) -> dict:
+        text = self.complete(common.classify_prompt(before, after, normalized), max_tokens=1024)
+        return common.parse_json_response(
+            text, required=("primary_type", "confidence", "reason", "signals")
+        )
+
     def complete(self, prompt: str, max_tokens: int = 4096) -> str:
         resp = self.client.messages.create(
             model=self.model,

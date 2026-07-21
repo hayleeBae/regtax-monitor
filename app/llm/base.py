@@ -22,6 +22,11 @@ class LlmClient(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def classify_change(self, before: str, after: str, normalized: dict) -> dict:
+        """모호한 변경을 허용 enum 기반 구조로 분류한다."""
+        raise NotImplementedError
+
+    @abstractmethod
     def complete(self, prompt: str, max_tokens: int = 4096) -> str:
         """단일 프롬프트 → 텍스트 응답 (기본 생성 모델).
         앵커 재시도 등 보조 프롬프트 호출에 사용한다."""
