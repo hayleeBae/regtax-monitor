@@ -96,6 +96,17 @@ class HybridChangeClassifier:
 
     def _from_llm(self, raw: dict, change: NormalizedChange, rule_result: ChangeClassification) -> ChangeClassification:
         primary = ChangeType(raw["primary_type"])
+        if (
+            rule_result.primary_type is ChangeType.STRUCTURAL_CHANGE
+            and primary is not ChangeType.STRUCTURAL_CHANGE
+        ):
+            return replace(
+                rule_result,
+                confidence=max(rule_result.confidence, 0.8),
+                source=ClassificationSource.HYBRID,
+                reason=f"{rule_result.reason}; 구조 변경 안전 우선",
+                classifier_version=self.version,
+            )
         confidence = float(raw["confidence"])
         if not 0 <= confidence <= 1:
             raise ValueError("confidence must be between 0 and 1")

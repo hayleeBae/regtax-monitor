@@ -76,7 +76,10 @@ class AutomationPolicyEngine:
             reasons.append(BlockReason("retrieval_candidate_missing", "검색 후보가 없음"))
         else:
             top = policy_input.candidates[0]
-            if top.final_score < self.thresholds.min_retrieval_score:
+            strongest_evidence = max(
+                evidence.normalized_score for evidence in top.evidences
+            )
+            if strongest_evidence < self.thresholds.min_retrieval_score:
                 reasons.append(BlockReason("retrieval_score_low", "최상위 검색 점수가 기준 미만"))
             sources = {evidence.source for evidence in top.evidences}
             valid_verified = RetrievalSource.VERIFIED_MAPPING in sources and not top.stale
@@ -103,4 +106,3 @@ class AutomationPolicyEngine:
         else:
             decision = AutomationDecision.MANUAL_REVIEW_REQUIRED
         return PolicyResult(decision, tuple(reasons), self.version)
-

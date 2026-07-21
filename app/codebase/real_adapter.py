@@ -1,4 +1,5 @@
 import re
+import subprocess
 from pathlib import Path
 
 from app.codebase.base import CodebaseAdapter, CodeHit
@@ -91,6 +92,16 @@ class RealCodebaseAdapter(CodebaseAdapter):
         if self.indexer is None:
             raise RuntimeError("indexer가 주입되지 않았습니다.")
         return self.indexer.search(query, k=k)
+
+    def repository_revision(self) -> str | None:
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=self.root, check=True,
+                capture_output=True, text=True, timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return result.stdout.strip() or None
 
     def find_usages(self, class_name: str, max_results: int = 5) -> list[str]:
         """class_name을 import하거나 직접 참조하는 파일 경로 목록."""

@@ -33,6 +33,9 @@ class MockCodebaseAdapter(CodebaseAdapter):
             raise RuntimeError("indexer가 주입되지 않았습니다. (Phase 3에서 연결)")
         return self.indexer.search(query, k=k)
 
+    def repository_revision(self) -> str | None:
+        return "fixture:mock_repo-v1"
+
     def apply_patch(self, proposal_id: int, diff: str) -> str:
         """
         승인된 patch를 mock_repo/patches/ 에 파일로 저장한다.

@@ -41,3 +41,7 @@ class CodebaseAdapter(ABC):
     def find_usages(self, class_name: str, max_results: int = 5) -> list[str]:
         """class_name을 참조하는 파일 경로 목록. 기본 구현은 빈 리스트."""
         return []
+
+    def repository_revision(self) -> str | None:
+        """정책·재현에 사용할 commit 또는 fixture 식별자."""
+        return None

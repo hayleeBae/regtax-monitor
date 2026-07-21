@@ -31,6 +31,44 @@ def _make_adapter(indexer=None):
     return MockCodebaseAdapter(repo_root=MOCK_REPO_ROOT, indexer=indexer)
 
 
+def _make_mapping_service(db: Session, article_id: str):
+    """기존 네 검색원을 #0009 공통 orchestrator로 조합한다."""
+    from app.application.services import MappingService
+    from app.retrieval.orchestrator import RetrievalOrchestrator
+    from app.retrieval.providers import (
+        ConstantProvider, DictionaryProvider, RagProvider,
+        VerifiedMappingProvider, VerifiedMappingRecord,
+    )
+
+    indexer = CodeIndexer()
+    adapter = _make_adapter(indexer=indexer)
+
+    def verified_lookup(_query):
+        rows = db.query(Mapping).filter_by(article_id=article_id, verified=True).all()
+        records = []
+        for mapping in rows:
+            try:
+                adapter.read_file(mapping.path)
+                valid = True
+            except (FileNotFoundError, OSError):
+                valid = False
+            records.append(
+                VerifiedMappingRecord(
+                    mapping.path, mapping.symbol, valid, content_hash=mapping.code_hash
+                )
+            )
+        return tuple(records)
+
+    repo_root = settings.repo_root or MOCK_REPO_ROOT
+    providers = (
+        VerifiedMappingProvider(verified_lookup),
+        RagProvider(lambda text, k: adapter.search(text, k=k)),
+        DictionaryProvider(settings.repo_root),
+        ConstantProvider(repo_root),
+    )
+    return MappingService(RetrievalOrchestrator(providers)), adapter
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
@@ -361,23 +399,23 @@ def analyze(change_id: int, force: bool = False, db: Session = Depends(get_sessi
     except Exception:
         pass  # 참고 문서는 보강일 뿐 — 실패해도 분석은 진행
 
+    from app.application.services import AnalysisService
+    from app.domain.changes.classification import HybridChangeClassifier
+    from app.domain.changes.normalization import ChangeNormalizer
     from app.llm.common import analyze_with_retry
     llm = get_llm_client()
-    # JSON 형식 이탈 시 1회 재포맷 재시도 (로컬 소형 모델 보정)
-    result = analyze_with_retry(
-        llm,
-        before=row.before_text or "",
-        after=row.after_text or "",
-        context=context,
+    service = AnalysisService(
+        ChangeNormalizer(),
+        HybridChangeClassifier(llm),
+        lambda before, after, ctx: analyze_with_retry(
+            llm, before=before, after=after, context=ctx
+        ),
     )
+    result = service.analyze(row.before_text or "", row.after_text or "", context)
 
-    if "raw" in result:
-        # 파싱 실패 — raw 텍스트라도 저장
-        row.ai_summary = result["raw"]
-        row.ai_impact = ""
-    else:
-        row.ai_summary = result.get("summary", "")
-        row.ai_impact = result.get("impact", "")
+    row.ai_summary = result.summary
+    row.ai_impact = result.impact
+    row.change_type = result.classification.primary_type.value
 
     row.status = "reviewing"
     db.commit()
@@ -386,7 +424,15 @@ def analyze(change_id: int, force: bool = False, db: Session = Depends(get_sessi
         "id": change_id,
         "summary": row.ai_summary,
         "impact": row.ai_impact,
-        "parse_ok": "raw" not in result,
+        "parse_ok": result.parse_ok,
+        "classification": {
+            "primary_type": result.classification.primary_type.value,
+            "secondary_types": [item.value for item in result.classification.secondary_types],
+            "confidence": result.classification.confidence,
+            "source": result.classification.source.value,
+            "reason": result.classification.reason,
+        },
+        "normalizer_version": result.normalized.normalizer_version,
     }
 
 
@@ -442,55 +488,18 @@ def map_change(change_id: int, k: int = 5, db: Session = Depends(get_session)) -
         row.ai_summary, row.before_text, row.after_text,
     ]))
 
-    indexer = CodeIndexer()
-    hits = indexer.search(query, k=k)
-
-    # 같은 파일의 여러 청크가 동일 (path, symbol)로 반환될 수 있으므로
-    # 최고 점수 청크만 남긴다 (hits는 이미 score 내림차순).
-    best: dict[tuple[str, str], object] = {}
-    for hit in hits:
-        key = (hit.path, hit.symbol)
-        if key not in best:
-            best[key] = hit
-
-    # 후보 = (path, symbol, confidence, source) 통합 목록.
-    candidates: list[tuple[str, str, float, str]] = [
-        (h.path, h.symbol, h.score, "rag") for h in best.values()
-    ]
-
-    # ── 사전 기반 부트스트랩 ──────────────────────────────────────
-    # 법령 텍스트 ↔ 컬럼코드 '정확 어휘 일치' → 컬럼코드를 symbol로 고신뢰 시드.
-    # 암호 컬럼명을 임베딩이 못 잡는 한계를 보완한다.
-    from app.embedding.term_dict import load, load_locations, match_codes, rank_locations
-
-    table = load(settings.repo_root)
-    loc = load_locations(settings.repo_root)
-    dict_matches = match_codes(query, table)
-    for code, term, score in dict_matches:
-        conf = round(min(0.99, 0.7 + score / 100), 3)  # 0.7~0.99 (퍼지 RAG보다 항상 위)
-        for path in rank_locations(loc.get(code, []))[:3]:
-            candidates.append((path, code, conf, "dict"))
-
-    # ── 상수 인벤토리 부트스트랩 ──────────────────────────────────
-    # 개정문의 금액·세율(연 15만원 → 150000, 100분의 6 → 0.06)을 코드 숫자
-    # 리터럴과 '정확 값 일치'시켜 시드. 수치 개정에서 임베딩보다 정밀하다.
-    from app.embedding.const_inventory import load_inventory, match_constants
-
-    inv = load_inventory(settings.repo_root or "mock_repo")
-    const_matches = match_constants(query, inv)
-    for value, expr, score, files in const_matches:
-        conf = round(min(0.99, 0.75 + score / 40), 3)  # 0.75~0.99
-        for path in rank_locations(files)[:3]:
-            candidates.append((path, value, conf, "const"))
-
-    if not candidates:
+    article_id = f"{row.law_id}:{row.article_no}"
+    service, _adapter = _make_mapping_service(db, article_id)
+    result = service.map(query, top_k=k)
+    if not result.candidates:
         return {"mapped": 0, "note": "인덱싱된 코드도, 사전 매칭도 없습니다. POST /index 를 먼저 실행하세요."}
 
     repo_name = (settings.repo_root.replace("\\", "/").rstrip("/").split("/")[-1]
                  or "mock_repo")
-    article_id = f"{row.law_id}:{row.article_no}"
     saved = 0
-    for path, symbol, conf, _src in candidates:
+    for candidate in result.candidates:
+        path = candidate.location.path
+        symbol = candidate.location.symbol or ""
         exists = (
             db.query(Mapping)
             .filter_by(article_id=article_id, path=path, symbol=symbol)
@@ -504,24 +513,13 @@ def map_change(change_id: int, k: int = 5, db: Session = Depends(get_session)) -
             path=path,
             symbol=symbol,
             change_type=row.change_type or "unknown",
-            confidence=conf,
+            confidence=candidate.final_score,
             verified=False,
         ))
         saved += 1
 
     db.commit()
-    return {
-        "law_change_id": change_id,
-        "rag_hits": [{"path": h.path, "symbol": h.symbol, "score": h.score} for h in hits],
-        "dict_matches": [
-            {"code": c, "term": t, "score": s} for c, t, s in dict_matches
-        ],
-        "const_matches": [
-            {"value": v, "expr": e, "score": s, "files": f}
-            for v, e, s, f in const_matches
-        ],
-        "saved": saved,
-    }
+    return {"law_change_id": change_id, **result.compatibility_payload, "saved": saved}
 
 
 @app.get("/changes/{change_id}/mappings")
@@ -616,8 +614,46 @@ def apply(
             detail=f"사용 가능한 매핑이 없습니다. POST /changes/{change_id}/map 을 먼저 실행하세요.",
         )
 
+    # 분류·검색 근거·repository 상태를 정책에 전달한다. 정책이 차단하면 LLM patch
+    # 생성에 진입하지 않는다. analyze/map 조회 자체는 이 정책과 무관하게 유지된다.
+    from app.application.services import ProposalService
+    from app.domain.changes.classification import RuleChangeClassifier
+    from app.domain.changes.normalization import ChangeNormalizer
+    from app.policy.automation import PolicyInput
+
+    normalized = ChangeNormalizer().normalize(row.before_text or "", row.after_text or "")
+    classification = RuleChangeClassifier().classify(normalized)
+    mapping_service, adapter = _make_mapping_service(db, article_id)
+    query = " ".join(filter(None, [
+        row.law_name, row.article_no, row.ai_summary, row.before_text, row.after_text,
+    ]))
+    try:
+        policy_candidates = mapping_service.map(query, top_k=5).candidates
+    except Exception:
+        policy_candidates = ()
+    policy_input = PolicyInput(
+        change_type=classification.primary_type,
+        classification_confidence=classification.confidence,
+        candidates=policy_candidates,
+        repository_commit=adapter.repository_revision(),
+        existing_files=frozenset(adapter.list_files()),
+        source_conflict=False,
+    )
+    gate = ProposalService().propose(policy_input, lambda: {"allowed": True})
+    if gate.blocked:
+        return {
+            "blocked": True,
+            "law_change_id": change_id,
+            "decision": gate.policy.decision.value,
+            "classification": classification.primary_type.value,
+            "block_reasons": [
+                {"code": reason.code, "message": reason.message}
+                for reason in gate.policy.block_reasons
+            ],
+            "policy_version": gate.policy.policy_version,
+        }
+
     # 매핑된 파일의 실제 코드를 읽어 스니펫 조합
-    adapter = _make_adapter()
     seen_paths: set[str] = set()
     snippets: list[str] = []
     for m in mappings:
