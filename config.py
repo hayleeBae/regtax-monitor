@@ -53,5 +53,8 @@ class Settings(BaseSettings):
     audit_store_code_snippets: bool = False
     audit_store_llm_raw_output: bool = True
 
+    # MCP는 읽기 전용이며 patch 본문은 별도 opt-in 전까지 노출하지 않는다.
+    mcp_expose_patch_drafts: bool = False
+
 
 settings = Settings()
