@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile
@@ -104,6 +105,78 @@ def _start_audit(db: Session, run_type, row):
     )
 
 
+def _write_audit_manifest(audit, artifacts: list, metadata: dict) -> None:
+    """Artifact 복제 실패는 업무 결과를 무효화하지 않고 부분 실패로 표시한다."""
+    if audit.run_id is None:
+        return
+    try:
+        from app.audit.artifacts import LocalArtifactStore
+
+        LocalArtifactStore(settings.audit_artifact_dir).write_manifest(
+            audit.run_id,
+            artifacts,
+            {
+                "settings_hash": stable_settings_hash(metadata),
+                "model": metadata.get("model"),
+                "prompt_versions": metadata.get("prompt_versions", {}),
+                "repository_alias": metadata.get("repository_alias"),
+                "repository_commit": metadata.get("repository_commit"),
+                "source_hash": metadata.get("source_hash"),
+                "replayability": "inspection_only",
+            },
+        )
+    except Exception as exc:
+        audit.incomplete = True
+        audit.error = f"artifact write failed: {exc}"
+
+
+def _store_audit_json(audit, artifact_type: str, payload: dict):
+    if audit.run_id is None:
+        return None
+    try:
+        from app.audit.artifacts import LocalArtifactStore
+        from app.audit.sanitizer import sanitize_payload
+
+        content = json.dumps(
+            sanitize_payload(payload),
+            ensure_ascii=False,
+            sort_keys=True,
+            indent=2,
+        ).encode("utf-8")
+        return LocalArtifactStore(settings.audit_artifact_dir).put_bytes(
+            audit.run_id,
+            artifact_type,
+            content,
+            ".json",
+            media_type="application/json",
+            redacted=True,
+        )
+    except Exception as exc:
+        audit.incomplete = True
+        audit.error = f"artifact write failed: {exc}"
+        return None
+
+
+def _audit_manifest_metadata(row, *, model: str | None = None) -> dict:
+    from app.domain.changes.normalization import ChangeNormalizer
+
+    return {
+        "model": model,
+        "prompt_versions": {
+            "analysis": "analysis-v1",
+            "classification": "classification-v1",
+        },
+        "repository_alias": (
+            Path(settings.repo_root).name if settings.repo_root else "mock_repo"
+        ),
+        "source_hash": ChangeNormalizer()
+        .normalize(row.before_text or "", row.after_text or "")
+        .source_hash,
+        "llm_backend": settings.llm_backend,
+        "embedding_model": settings.embedding_model,
+    }
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
@@ -201,6 +274,49 @@ def get_execution_run_events(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="실행 기록을 찾을 수 없습니다.") from exc
     return [to_jsonable(event) for event in repository.list_events(run_id)]
+
+
+@app.get("/runs/{run_id}/artifacts")
+def get_execution_run_artifacts(
+    run_id: str,
+    db: Session = Depends(get_session),
+) -> list[dict]:
+    """manifest에 기록된 artifact 참조와 현재 무결성 상태를 조회한다."""
+    from app.audit.artifacts import LocalArtifactStore
+    from app.audit.replay import InspectionReplay
+    from app.audit.repository import SqlAlchemyAuditRepository
+
+    try:
+        SqlAlchemyAuditRepository(db).get_run(run_id)
+        replay = InspectionReplay(
+            LocalArtifactStore(settings.audit_artifact_dir)
+        ).inspect(run_id)
+    except (KeyError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail="감사 artifact를 찾을 수 없습니다.") from exc
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=409, detail="감사 artifact가 손상되었습니다.") from exc
+    return replay["artifacts"]
+
+
+@app.post("/runs/{run_id}/replay")
+def replay_execution_run(
+    run_id: str,
+    db: Session = Depends(get_session),
+) -> dict:
+    """LLM·코드 저장소를 호출하지 않는 inspection replay만 제공한다."""
+    from app.audit.artifacts import LocalArtifactStore
+    from app.audit.replay import InspectionReplay
+    from app.audit.repository import SqlAlchemyAuditRepository
+
+    try:
+        SqlAlchemyAuditRepository(db).get_run(run_id)
+        return InspectionReplay(
+            LocalArtifactStore(settings.audit_artifact_dir)
+        ).inspect(run_id)
+    except (KeyError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail="재현 정보를 찾을 수 없습니다.") from exc
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=409, detail="재현 정보가 손상되었습니다.") from exc
 
 
 @app.post("/collect")
@@ -509,6 +625,25 @@ def analyze(change_id: int, force: bool = False, db: Session = Depends(get_sessi
 
     row.status = "reviewing"
     db.commit()
+    artifacts = []
+    if settings.audit_store_llm_raw_output:
+        analysis_ref = _store_audit_json(
+            audit,
+            "analysis-output",
+            {
+                "summary": result.summary,
+                "impact": result.impact,
+                "parse_ok": result.parse_ok,
+                "classification": result.classification.primary_type.value,
+            },
+        )
+        if analysis_ref:
+            artifacts.append(analysis_ref)
+    _write_audit_manifest(
+        audit,
+        artifacts,
+        _audit_manifest_metadata(row, model=llm.model),
+    )
     audit.complete()
 
     return {
@@ -597,6 +732,16 @@ def map_change(change_id: int, k: int = 5, db: Session = Depends(get_session)) -
         },
     )
     if not result.candidates:
+        retrieval_ref = _store_audit_json(
+            audit,
+            "retrieval",
+            result.compatibility_payload,
+        )
+        _write_audit_manifest(
+            audit,
+            [retrieval_ref] if retrieval_ref else [],
+            _audit_manifest_metadata(row),
+        )
         audit.complete()
         return {
             "mapped": 0,
@@ -629,6 +774,16 @@ def map_change(change_id: int, k: int = 5, db: Session = Depends(get_session)) -
         saved += 1
 
     db.commit()
+    retrieval_ref = _store_audit_json(
+        audit,
+        "retrieval",
+        result.compatibility_payload,
+    )
+    _write_audit_manifest(
+        audit,
+        [retrieval_ref] if retrieval_ref else [],
+        _audit_manifest_metadata(row),
+    )
     audit.complete()
     return {
         "law_change_id": change_id,
@@ -888,6 +1043,32 @@ def apply(
     row.status = "pending_apply"
     db.commit()
     db.refresh(proposal)
+    artifact_refs = []
+    if settings.audit_store_code_snippets and audit.run_id:
+        try:
+            from app.audit.artifacts import LocalArtifactStore
+
+            patch_ref = LocalArtifactStore(settings.audit_artifact_dir).put_bytes(
+                audit.run_id,
+                "proposal",
+                diff_text.encode("utf-8"),
+                ".patch",
+                media_type="text/x-diff",
+                contains_code=True,
+            )
+            artifact_refs.append(patch_ref)
+            audit.record(
+                AuditEventType.PATCH_BUILT,
+                {"sha256": patch_ref.sha256, "size": patch_ref.size},
+            )
+        except Exception as exc:
+            audit.incomplete = True
+            audit.error = f"artifact write failed: {exc}"
+    _write_audit_manifest(
+        audit,
+        artifact_refs,
+        _audit_manifest_metadata(row, model=llm.model),
+    )
     audit.record(
         AuditEventType.PROPOSAL_CREATED,
         {

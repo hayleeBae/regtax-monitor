@@ -47,5 +47,11 @@ class Settings(BaseSettings):
     scheduler_enabled: bool = False   # True로 설정 시 주기적 법령 수집 자동 실행
     scheduler_interval_hours: int = 24  # 수집 주기 (시간)
 
+    # 실행 감사 artifact — 코드/프롬프트 원문은 명시적으로 허용할 때만 저장
+    audit_artifact_dir: str = "data/audit"
+    audit_store_prompt_input: bool = False
+    audit_store_code_snippets: bool = False
+    audit_store_llm_raw_output: bool = True
+
 
 settings = Settings()

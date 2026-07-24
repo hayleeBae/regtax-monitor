@@ -15,6 +15,8 @@ term_loc_cache.json
 const_inventory_cache.json
 # 참고 문서 업로드 폴더 (개정세법 해설 PDF 등 — 용량 큰 발간물, repo에 커밋 안 함)
 data/uploads/
+# 실행 감사 artifact (프롬프트·모델 결과·코드가 포함될 수 있음)
+data/audit/
 # 검증 로그
 validate_out.log
 
