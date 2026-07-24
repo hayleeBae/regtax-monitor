@@ -57,9 +57,39 @@ enabled_tools = [
 
 ## Claude Code 연결
 
-Claude Code에서도 동일한 stdio command와 args를 MCP 서버로 등록한다.
-클라이언트 버전에 따라 설정 명령과 파일 위치가 달라질 수 있으므로, 회사
-PC에 설치된 버전의 MCP 도움말을 기준으로 등록한다.
+회사 맥북의 프로젝트 루트에서 다음 명령을 실행한다. Python 경로는 회사
+맥북에서 `pwd`와 `which python`으로 확인한 실제 절대경로를 사용한다.
+
+```bash
+claude mcp add regtax-monitor --scope local -- \
+  /absolute/path/regtax-monitor/.venv/bin/python \
+  -m app.mcp.server
+```
+
+`--scope local`은 현재 프로젝트에서만 사용하고 설정을 Git에 커밋하지 않는
+범위다. 회사별 절대경로와 내부 데이터 설정이 포함될 수 있으므로 기본
+등록 방식으로 사용한다. 팀 공용 `.mcp.json`이 필요해지는 시점에는 경로를
+환경변수로 치환한 뒤 별도 보안 검토를 거친다.
+
+등록 상태는 아래 명령으로 확인한다.
+
+```bash
+claude mcp get regtax-monitor
+claude mcp list
+```
+
+Claude Code를 실행한 뒤 `/mcp`에서도 연결 상태를 확인할 수 있다. 연결 후
+다음과 같이 요청해 읽기 동작을 점검한다.
+
+```text
+regtax-monitor에서 최근 법령 변경 5건을 조회해줘.
+가장 최근 실행의 audit event를 순서대로 보여줘.
+해당 실행 artifact의 SHA-256 검증 상태를 확인해줘.
+```
+
+서버가 보이지 않으면 프로젝트 루트에서 등록했는지, `.venv`에
+`requirements.txt`가 설치되었는지, `python -m app.mcp.server`가 실행되는지
+순서대로 확인한다.
 
 ## 보안 경계
 
