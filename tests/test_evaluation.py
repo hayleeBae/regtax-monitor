@@ -322,6 +322,10 @@ def test_file_recall_at_k_empty_relevant():
     assert file_recall_at_k([], ["a.java"], k=5) == pytest.approx(1.0)
 
 
+def test_file_recall_at_k_does_not_count_duplicate_file_twice():
+    assert file_recall_at_k(["a.java"], ["a.java", "a.java"], k=5) == 1.0
+
+
 def test_precision_at_k_basic():
     relevant = ["a.java", "b.java"]
     predicted = ["a.java", "x.java", "b.java"]

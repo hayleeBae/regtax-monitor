@@ -1,0 +1,51 @@
+# 회사 맥북에서 evaluation/private/company.yaml 로 복사한 뒤 실제 값으로 채운다.
+# 이 파일에는 실제 eHR 경로·코드·법령 원문을 입력하거나 커밋하지 않는다.
+cases:
+  - schema_version: "1"
+    case_id: "company_case_001"
+    title: "확인한 법령 변경 제목"
+    domain: "tax"
+    tags: ["value_change", "private"]
+
+    law:
+      law_name: "법령명 입력"
+      tier: "law"
+      article: "조문 입력"
+      before_text: "개정 전 문구 입력"
+      after_text: "개정 후 문구 입력"
+      effective_date: "2026-01-01"
+
+    expected:
+      change_type: "value_change"
+      automation_decision: "draft_allowed"
+      retrieval:
+        relevant_files:
+          - "실제/관련/파일.java"
+        primary_files:
+          - "실제/관련/파일.java"
+        relevant_symbols:
+          - "확인한Symbol"
+      patch:
+        expected_replacements:
+          - path: "실제/관련/파일.java"
+            before: "변경 전 코드 값"
+            after: "변경 후 코드 값"
+            match_mode: "exact"
+        forbidden_files: []
+        require_git_apply: false
+        require_golden_pass: false
+
+    repository:
+      fixture_type: "directory"
+      path: "/ABSOLUTE/PATH/TO/EHR_REPOSITORY"
+
+    execution:
+      evaluate_classification: true
+      evaluate_retrieval: true
+      evaluate_patch: false
+      top_k: [1, 3, 5, 10]
+      timeout_seconds: 600
+
+    metadata:
+      source: "real"
+      reviewed: true

@@ -2,3 +2,4 @@
 ruff>=0.5
 pytest>=8.0
 pip-audit>=2.7
+setuptools>=83.0.0     # macOS sdist 제외 우회 수정 (PYSEC-2026-3447)

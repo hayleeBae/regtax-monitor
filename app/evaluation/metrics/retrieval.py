@@ -31,7 +31,7 @@ def file_recall_at_k(
         return 1.0
     top_k = list(predicted_files)[:k]
     relevant_set = set(relevant_files)
-    found = sum(1 for f in top_k if f in relevant_set)
+    found = len(set(top_k) & relevant_set)
     return found / len(relevant_files)
 
 
@@ -45,7 +45,7 @@ def precision_at_k(
     if not top_k:
         return 0.0
     relevant_set = set(relevant_files)
-    found = sum(1 for f in top_k if f in relevant_set)
+    found = len(set(top_k) & relevant_set)
     return found / len(top_k)
 
 

@@ -6,6 +6,7 @@ from app.evaluation.retrieval_benchmark import (
     BenchmarkCase,
     RetrievalBenchmark,
     default_experiments,
+    ensure_benchmark_index,
 )
 
 
@@ -50,3 +51,23 @@ def test_same_cases_produce_deterministic_comparison_files(tmp_path: Path) -> No
     second = RetrievalBenchmark(_run_variant).run(tmp_path / "b", "stable")
     for name in ("comparison.json", "comparison.md", "case_ranks.jsonl"):
         assert (first.output_dir / name).read_bytes() == (second.output_dir / name).read_bytes()
+
+
+def test_empty_benchmark_index_requires_explicit_build() -> None:
+    class Collection:
+        value = 0
+        def count(self):
+            return self.value
+    class Indexer:
+        collection = Collection()
+        def index(self, adapter):
+            self.collection.value = 3
+            return 3
+    indexer = Indexer()
+    try:
+        ensure_benchmark_index(indexer, object(), False)
+    except RuntimeError as exc:
+        assert "--build-index" in str(exc)
+    else:
+        raise AssertionError("empty index must require --build-index")
+    assert ensure_benchmark_index(indexer, object(), True) == 3

@@ -68,9 +68,11 @@ class RetrievalBenchmark:
             [RetrievalExperimentConfig], Sequence[BenchmarkCase]
         ],
         experiments: Sequence[RetrievalExperimentConfig] | None = None,
+        environment_snapshot: dict | None = None,
     ) -> None:
         self.run_variant = run_variant
         self.experiments = tuple(experiments or default_experiments())
+        self.environment_snapshot = dict(environment_snapshot or {})
 
     def run(self, result_root: Path, run_name: str) -> BenchmarkResult:
         output_dir = result_root.resolve() / run_name
@@ -106,6 +108,7 @@ class RetrievalBenchmark:
                 }
                 for item in self.experiments
             ],
+            **self.environment_snapshot,
         }
         _write_json(output_dir / "environment.json", environment)
         return BenchmarkResult(output_dir, summary)
@@ -177,12 +180,28 @@ def run_orchestrator_cases(orchestrator, cases: Sequence[EvaluationCase], experi
             BenchmarkCase(
                 case.case_id,
                 case.expected.retrieval.relevant_files,
-                tuple(item.location.path for item in response.candidates),
+                tuple(dict.fromkeys(item.location.path for item in response.candidates)),
                 int((time.monotonic() - started) * 1000),
                 failures,
             )
         )
     return tuple(results)
+
+
+def ensure_benchmark_index(indexer, adapter, build_index: bool) -> int:
+    """전용 index가 비어 있으면 명시적 옵션에서만 fixture를 인덱싱한다."""
+    count = indexer.collection.count()
+    if count:
+        return count
+    if not build_index:
+        raise RuntimeError(
+            "benchmark index is empty; rerun with --build-index and a dedicated --persist-dir"
+        )
+    indexer.index(adapter)
+    count = indexer.collection.count()
+    if not count:
+        raise RuntimeError("benchmark indexing completed but no chunks were created")
+    return count
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -192,9 +211,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--run-name", required=True)
     parser.add_argument("--repo-root")
     parser.add_argument("--persist-dir", default="./chroma_data")
+    parser.add_argument("--build-index", action="store_true")
+    parser.add_argument("--refresh-caches", action="store_true")
     args = parser.parse_args(argv)
 
     from app.embedding.indexer import CodeIndexer
+    from app.codebase.mock_adapter import MockCodebaseAdapter
     from app.evaluation.loader import DatasetLoader
     from app.retrieval.orchestrator import RetrievalOrchestrator
     from app.retrieval.providers import (
@@ -209,16 +231,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     repo_root = args.repo_root or settings.repo_root or "mock_repo"
     cases = DatasetLoader(project_root, check_paths=True).load_yaml(args.dataset)
     indexer = CodeIndexer(args.persist_dir)
+    adapter = MockCodebaseAdapter(repo_root=repo_root, indexer=indexer)
+    index_count = ensure_benchmark_index(indexer, adapter, args.build_index)
     orchestrator = RetrievalOrchestrator(
         (
             VerifiedMappingProvider(lambda _query: ()),
             RagProvider(lambda text, k: indexer.search(text, k=k)),
-            DictionaryProvider(repo_root),
-            ConstantProvider(repo_root),
+            DictionaryProvider(repo_root, refresh_cache=args.refresh_caches),
+            ConstantProvider(repo_root, refresh_cache=args.refresh_caches),
         )
     )
     benchmark = RetrievalBenchmark(
-        lambda experiment: run_orchestrator_cases(orchestrator, cases, experiment)
+        lambda experiment: run_orchestrator_cases(orchestrator, cases, experiment),
+        environment_snapshot={
+            "embedding_model": settings.embedding_model,
+            "index_chunk_count": index_count,
+            "persist_dir": str(Path(args.persist_dir).resolve()),
+            "repository_root": str(Path(repo_root).resolve()),
+        },
     )
     result = benchmark.run(args.result_dir, args.run_name)
     print(result.output_dir)

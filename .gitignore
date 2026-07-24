@@ -20,3 +20,5 @@ validate_out.log
 
 # 평가 결과 — EVALUATION_SPEC.md §19 / §3
 evaluation/results/
+evaluation/private/
+evaluation/chroma_*/

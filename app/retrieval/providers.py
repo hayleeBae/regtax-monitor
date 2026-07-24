@@ -46,13 +46,14 @@ class DictionaryProvider:
     source = RetrievalSource.TERM_DICTIONARY
     version = "dictionary-provider-v1"
 
-    def __init__(self, repo_root: str) -> None:
+    def __init__(self, repo_root: str, refresh_cache: bool = False) -> None:
         self.repo_root = repo_root
+        self.refresh_cache = refresh_cache
 
     def retrieve(self, query: RetrievalQuery) -> ProviderResult:
         started = time.monotonic()
-        table = load(self.repo_root)
-        locations = load_locations(self.repo_root)
+        table = load(self.repo_root, refresh=self.refresh_cache)
+        locations = load_locations(self.repo_root, refresh=self.refresh_cache)
         candidates = []
         for code, term, raw_score in match_codes(
             query.text, table, query.top_k_per_provider
@@ -80,12 +81,13 @@ class ConstantProvider:
     source = RetrievalSource.CONSTANT_MATCH
     version = "constant-provider-v1"
 
-    def __init__(self, repo_root: str) -> None:
+    def __init__(self, repo_root: str, refresh_cache: bool = False) -> None:
         self.repo_root = repo_root
+        self.refresh_cache = refresh_cache
 
     def retrieve(self, query: RetrievalQuery) -> ProviderResult:
         started = time.monotonic()
-        inventory = load_inventory(self.repo_root)
+        inventory = load_inventory(self.repo_root, refresh=self.refresh_cache)
         candidates = []
         for value, expression, raw_score, files in match_constants(
             query.text, inventory, query.top_k_per_provider
@@ -163,4 +165,3 @@ def _result(source, candidates, started) -> ProviderResult:
         (),
         int((time.monotonic() - started) * 1000),
     )
-
