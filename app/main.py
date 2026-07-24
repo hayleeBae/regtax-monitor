@@ -15,6 +15,7 @@ from app.db.database import init_db, get_session
 from app.db.models import LawChange, Mapping, PatchProposal, Review, SyncState
 from app.embedding.indexer import CodeIndexer
 from app.llm import get_llm_client
+from app.audit.sanitizer import stable_settings_hash
 from config import settings
 
 MOCK_REPO_ROOT = "./mock_repo"
@@ -67,6 +68,40 @@ def _make_mapping_service(db: Session, article_id: str):
         ConstantProvider(repo_root),
     )
     return MappingService(RetrievalOrchestrator(providers)), adapter
+
+
+def _start_audit(db: Session, run_type, row):
+    from app.audit.integration import AuditScope
+    from app.domain.changes.normalization import ChangeNormalizer
+
+    normalized = ChangeNormalizer().normalize(row.before_text or "", row.after_text or "")
+    return AuditScope.start(
+        db,
+        run_type,
+        law_change_id=row.id,
+        source_hash=normalized.source_hash,
+        settings_hash=stable_settings_hash(
+            {
+                "llm_backend": settings.llm_backend,
+                "llm_model": settings.local_llm_model
+                if settings.llm_backend == "local"
+                else settings.llm_model,
+                "embedding_model": settings.embedding_model,
+                "local_llm_num_ctx": settings.local_llm_num_ctx,
+            }
+        ),
+        repository_alias=(
+            Path(settings.repo_root).name if settings.repo_root else "mock_repo"
+        ),
+        llm_backend=settings.llm_backend,
+        llm_model=(
+            settings.local_llm_model
+            if settings.llm_backend == "local"
+            else settings.llm_model
+        ),
+        embedding_model=settings.embedding_model,
+        prompt_versions={"analysis": "analysis-v1", "classification": "classification-v1"},
+    )
 
 
 @asynccontextmanager
@@ -136,6 +171,36 @@ def ui():
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/runs/{run_id}")
+def get_execution_run(run_id: str, db: Session = Depends(get_session)) -> dict:
+    """경로·시크릿을 제외한 실행 단위 감사 메타데이터를 조회한다."""
+    from app.audit.repository import SqlAlchemyAuditRepository
+    from app.domain.common.serialization import to_jsonable
+
+    try:
+        run = SqlAlchemyAuditRepository(db).get_run(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="실행 기록을 찾을 수 없습니다.") from exc
+    return to_jsonable(run)
+
+
+@app.get("/runs/{run_id}/events")
+def get_execution_run_events(
+    run_id: str,
+    db: Session = Depends(get_session),
+) -> list[dict]:
+    """append-only 감사 이벤트를 발생 순서대로 조회한다."""
+    from app.audit.repository import SqlAlchemyAuditRepository
+    from app.domain.common.serialization import to_jsonable
+
+    repository = SqlAlchemyAuditRepository(db)
+    try:
+        repository.get_run(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="실행 기록을 찾을 수 없습니다.") from exc
+    return [to_jsonable(event) for event in repository.list_events(run_id)]
 
 
 @app.post("/collect")
@@ -376,6 +441,10 @@ def analyze(change_id: int, force: bool = False, db: Session = Depends(get_sessi
     if row.ai_summary and not force:
         return {"skipped": True, "reason": "이미 분석된 건입니다. 재분석하려면 ?force=true 를 사용하세요.", "id": change_id}
 
+    from app.domain.audit import AuditEventType, ExecutionRunType
+    audit = _start_audit(db, ExecutionRunType.ANALYZE, row)
+    audit.record(AuditEventType.ANALYSIS_REQUESTED, {"force": force})
+
     # 도메인 라벨(세법/노동·인사 등)을 맥락 첫 줄로 — 프롬프트 자체는 도메인 중립
     domain_label = ""
     try:
@@ -412,6 +481,27 @@ def analyze(change_id: int, force: bool = False, db: Session = Depends(get_sessi
         ),
     )
     result = service.analyze(row.before_text or "", row.after_text or "", context)
+    audit.record(
+        AuditEventType.NORMALIZATION_COMPLETED,
+        {
+            "normalizer_version": result.normalized.normalizer_version,
+            "money_delta_count": len(result.normalized.money_changes),
+            "rate_delta_count": len(result.normalized.rate_changes),
+            "date_delta_count": len(result.normalized.date_changes),
+        },
+    )
+    audit.record(
+        AuditEventType.CLASSIFICATION_COMPLETED,
+        {
+            "primary_type": result.classification.primary_type.value,
+            "confidence": result.classification.confidence,
+            "source": result.classification.source.value,
+        },
+    )
+    audit.record(
+        AuditEventType.ANALYSIS_COMPLETED,
+        {"parse_ok": result.parse_ok, "summary_length": len(result.summary)},
+    )
 
     row.ai_summary = result.summary
     row.ai_impact = result.impact
@@ -419,6 +509,7 @@ def analyze(change_id: int, force: bool = False, db: Session = Depends(get_sessi
 
     row.status = "reviewing"
     db.commit()
+    audit.complete()
 
     return {
         "id": change_id,
@@ -433,6 +524,7 @@ def analyze(change_id: int, force: bool = False, db: Session = Depends(get_sessi
             "reason": result.classification.reason,
         },
         "normalizer_version": result.normalized.normalizer_version,
+        **audit.response_fields(),
     }
 
 
@@ -483,6 +575,9 @@ def map_change(change_id: int, k: int = 5, db: Session = Depends(get_session)) -
     if row is None:
         raise HTTPException(status_code=404, detail="변경 건을 찾을 수 없습니다.")
 
+    from app.domain.audit import AuditEventType, ExecutionRunType
+    audit = _start_audit(db, ExecutionRunType.MAP, row)
+
     query = " ".join(filter(None, [
         row.law_name, row.article_no,
         row.ai_summary, row.before_text, row.after_text,
@@ -491,8 +586,23 @@ def map_change(change_id: int, k: int = 5, db: Session = Depends(get_session)) -
     article_id = f"{row.law_id}:{row.article_no}"
     service, _adapter = _make_mapping_service(db, article_id)
     result = service.map(query, top_k=k)
+    audit.record(
+        AuditEventType.RETRIEVAL_COMPLETED,
+        {
+            "candidate_count": len(result.candidates),
+            "top_k": k,
+            "provider_statuses": result.compatibility_payload.get(
+                "provider_statuses", {}
+            ),
+        },
+    )
     if not result.candidates:
-        return {"mapped": 0, "note": "인덱싱된 코드도, 사전 매칭도 없습니다. POST /index 를 먼저 실행하세요."}
+        audit.complete()
+        return {
+            "mapped": 0,
+            "note": "인덱싱된 코드도, 사전 매칭도 없습니다. POST /index 를 먼저 실행하세요.",
+            **audit.response_fields(),
+        }
 
     repo_name = (settings.repo_root.replace("\\", "/").rstrip("/").split("/")[-1]
                  or "mock_repo")
@@ -519,7 +629,13 @@ def map_change(change_id: int, k: int = 5, db: Session = Depends(get_session)) -
         saved += 1
 
     db.commit()
-    return {"law_change_id": change_id, **result.compatibility_payload, "saved": saved}
+    audit.complete()
+    return {
+        "law_change_id": change_id,
+        **result.compatibility_payload,
+        "saved": saved,
+        **audit.response_fields(),
+    }
 
 
 @app.get("/changes/{change_id}/mappings")
@@ -587,6 +703,9 @@ def apply(
     if row is None:
         raise HTTPException(status_code=404, detail="변경 건을 찾을 수 없습니다.")
 
+    from app.domain.audit import AuditEventType, ExecutionRunType
+    audit = _start_audit(db, ExecutionRunType.APPLY, row)
+
     article_id = f"{row.law_id}:{row.article_no}"
 
     # verified 매핑이 있으면 우선 사용, 없으면 confidence 기준 fallback
@@ -609,6 +728,7 @@ def apply(
         mapping_mode = "confidence"
 
     if not mappings:
+        audit.fail("retrieval_error", "사용 가능한 매핑이 없음")
         raise HTTPException(
             status_code=422,
             detail=f"사용 가능한 매핑이 없습니다. POST /changes/{change_id}/map 을 먼저 실행하세요.",
@@ -640,7 +760,16 @@ def apply(
         source_conflict=False,
     )
     gate = ProposalService().propose(policy_input, lambda: {"allowed": True})
+    audit.record(
+        AuditEventType.POLICY_DECIDED,
+        {
+            "decision": gate.policy.decision.value,
+            "reason_codes": [reason.code for reason in gate.policy.block_reasons],
+            "policy_version": gate.policy.policy_version,
+        },
+    )
     if gate.blocked:
+        audit.complete()
         return {
             "blocked": True,
             "law_change_id": change_id,
@@ -651,6 +780,7 @@ def apply(
                 for reason in gate.policy.block_reasons
             ],
             "policy_version": gate.policy.policy_version,
+            **audit.response_fields(),
         }
 
     # 매핑된 파일의 실제 코드를 읽어 스니펫 조합
@@ -705,10 +835,18 @@ def apply(
     )
 
     llm = get_llm_client()
+    audit.record(
+        AuditEventType.EDIT_REQUESTED,
+        {"snippet_file_count": len(seen_paths), "mapping_mode": mapping_mode},
+    )
     # 앵커 편집 → unified diff 변환. 앵커 불일치 시 원본 발췌를 보여주며 자동 재시도
     from app.llm.common import propose_and_build
     diff_text, warnings, applied, raw_edits = propose_and_build(
         llm, law_diff=law_diff, code_snippets=snippets, read_file=adapter.read_file,
+    )
+    audit.record(
+        AuditEventType.EDIT_COMPLETED,
+        {"edits_applied": applied, "warning_count": len(warnings)},
     )
     if not diff_text.strip():
         diff_text = (
@@ -726,10 +864,15 @@ def apply(
     # 스크래치 사본에 diff를 적용해 계산 기대값 대조 — 실제 repo는 건드리지 않는다.
     golden = None
     if settings.golden_test_cmd:
+        audit.record(AuditEventType.GOLDEN_STARTED, {})
         from app.golden import run_golden_tests
         golden = run_golden_tests(
             settings.repo_root or MOCK_REPO_ROOT, diff_text,
             settings.golden_test_cmd, settings.golden_test_timeout_seconds,
+        )
+        audit.record(
+            AuditEventType.GOLDEN_COMPLETED,
+            {"status": golden["status"], "duration_s": golden.get("duration_s")},
         )
 
     proposal = PatchProposal(
@@ -745,6 +888,15 @@ def apply(
     row.status = "pending_apply"
     db.commit()
     db.refresh(proposal)
+    audit.record(
+        AuditEventType.PROPOSAL_CREATED,
+        {
+            "proposal_id": proposal.id,
+            "approval_status": proposal.approval_status,
+            "diff_length": len(diff_text),
+        },
+    )
+    audit.complete()
 
     return {
         "proposal_id": proposal.id,
@@ -756,6 +908,7 @@ def apply(
         "warnings": warnings,
         "golden": golden,               # None=미설정, 아니면 {status, output, duration_s}
         "diff_preview": diff_text[:400] + ("…" if len(diff_text) > 400 else ""),
+        **audit.response_fields(),
     }
 
 

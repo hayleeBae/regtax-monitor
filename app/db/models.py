@@ -9,6 +9,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 
 from app.db.database import Base
@@ -93,3 +94,46 @@ class SyncState(Base):
     id = Column(Integer, primary_key=True, default=1)
     last_sync = Column(String, nullable=True)    # 마지막 수집 기준일 YYYYMMDD
     last_run_at = Column(DateTime, nullable=True)
+
+
+class ExecutionRun(Base):
+    """주요 application 실행 단위."""
+
+    __tablename__ = "execution_run"
+
+    run_id = Column(String, primary_key=True)
+    parent_run_id = Column(String, nullable=True, index=True)
+    run_type = Column(String, nullable=False, index=True)
+    status = Column(String, nullable=False, index=True)
+    law_change_id = Column(Integer, nullable=True, index=True)
+    proposal_id = Column(Integer, nullable=True)
+    evaluation_run_id = Column(String, nullable=True)
+    source_hash = Column(String, nullable=True)
+    repository_alias = Column(String, nullable=True)
+    repository_commit = Column(String, nullable=True)
+    settings_hash = Column(String, nullable=True)
+    llm_backend = Column(String, nullable=True)
+    llm_model = Column(String, nullable=True)
+    embedding_model = Column(String, nullable=True)
+    prompt_versions = Column(Text, default="{}")
+    started_at = Column(DateTime, nullable=False, index=True)
+    completed_at = Column(DateTime, nullable=True)
+    error_category = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
+
+
+class AuditEvent(Base):
+    """append-only 구조화 실행 이벤트."""
+
+    __tablename__ = "audit_event"
+    __table_args__ = (
+        UniqueConstraint("run_id", "sequence_no", name="uq_audit_run_sequence"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    run_id = Column(String, nullable=False, index=True)
+    sequence_no = Column(Integer, nullable=False)
+    event_type = Column(String, nullable=False, index=True)
+    occurred_at = Column(DateTime, nullable=False)
+    payload = Column(Text, default="{}")
+    artifact_refs = Column(Text, default="[]")
