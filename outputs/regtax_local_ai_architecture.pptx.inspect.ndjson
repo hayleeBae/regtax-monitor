@@ -1,0 +1,241 @@
+{"kind":"deck","id":"pr/qvqq53","name":"Deck"}
+{"kind":"layout","layoutId":"227fe006-e0bc-4502-92ac-331e47d5c8c3","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"e681554d-5828-431a-94a7-3450ad9371b0","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/3r3d8r","slide":1,"title":"REGTAX-MONITOR","textShapes":4}
+{"kind":"textbox","id":"sh/ap072pgf","slide":1,"text":"REGTAX-MONITOR","textPreview":"REGTAX-MONITOR","textChars":14,"textLines":1,"bbox":[42,42,400,32]}
+{"kind":"textbox","id":"sh/xsr6xkzq","slide":1,"text":"민감한 코드를 지키면서\n실제 수정까지 가는 로컬 AI 설계","textPreview":"민감한 코드를 지키면서 | 실제 수정까지 가는 로컬 AI 설계","textChars":32,"textLines":2,"bbox":[42,178,1050,220]}
+{"kind":"textbox","id":"sh/wrip4fy5","slide":1,"text":"API 토큰형과 로컬 모델의 선택 기준 · 성능 보완 구조 · 평가와 학습 전략","textPreview":"API 토큰형과 로컬 모델의 선택 기준 · 성능 보완 구조 · 평가와 학습 전략","textChars":44,"textLines":1,"bbox":[42,462,1040,60]}
+{"kind":"shape","id":"sh/jutozuhw","slide":1,"bbox":[42,596,1196,5]}
+{"kind":"textbox","id":"sh/itk76pgb","slide":1,"text":"최종 목표 아키텍처 설명안  |  2026.07","textPreview":"최종 목표 아키텍처 설명안  |  2026.07","textChars":26,"textLines":1,"bbox":[42,626,500,30]}
+{"kind":"notes","id":"nt/3r3d8r","slide":1,"text":"안녕하세요. 오늘은 regtax-monitor가 왜 로컬 모델을 중심으로 설계되었는지, 그리고 로컬 모델의 속도와 성능 한계를 어떤 시스템 구조로 보완하는지 설명드리겠습니다. 핵심은 로컬 모델이 API 모델보다 절대적으로 더 똑똑하다는 주장이 아닙니다. 민감한 eHR 코드를 외부로 보내지 않으면서도, 법령 변경 탐지부터 실제 적용 가능한 패치 초안까지 통제 가능한 방식으로 연결하는 것이 목표입니다."}
+{"kind":"slide","id":"sl/r2d4vx","slide":2,"title":"선택의 기준은 모델 순위가 아니라 ‘운영 가능한 위험’이다","textShapes":12}
+{"kind":"textbox","id":"sh/8rux876x","slide":2,"text":"선택의 기준은 모델 순위가 아니라 ‘운영 가능한 위험’이다","textPreview":"선택의 기준은 모델 순위가 아니라 ‘운영 가능한 위험’이다","textChars":32,"textLines":1,"bbox":[42,34,1160,76]}
+{"kind":"textbox","id":"sh/7qlwzmps","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1178,660,60,22]}
+{"kind":"textbox","id":"sh/mpcf6h87","slide":2,"text":"가장 비싼 실패","textPreview":"가장 비싼 실패","textChars":8,"textLines":1,"bbox":[42,162,340,40]}
+{"kind":"textbox","id":"sh/lo3exc7m","slide":2,"text":"개정을 놓치는 것","textPreview":"개정을 놓치는 것","textChars":9,"textLines":1,"bbox":[42,212,430,74]}
+{"kind":"textbox","id":"sh/k3ax47q1","slide":2,"text":"그 다음 위험","textPreview":"그 다음 위험","textChars":7,"textLines":1,"bbox":[42,342,340,40]}
+{"kind":"textbox","id":"sh/z21wv2pg","slide":2,"text":"잘못된 수정을\n자동 반영하는 것","textPreview":"잘못된 수정을 | 자동 반영하는 것","textChars":17,"textLines":2,"bbox":[42,392,430,122]}
+{"kind":"shape","id":"sh/y1sf2x8v","slide":2,"bbox":[548,150,690,420]}
+{"kind":"textbox","id":"sh/x0jets7a","slide":2,"text":"설계 원칙","textPreview":"설계 원칙","textChars":5,"textLines":1,"bbox":[590,185,240,36]}
+{"kind":"textbox","id":"sh/czax0nq5","slide":2,"text":"• 수집·감지는 재현율 우선","textPreview":"• 수집·감지는 재현율 우선","textChars":15,"textLines":1,"bbox":[590,250,570,48]}
+{"kind":"textbox","id":"sh/65kvq9wf","slide":2,"text":"• 코드·임베딩·생성은 기본적으로 로컬","textPreview":"• 코드·임베딩·생성은 기본적으로 로컬","textChars":21,"textLines":1,"bbox":[590,315,570,48]}
+{"kind":"textbox","id":"sh/76tczedk","slide":2,"text":"• AI는 의미 해석과 수정 초안까지만","textPreview":"• AI는 의미 해석과 수정 초안까지만","textChars":21,"textLines":1,"bbox":[590,380,570,48]}
+{"kind":"textbox","id":"sh/s72dsje5","slide":2,"text":"• 검증과 실제 반영은 코드와 사람이 통제","textPreview":"• 검증과 실제 반영은 코드와 사람이 통제","textChars":23,"textLines":1,"bbox":[590,445,570,58]}
+{"kind":"textbox","id":"sh/t8bu1ovq","slide":2,"text":"근거: docs/architecture/ADR.md · docs/product/PRD.md","textPreview":"근거: docs/architecture/ADR.md · docs/product/PRD.md","textChars":50,"textLines":1,"bbox":[42,668,1040,18]}
+{"kind":"notes","id":"nt/r2d4vx","slide":2,"text":"먼저 이 프로젝트의 의사결정 기준입니다. 첫 번째 위험은 세법이나 노동법 개정을 놓치는 것입니다. 그래서 수집과 감지에서는 재현율을 우선합니다. 두 번째 위험은 AI가 잘못 만든 코드를 자동으로 반영하는 것입니다. 그래서 모델은 초안까지만 만들고, 파일 확인과 diff 생성, 테스트, 승인은 결정론적 코드와 사람이 담당합니다. 즉 모델 선택도 벤치마크 순위가 아니라 보안, 실패 영향, 운영 통제 가능성을 기준으로 봅니다."}
+{"kind":"slide","id":"sl/8nkmih","slide":3,"title":"API형은 즉시 높은 품질, 로컬형은 통제권과 내부 자산화를 준다","textShapes":24}
+{"kind":"textbox","id":"sh/rypgvex0","slide":3,"text":"API형은 즉시 높은 품질, 로컬형은 통제권과 내부 자산화를 준다","textPreview":"API형은 즉시 높은 품질, 로컬형은 통제권과 내부 자산화를 준다","textChars":36,"textLines":1,"bbox":[42,34,1160,76]}
+{"kind":"textbox","id":"sh/sjyxojyl","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1178,660,60,22]}
+{"kind":"shape","id":"sh/dk7yx4f6","slide":3,"bbox":[42,145,360,458]}
+{"kind":"textbox","id":"sh/itgfipgj","slide":3,"text":"비교 기준","textPreview":"비교 기준","textChars":5,"textLines":1,"bbox":[64,170,316,38]}
+{"kind":"shape","id":"sh/3upgrux4","slide":3,"bbox":[435,145,367,458]}
+{"kind":"textbox","id":"sh/4vyxkzy9","slide":3,"text":"API 토큰 방식","textPreview":"API 토큰 방식","textChars":9,"textLines":1,"bbox":[457,170,323,38]}
+{"kind":"shape","id":"sh/5w7yt4fu","slide":3,"bbox":[828,145,367,458]}
+{"kind":"textbox","id":"sh/2p0zutgn","slide":3,"text":"로컬 모델 구축","textPreview":"로컬 모델 구축","textChars":8,"textLines":1,"bbox":[850,170,323,38]}
+{"kind":"textbox","id":"sh/nq9g3yx8","slide":3,"text":"시작 속도","textPreview":"시작 속도","textChars":5,"textLines":1,"bbox":[64,228,314,42]}
+{"kind":"textbox","id":"sh/f29o7i58","slide":3,"text":"API 키로 즉시 사용","textPreview":"API 키로 즉시 사용","textChars":12,"textLines":1,"bbox":[457,228,323,44]}
+{"kind":"textbox","id":"sh/e10nyd4n","slide":3,"text":"서버·모델·인덱스 준비","textPreview":"서버·모델·인덱스 준비","textChars":12,"textLines":1,"bbox":[850,228,323,44]}
+{"kind":"textbox","id":"sh/14r69sny","slide":3,"text":"코드 보안","textPreview":"코드 보안","textChars":5,"textLines":1,"bbox":[64,286,314,42]}
+{"kind":"textbox","id":"sh/g3i50nmt","slide":3,"text":"스니펫 외부 전송 검토 필요","textPreview":"스니펫 외부 전송 검토 필요","textChars":15,"textLines":1,"bbox":[457,286,323,44]}
+{"kind":"textbox","id":"sh/3q9obi54","slide":3,"text":"코드가 사내 경계를 벗어나지 않음","textPreview":"코드가 사내 경계를 벗어나지 않음","textChars":18,"textLines":1,"bbox":[850,286,323,44]}
+{"kind":"textbox","id":"sh/250n2x4j","slide":3,"text":"초기 품질","textPreview":"초기 품질","textChars":5,"textLines":1,"bbox":[64,344,314,42]}
+{"kind":"textbox","id":"sh/psb6dsna","slide":3,"text":"대형 모델 우위","textPreview":"대형 모델 우위","textChars":8,"textLines":1,"bbox":[457,344,323,44]}
+{"kind":"textbox","id":"sh/or254nmp","slide":3,"text":"8B급은 복잡한 추론에 한계","textPreview":"8B급은 복잡한 추론에 한계","textChars":15,"textLines":1,"bbox":[850,344,323,44]}
+{"kind":"textbox","id":"sh/butof25g","slide":3,"text":"비용 구조","textPreview":"비용 구조","textChars":5,"textLines":1,"bbox":[64,402,314,42]}
+{"kind":"textbox","id":"sh/qtkn6x4v","slide":3,"text":"사용량에 비례한 토큰 비용","textPreview":"사용량에 비례한 토큰 비용","textChars":14,"textLines":1,"bbox":[457,402,323,44]}
+{"kind":"textbox","id":"sh/mp4ry1o3","slide":3,"text":"초기 장비·운영비, 반복 비용 낮음","textPreview":"초기 장비·운영비, 반복 비용 낮음","textChars":19,"textLines":1,"bbox":[850,402,323,44]}
+{"kind":"textbox","id":"sh/7qx876po","slide":3,"text":"지연시간","textPreview":"지연시간","textChars":4,"textLines":1,"bbox":[64,460,314,42]}
+{"kind":"textbox","id":"sh/8r690b6t","slide":3,"text":"네트워크+API, 비교적 빠름","textPreview":"네트워크+API, 비교적 빠름","textChars":16,"textLines":1,"bbox":[457,460,323,44]}
+{"kind":"textbox","id":"sh/9sfq9g7e","slide":3,"text":"CPU 수 분; GPU로 개선 가능","textPreview":"CPU 수 분; GPU로 개선 가능","textChars":19,"textLines":1,"bbox":[850,460,323,44]}
+{"kind":"textbox","id":"sh/yl47uhor","slide":3,"text":"통제·재현성","textPreview":"통제·재현성","textChars":6,"textLines":1,"bbox":[64,518,314,42]}
+{"kind":"textbox","id":"sh/zmd83mpc","slide":3,"text":"모델 버전 변화 영향","textPreview":"모델 버전 변화 영향","textChars":11,"textLines":1,"bbox":[457,518,323,44]}
+{"kind":"textbox","id":"sh/0nmpwr6x","slide":3,"text":"모델·프롬프트·데이터 고정 가능","textPreview":"모델·프롬프트·데이터 고정 가능","textChars":17,"textLines":1,"bbox":[850,518,323,44]}
+{"kind":"textbox","id":"sh/lovq5w7i","slide":3,"text":"결론: 보안 민감도가 낮고 빠른 PoC면 API형, 내부 코드와 반복 운영이 핵심이면 로컬형","textPreview":"결론: 보안 민감도가 낮고 빠른 PoC면 API형, 내부 코드와 반복 운영이 핵심이면 로컬형","textChars":51,"textLines":1,"bbox":[42,668,1040,18]}
+{"kind":"notes","id":"nt/8nkmih","slide":3,"text":"두 방식의 장단점은 명확합니다. API 방식은 대형 모델을 바로 사용할 수 있어 초기 품질과 구축 속도가 좋습니다. 반면 코드 스니펫이라도 외부 전송 검토가 필요하고, 사용량에 따라 비용이 증가하며 모델 버전 변화의 영향을 받습니다. 로컬 방식은 초기 구축과 운영이 필요하고 CPU에서는 느리지만, 코드가 외부로 나가지 않고 모델과 데이터 버전을 고정할 수 있습니다. 이 프로젝트는 내부 eHR 코드와 매년 반복되는 업무라는 특성 때문에 로컬형을 기본으로 선택하되, LlmClient 인터페이스를 통해 API형을 대체 옵션으로 남깁니다."}
+{"kind":"slide","id":"sl/rj8usa","slide":4,"title":"모델을 ‘자유로운 에이전트’가 아니라 제한된 편집 엔진으로 사용한다","textShapes":12}
+{"kind":"textbox","id":"sh/ny5gnmls","slide":4,"text":"모델을 ‘자유로운 에이전트’가 아니라 제한된 편집 엔진으로 사용한다","textPreview":"모델을 ‘자유로운 에이전트’가 아니라 제한된 편집 엔진으로 사용한다","textChars":37,"textLines":1,"bbox":[42,34,1160,76]}
+{"kind":"textbox","id":"sh/8zehwr2d","slide":4,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1178,660,60,22]}
+{"kind":"shape","id":"sh/90nypw3y","slide":4,"bbox":[208,315,32,4]}
+{"kind":"shape","id":"sh/ytcfqx4b","slide":4,"bbox":[42,250,166,140]}
+{"kind":"textbox","id":"sh/zulgj2lw","slide":4,"text":"법령 수집\n· 정규화","textPreview":"법령 수집 | · 정규화","textChars":11,"textLines":2,"bbox":[54,277,142,86]}
+{"kind":"shape","id":"sh/0vuhs721","slide":4,"bbox":[406,315,32,4]}
+{"kind":"shape","id":"sh/lwnylc3m","slide":4,"bbox":[240,250,166,140]}
+{"kind":"textbox","id":"sh/ipgz21kf","slide":4,"text":"변경 분류\n· 정책 결정","textPreview":"변경 분류 | · 정책 결정","textChars":13,"textLines":2,"bbox":[252,277,142,86]}
+{"kind":"shape","id":"sh/jqpgv6l0","slide":4,"bbox":[604,315,32,4]}
+{"kind":"shape","id":"sh/ne9ony18","slide":4,"bbox":[438,250,166,140]}
+{"kind":"textbox","id":"sh/2d0net0n","slide":4,"text":"후보 검색\nRAG+사전+상수","textPreview":"후보 검색 | RAG+사전+상수","textChars":15,"textLines":2,"bbox":[450,277,142,86]}
+{"kind":"shape","id":"sh/9gr6p8jy","slide":4,"bbox":[802,315,32,4]}
+{"kind":"shape","id":"sh/ofi5g3it","slide":4,"bbox":[636,250,166,140]}
+{"kind":"textbox","id":"sh/bi9ory14","slide":4,"text":"로컬 LLM\n분석+앵커 편집","textPreview":"로컬 LLM | 분석+앵커 편집","textChars":15,"textLines":2,"bbox":[648,277,142,86]}
+{"kind":"shape","id":"sh/ah0nit0j","slide":4,"bbox":[1000,315,32,4]}
+{"kind":"shape","id":"sh/x4b6t8za","slide":4,"bbox":[834,250,166,140]}
+{"kind":"textbox","id":"sh/wj25k3ip","slide":4,"text":"서버 검증\ndiff+git apply","textPreview":"서버 검증 | diff+git apply","textChars":20,"textLines":2,"bbox":[846,277,142,86]}
+{"kind":"shape","id":"sh/j6tovihg","slide":4,"bbox":[1032,250,166,140]}
+{"kind":"textbox","id":"sh/y5k7md0v","slide":4,"text":"골든 테스트\n+ 사람 승인","textPreview":"골든 테스트 | + 사람 승인","textChars":14,"textLines":2,"bbox":[1044,277,142,86]}
+{"kind":"shape","id":"sh/u14rehk3","slide":4,"bbox":[642,430,166,42]}
+{"kind":"textbox","id":"sh/v2x8nm1o","slide":4,"text":"AI 판단","textPreview":"AI 판단","textChars":5,"textLines":1,"bbox":[656,438,138,26]}
+{"kind":"shape","id":"sh/g369gr2t","slide":4,"bbox":[840,430,354,42]}
+{"kind":"textbox","id":"sh/h4fqpcje","slide":4,"text":"결정론적 통제","textPreview":"결정론적 통제","textChars":7,"textLines":1,"bbox":[854,438,326,26]}
+{"kind":"textbox","id":"sh/6d4raxkr","slide":4,"text":"전체 저장소를 모델에 맡기지 않고, 검색으로 좁힌 실제 코드만 제공","textPreview":"전체 저장소를 모델에 맡기지 않고, 검색으로 좁힌 실제 코드만 제공","textChars":37,"textLines":1,"bbox":[42,520,1150,52]}
+{"kind":"textbox","id":"sh/7yd8j2lc","slide":4,"text":"구현 seam: app/llm/LlmClient · app/codebase/CodebaseAdapter | 목표: Run/Audit/Artifact 추적","textPreview":"구현 seam: app/llm/LlmClient · app/codebase/CodebaseAdapter | 목표: Run/Audit/Artifact 추적","textChars":85,"textLines":1,"bbox":[42,668,1040,18]}
+{"kind":"notes","id":"nt/rj8usa","slide":4,"text":"최종 구조에서 모델은 자유롭게 저장소를 돌아다니는 에이전트가 아닙니다. 법령 수집과 정규화, 변경 유형 분류를 거친 뒤, RAG와 용어 사전, 상수 값 매칭으로 관련 코드 후보를 좁힙니다. 모델은 그 코드만 보고 분석과 SEARCH/REPLACE 편집을 생성합니다. 이후 실제 파일 존재 여부, 앵커 일치, unified diff, git apply, 골든 테스트는 일반 코드가 수행합니다. 마지막에는 사람이 승인합니다. 이 구조는 모델이 틀릴 수 있다는 사실을 전제로 안전성을 만듭니다."}
+{"kind":"slide","id":"sl/a2v94y","slide":5,"title":"로컬 모델 구축에서 품질을 좌우하는 것은 모델 이름보다 실행 조건이다","textShapes":21}
+{"kind":"textbox","id":"sh/xwbmtwby","slide":5,"text":"로컬 모델 구축에서 품질을 좌우하는 것은 모델 이름보다 실행 조건이다","textPreview":"로컬 모델 구축에서 품질을 좌우하는 것은 모델 이름보다 실행 조건이다","textChars":38,"textLines":1,"bbox":[42,34,1160,76]}
+{"kind":"textbox","id":"sh/atk3ihs7","slide":5,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1178,660,60,22]}
+{"kind":"textbox","id":"sh/but4rmts","slide":5,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[42,145,55,30]}
+{"kind":"textbox","id":"sh/or2lg7ah","slide":5,"text":"보안 경계","textPreview":"보안 경계","textChars":5,"textLines":1,"bbox":[107,145,480,34]}
+{"kind":"textbox","id":"sh/9sbmpcbm","slide":5,"text":"코드·파생 인덱스·프롬프트·로그가 외부로 나가지 않도록 구성","textPreview":"코드·파생 인덱스·프롬프트·로그가 외부로 나가지 않도록 구성","textChars":33,"textLines":1,"bbox":[107,193,500,78]}
+{"kind":"shape","id":"sh/mp03ehsb","slide":5,"bbox":[626,145,1,122]}
+{"kind":"textbox","id":"sh/nq94nmtw","slide":5,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[649,145,55,30]}
+{"kind":"textbox","id":"sh/8nm5sbal","slide":5,"text":"컨텍스트","textPreview":"컨텍스트","textChars":4,"textLines":1,"bbox":[714,145,480,34]}
+{"kind":"textbox","id":"sh/tovm1gb6","slide":5,"text":"Ollama 서버를 16K 이상으로 기동하고 실제 context shift를 감시","textPreview":"Ollama 서버를 16K 이상으로 기동하고 실제 context shift를 감시","textChars":45,"textLines":1,"bbox":[714,193,500,78]}
+{"kind":"textbox","id":"sh/lgby5gje","slide":5,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[42,305,55,30]}
+{"kind":"textbox","id":"sh/kf2xcb2t","slide":5,"text":"모델 분업","textPreview":"모델 분업","textChars":5,"textLines":1,"bbox":[107,305,480,34]}
+{"kind":"textbox","id":"sh/zetw3618","slide":5,"text":"요약은 경량 모델, 코드 편집은 상위 모델로 비용과 속도 분리","textPreview":"요약은 경량 모델, 코드 편집은 상위 모델로 비용과 속도 분리","textChars":34,"textLines":1,"bbox":[107,353,500,78]}
+{"kind":"shape","id":"sh/ydkfa1kn","slide":5,"bbox":[626,305,1,122]}
+{"kind":"textbox","id":"sh/xcre1wji","slide":5,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[649,305,55,30]}
+{"kind":"textbox","id":"sh/cbix8r2x","slide":5,"text":"하드웨어","textPreview":"하드웨어","textChars":4,"textLines":1,"bbox":[714,305,480,34]}
+{"kind":"textbox","id":"sh/ba9wz61c","slide":5,"text":"CPU 5–8 t/s 기준 수 분; 운영량 증가 시 GPU/vLLM로 교체","textPreview":"CPU 5–8 t/s 기준 수 분; 운영량 증가 시 GPU/vLLM로 교체","textChars":41,"textLines":1,"bbox":[714,353,500,78]}
+{"kind":"textbox","id":"sh/a90f61kr","slide":5,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[42,465,55,30]}
+{"kind":"textbox","id":"sh/h8vyd0jm","slide":5,"text":"출력 통제","textPreview":"출력 통제","textChars":5,"textLines":1,"bbox":[107,465,480,34]}
+{"kind":"textbox","id":"sh/w7mxkv21","slide":5,"text":"thinking 비활성, 낮은 temperature, JSON·앵커 스키마 강제","textPreview":"thinking 비활성, 낮은 temperature, JSON·앵커 스키마 강제","textChars":44,"textLines":1,"bbox":[107,513,500,78]}
+{"kind":"shape","id":"sh/0ne9w3e9","slide":5,"bbox":[626,465,1,122]}
+{"kind":"textbox","id":"sh/1onq58vu","slide":5,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[649,465,55,30]}
+{"kind":"textbox","id":"sh/e1crutwj","slide":5,"text":"재현성","textPreview":"재현성","textChars":3,"textLines":1,"bbox":[714,465,480,34]}
+{"kind":"textbox","id":"sh/f2583yd4","slide":5,"text":"모델·프롬프트·컨텍스트·commit·검색 결과를 run_id로 기록","textPreview":"모델·프롬프트·컨텍스트·commit·검색 결과를 run_id로 기록","textChars":37,"textLines":1,"bbox":[714,513,500,78]}
+{"kind":"textbox","id":"sh/szu9sjed","slide":5,"text":"현재 실측 실패 근거: F-20260712-0001 컨텍스트 유실 · F-20260712-0002 출력 토큰 절단","textPreview":"현재 실측 실패 근거: F-20260712-0001 컨텍스트 유실 · F-20260712-0002 출력 토큰 절단","textChars":63,"textLines":1,"bbox":[42,668,1040,18]}
+{"kind":"notes","id":"nt/a2v94y","slide":5,"text":"로컬 모델에서는 모델 이름만 바꾸는 것으로 품질이 보장되지 않습니다. 특히 Ollama 컨텍스트 길이가 중요합니다. 4096으로 실행했을 때 프롬프트 앞부분이 잘려 도메인 오해석과 형식 오류가 발생했고, 16384로 올린 뒤 프롬프트 유실이 사라졌습니다. 요약과 코드 편집의 모델을 분리하고, Qwen3 thinking을 끄며, 낮은 temperature와 구조화된 출력 형식을 사용합니다. 또한 운영 수준에서는 모델, 프롬프트, 컨텍스트, 코드 commit을 함께 기록해야 같은 결과를 재현할 수 있습니다."}
+{"kind":"slide","id":"sl/htl43u","slide":6,"title":"느리고 작은 모델의 약점은 ‘더 적게 읽고, 더 좁게 쓰고, 더 강하게 검사’해 보완한다","textShapes":12}
+{"kind":"textbox","id":"sh/ixcral0b","slide":6,"text":"느리고 작은 모델의 약점은 ‘더 적게 읽고, 더 좁게 쓰고, 더 강하게 검사’해 보완한다","textPreview":"느리고 작은 모델의 약점은 ‘더 적게 읽고, 더 좁게 쓰고, 더 강하게 검사’해 보완한다","textChars":49,"textLines":1,"bbox":[42,34,1160,76]}
+{"kind":"textbox","id":"sh/5k3q5gzm","slide":6,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1178,660,60,22]}
+{"kind":"shape","id":"sh/4ju9cbi1","slide":6,"bbox":[42,166,365,376]}
+{"kind":"textbox","id":"sh/rm587qhs","slide":6,"text":"더 적게 읽기","textPreview":"더 적게 읽기","textChars":7,"textLines":1,"bbox":[66,200,317,44]}
+{"kind":"textbox","id":"sh/qlcrel07","slide":6,"text":"Java 메서드·SQL 문장·XML 쿼리 단위 청킹\n검증 매핑 → RAG → 용어 사전 → 상수 값 매칭","textPreview":"Java 메서드·SQL 문장·XML 쿼리 단위 청킹 | 검증 매핑 → RAG → 용어 사전 → 상수 값 매칭","textChars":58,"textLines":2,"bbox":[66,280,317,190]}
+{"kind":"textbox","id":"sh/donq90zy","slide":6,"text":"검색 비용↓\n무관 코드↓","textPreview":"검색 비용↓ | 무관 코드↓","textChars":13,"textLines":2,"bbox":[66,468,317,62]}
+{"kind":"shape","id":"sh/cne9gvid","slide":6,"bbox":[443,166,365,376]}
+{"kind":"textbox","id":"sh/7q18vmho","slide":6,"text":"더 좁게 쓰기","textPreview":"더 좁게 쓰기","textChars":7,"textLines":1,"bbox":[467,200,317,44]}
+{"kind":"textbox","id":"sh/6ps72103","slide":6,"text":"전체 파일 재작성 대신 SEARCH/REPLACE\n실패 앵커는 실제 원본 ±25줄로 최대 2회 재시도","textPreview":"전체 파일 재작성 대신 SEARCH/REPLACE | 실패 앵커는 실제 원본 ±25줄로 최대 2회 재시도","textChars":56,"textLines":2,"bbox":[467,280,317,190]}
+{"kind":"textbox","id":"sh/kvmho7y5","slide":6,"text":"출력 토큰↓\n앵커 오류↓","textPreview":"출력 토큰↓ | 앵커 오류↓","textChars":13,"textLines":2,"bbox":[467,468,317,62]}
+{"kind":"shape","id":"sh/lwvihcfq","slide":6,"bbox":[844,166,365,376]}
+{"kind":"textbox","id":"sh/ytkzmxgf","slide":6,"text":"더 강하게 검사","textPreview":"더 강하게 검사","textChars":8,"textLines":1,"bbox":[868,200,317,44]}
+{"kind":"textbox","id":"sh/zud0f2xk","slide":6,"text":"서버가 unified diff 생성\n스크래치 git apply + 골든 테스트 + 사람 승인","textPreview":"서버가 unified diff 생성 | 스크래치 git apply + 골든 테스트 + 사람 승인","textChars":51,"textLines":2,"bbox":[868,280,317,190]}
+{"kind":"textbox","id":"sh/8zm1sryh","slide":6,"text":"환각의 영향↓\n실제 repo 불변","textPreview":"환각의 영향↓ | 실제 repo 불변","textChars":18,"textLines":2,"bbox":[868,468,317,62]}
+{"kind":"textbox","id":"sh/90vilwf2","slide":6,"text":"성능 보완은 모델 튜닝보다 먼저 검색·출력·검증 파이프라인에서 수행","textPreview":"성능 보완은 모델 튜닝보다 먼저 검색·출력·검증 파이프라인에서 수행","textChars":37,"textLines":1,"bbox":[42,668,1040,18]}
+{"kind":"notes","id":"nt/htl43u","slide":6,"text":"속도와 성능 단점은 세 가지로 보완합니다. 첫째, 전체 파일을 읽히지 않고 코드 구조 단위로 청킹해 필요한 후보만 검색합니다. 둘째, 전체 파일을 다시 쓰게 하지 않고 정확한 SEARCH/REPLACE 블록만 만들게 합니다. 앵커가 틀리면 실제 원본 주변만 다시 제공해 재시도합니다. 셋째, 모델이 diff를 직접 확정하지 못하게 하고 서버가 diff를 만든 뒤 스크래치에서 적용과 테스트를 수행합니다. 결과적으로 모델의 토큰 사용과 자유도를 줄이고, 오류가 실제 저장소에 영향을 주지 않게 합니다."}
+{"kind":"slide","id":"sl/ogwqi0","slide":7,"title":"자동 수정 가능성은 변경 유형에 따라 다르게 판단해야 한다","textShapes":13}
+{"kind":"textbox","id":"sh/j21ori90","slide":7,"text":"자동 수정 가능성은 변경 유형에 따라 다르게 판단해야 한다","textPreview":"자동 수정 가능성은 변경 유형에 따라 다르게 판단해야 한다","textChars":32,"textLines":1,"bbox":[42,34,1160,76]}
+{"kind":"textbox","id":"sh/4na50nal","slide":7,"text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1178,660,60,22]}
+{"kind":"textbox","id":"sh/5oj6tsr6","slide":7,"text":"VALUE / RATE / DATE","textPreview":"VALUE / RATE / DATE","textChars":19,"textLines":1,"bbox":[42,162,330,36]}
+{"kind":"textbox","id":"sh/6psn2d8r","slide":7,"text":"초안 자동화에 적합","textPreview":"초안 자동화에 적합","textChars":10,"textLines":1,"bbox":[395,162,280,36]}
+{"kind":"textbox","id":"sh/rqlovi9c","slide":7,"text":"기존 상수·세율·한도·기준일 변경","textPreview":"기존 상수·세율·한도·기준일 변경","textChars":18,"textLines":1,"bbox":[700,162,500,64]}
+{"kind":"shape","id":"sh/srup4nqx","slide":7,"bbox":[42,238,1155,2]}
+{"kind":"textbox","id":"sh/ts36xsri","slide":7,"text":"CONDITION / TABLE","textPreview":"CONDITION / TABLE","textChars":17,"textLines":1,"bbox":[42,307,330,36]}
+{"kind":"textbox","id":"sh/mt8nqtsn","slide":7,"text":"하이브리드 검토","textPreview":"하이브리드 검토","textChars":8,"textLines":1,"bbox":[395,307,280,36]}
+{"kind":"textbox","id":"sh/7uhojy9s","slide":7,"text":"위치 매핑은 강점, 분기 로직은 사람 검토","textPreview":"위치 매핑은 강점, 분기 로직은 사람 검토","textChars":23,"textLines":1,"bbox":[700,307,500,64]}
+{"kind":"shape","id":"sh/fa54zyxc","slide":7,"bbox":[42,383,1155,2]}
+{"kind":"textbox","id":"sh/e9wn6tg7","slide":7,"text":"NEW FIELD / STRUCTURAL","textPreview":"NEW FIELD / STRUCTURAL","textChars":22,"textLines":1,"bbox":[42,452,330,36]}
+{"kind":"textbox","id":"sh/1cnm1ofi","slide":7,"text":"분석 중심","textPreview":"분석 중심","textChars":5,"textLines":1,"bbox":[395,452,280,36]}
+{"kind":"textbox","id":"sh/gbe58jyx","slide":7,"text":"신규 스키마·계산 체계는 자동 반영 금지","textPreview":"신규 스키마·계산 체계는 자동 반영 금지","textChars":22,"textLines":1,"bbox":[700,452,500,64]}
+{"kind":"shape","id":"sh/r654vehg","slide":7,"bbox":[42,528,1155,2]}
+{"kind":"shape","id":"sh/65wn29gv","slide":7,"bbox":[42,596,1155,48]}
+{"kind":"textbox","id":"sh/t8nmxofm","slide":7,"text":"정책 출력: DRAFT_ALLOWED  |  MANUAL_REVIEW_REQUIRED  |  ANALYSIS_ONLY","textPreview":"정책 출력: DRAFT_ALLOWED  |  MANUAL_REVIEW_REQUIRED  |  ANALYSIS_ONLY","textChars":65,"textLines":1,"bbox":[60,607,1115,26]}
+{"kind":"textbox","id":"sh/s7e54jy1","slide":7,"text":"목표 설계: ChangeClassifier → Risk & Automation Policy","textPreview":"목표 설계: ChangeClassifier → Risk & Automation Policy","textChars":50,"textLines":1,"bbox":[42,668,1040,18]}
+{"kind":"notes","id":"nt/ogwqi0","slide":7,"text":"모든 변경에 같은 자동화 수준을 적용하면 안 됩니다. 기존 숫자, 비율, 날짜 변경은 상수 매칭과 골든 테스트가 잘 작동하기 때문에 초안 자동화에 적합합니다. 조건과 표 변경은 위치 매핑은 가능하지만 의미 검토가 필요합니다. 새 필드나 구조 개정은 분석과 영향 범위 제시에 집중하고 코드 초안 생성을 제한합니다. 최종 설계에서는 변경 유형과 신뢰도에 따라 초안 허용, 수동 검토 필수, 분석 전용 정책을 반환합니다."}
+{"kind":"slide","id":"sl/e2opb1","slide":8,"title":"모델 평가는 ‘답변이 좋아 보이는가’가 아니라 단계별 성공률로 본다","textShapes":15}
+{"kind":"textbox","id":"sh/t8jy503a","slide":8,"text":"모델 평가는 ‘답변이 좋아 보이는가’가 아니라 단계별 성공률로 본다","textPreview":"모델 평가는 ‘답변이 좋아 보이는가’가 아니라 단계별 성공률로 본다","textChars":37,"textLines":1,"bbox":[42,34,1160,76]}
+{"kind":"textbox","id":"sh/6l8fu5kz","slide":8,"text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1178,660,60,22]}
+{"kind":"shape","id":"sh/7mhg3alk","slide":8,"bbox":[42,158,365,174]}
+{"kind":"textbox","id":"sh/gbax0f21","slide":8,"text":"탐지","textPreview":"탐지","textChars":2,"textLines":1,"bbox":[64,178,130,30]}
+{"kind":"textbox","id":"sh/1cjy9k3m","slide":8,"text":"변경 탐지 Recall\n중복률 · 누락률","textPreview":"변경 탐지 Recall | 중복률 · 누락률","textChars":22,"textLines":2,"bbox":[64,227,320,76]}
+{"kind":"shape","id":"sh/u9sfy5kv","slide":8,"bbox":[443,158,365,174]}
+{"kind":"textbox","id":"sh/fa1g7alg","slide":8,"text":"검색","textPreview":"검색","textChars":2,"textLines":1,"bbox":[465,178,130,30]}
+{"kind":"textbox","id":"sh/wf6xov2x","slide":8,"text":"Recall@K · MRR\n정답 파일/심볼 순위","textPreview":"Recall@K · MRR | 정답 파일/심볼 순위","textChars":26,"textLines":2,"bbox":[465,227,320,76]}
+{"kind":"shape","id":"sh/xgfexg3i","slide":8,"bbox":[844,158,365,174]}
+{"kind":"textbox","id":"sh/1cfqlgj2","slide":8,"text":"생성","textPreview":"생성","textChars":2,"textLines":1,"bbox":[866,178,130,30]}
+{"kind":"textbox","id":"sh/0r6psbih","slide":8,"text":"형식 준수율\n앵커 성공률 · git apply율","textPreview":"형식 준수율 | 앵커 성공률 · git apply율","textChars":26,"textLines":2,"bbox":[866,227,320,76]}
+{"kind":"shape","id":"sh/zqx8j61w","slide":8,"bbox":[42,370,365,174]}
+{"kind":"textbox","id":"sh/epo7q10b","slide":8,"text":"검증","textPreview":"검증","textChars":2,"textLines":1,"bbox":[64,390,130,30]}
+{"kind":"textbox","id":"sh/9gzqpgjy","slide":8,"text":"골든 테스트 통과율\n회귀 실패 유형","textPreview":"골든 테스트 통과율 | 회귀 실패 유형","textChars":19,"textLines":2,"bbox":[64,439,320,76]}
+{"kind":"shape","id":"sh/ofq9wvid","slide":8,"bbox":[443,370,365,174]}
+{"kind":"textbox","id":"sh/neh8nq1s","slide":8,"text":"사람","textPreview":"사람","textChars":2,"textLines":1,"bbox":[465,390,130,30]}
+{"kind":"textbox","id":"sh/mdorul07","slide":8,"text":"무수정 승인율\n수정 시간 · 거절 사유","textPreview":"무수정 승인율 | 수정 시간 · 거절 사유","textChars":21,"textLines":2,"bbox":[465,439,320,76]}
+{"kind":"shape","id":"sh/xkzqt0za","slide":8,"bbox":[844,370,365,174]}
+{"kind":"textbox","id":"sh/wjq90vip","slide":8,"text":"운영","textPreview":"운영","textChars":2,"textLines":1,"bbox":[866,390,130,30]}
+{"kind":"textbox","id":"sh/gnytwzql","slide":8,"text":"tokens/s · p50/p95\n타임아웃 · 메모리","textPreview":"tokens/s · p50/p95 | 타임아웃 · 메모리","textChars":29,"textLines":2,"bbox":[866,439,320,76]}
+{"kind":"textbox","id":"sh/ho7ap476","slide":8,"text":"핵심 KPI: 위험가중 성공률 = 변경 유형별 성공률 × 업무 영향도 × 사람 검토 비용","textPreview":"핵심 KPI: 위험가중 성공률 = 변경 유형별 성공률 × 업무 영향도 × 사람 검토 비용","textChars":49,"textLines":1,"bbox":[42,668,1040,18]}
+{"kind":"notes","id":"nt/e2opb1","slide":8,"text":"성능은 모델 응답의 인상으로 평가하면 안 됩니다. 탐지에서는 놓치지 않는지, 검색에서는 정답 파일이 top-k 안에 들어오는지, 생성에서는 출력 형식과 앵커가 맞는지, 최종적으로 git apply와 골든 테스트를 통과하는지 봅니다. 그리고 사람이 수정 없이 승인했는지, 수정에 얼마나 시간이 들었는지도 측정합니다. 운영 측면에서는 tokens per second, p50과 p95 지연, 타임아웃, 메모리를 기록합니다. 이 지표들을 변경 유형별로 분리해야 수치 변경의 높은 성공률이 구조 변경의 실패를 가리는 일을 막을 수 있습니다."}
+{"kind":"slide","id":"sl/k8jxc2","slide":9,"title":"과거 개정과 실제 코드 변경을 재생해 모델·검색·프롬프트를 같은 조건에서 비교한다","textShapes":13}
+{"kind":"textbox","id":"sh/uhwvut4r","slide":9,"text":"과거 개정과 실제 코드 변경을 재생해 모델·검색·프롬프트를 같은 조건에서 비교한다","textPreview":"과거 개정과 실제 코드 변경을 재생해 모델·검색·프롬프트를 같은 조건에서 비교한다","textChars":45,"textLines":1,"bbox":[42,34,1160,76]}
+{"kind":"textbox","id":"sh/hkne583i","slide":9,"text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[1178,660,60,22]}
+{"kind":"shape","id":"sh/wjedw32x","slide":9,"bbox":[202,292,38,3]}
+{"kind":"shape","id":"sh/7ulwzylg","slide":9,"bbox":[42,232,160,124]}
+{"kind":"textbox","id":"sh/mtcvqt4v","slide":9,"text":"과거 법령\n전후 원문","textPreview":"과거 법령 | 전후 원문","textChars":11,"textLines":2,"bbox":[52,255,140,76]}
+{"kind":"shape","id":"sh/9g3e1o36","slide":9,"bbox":[400,292,38,3]}
+{"kind":"shape","id":"sh/8fuds3ml","slide":9,"bbox":[240,232,160,124]}
+{"kind":"textbox","id":"sh/zqlwvel4","slide":9,"text":"당시 코드\ncommit 고정","textPreview":"당시 코드 | commit 고정","textChars":15,"textLines":2,"bbox":[250,255,140,76]}
+{"kind":"shape","id":"sh/ypsvm94j","slide":9,"bbox":[598,292,38,3]}
+{"kind":"shape","id":"sh/4budgfu9","slide":9,"bbox":[438,232,160,124]}
+{"kind":"textbox","id":"sh/5cnepkbu","slide":9,"text":"후보 검색\n전략 비교","textPreview":"후보 검색 | 전략 비교","textChars":11,"textLines":2,"bbox":[448,255,140,76]}
+{"kind":"shape","id":"sh/i9cvepc3","slide":9,"bbox":[796,292,38,3]}
+{"kind":"shape","id":"sh/jalwnato","slide":9,"bbox":[636,232,160,124]}
+{"kind":"textbox","id":"sh/w7udcfud","slide":9,"text":"패치 생성\n모델 비교","textPreview":"패치 생성 | 모델 비교","textChars":11,"textLines":2,"bbox":[646,255,140,76]}
+{"kind":"shape","id":"sh/h83ulkby","slide":9,"bbox":[994,292,38,3]}
+{"kind":"shape","id":"sh/u5cva5c7","slide":9,"bbox":[834,232,160,124]}
+{"kind":"textbox","id":"sh/v6lcjats","slide":9,"text":"스크래치\n테스트","textPreview":"스크래치 | 테스트","textChars":8,"textLines":2,"bbox":[844,255,140,76]}
+{"kind":"shape","id":"sh/g3ydozuh","slide":9,"bbox":[1032,232,160,124]}
+{"kind":"textbox","id":"sh/147ex4b2","slide":9,"text":"실제 변경과\n차이 측정","textPreview":"실제 변경과 | 차이 측정","textChars":12,"textLines":2,"bbox":[1042,255,140,76]}
+{"kind":"textbox","id":"sh/p8jmlkzu","slide":9,"text":"고정 조건","textPreview":"고정 조건","textChars":5,"textLines":1,"bbox":[42,421,180,32]}
+{"kind":"textbox","id":"sh/o7a5sfy9","slide":9,"text":"법령 입력 · 코드 commit · 모델/양자화 · 컨텍스트 · temperature · top-k · 프롬프트 버전","textPreview":"법령 입력 · 코드 commit · 모델/양자화 · 컨텍스트 · temperature · top-k · 프롬프트 버전","textChars":65,"textLines":1,"bbox":[220,418,970,46]}
+{"kind":"textbox","id":"sh/3m14jah4","slide":9,"text":"비교 실험","textPreview":"비교 실험","textChars":5,"textLines":1,"bbox":[42,493,180,32]}
+{"kind":"textbox","id":"sh/2ls3q5gj","slide":9,"text":"RAG only vs +사전 vs +상수 vs +검증 매핑  /  8B vs 14B  /  4K vs 16K context","textPreview":"RAG only vs +사전 vs +상수 vs +검증 매핑  /  8B vs 14B  /  4K vs 16K context","textChars":68,"textLines":1,"bbox":[220,490,970,54]}
+{"kind":"textbox","id":"sh/1kzmh0zy","slide":9,"text":"산출물: run_id · 입력/출력 hash · 검색 근거 · patch · golden.log · 사람 판정","textPreview":"산출물: run_id · 입력/출력 hash · 검색 근거 · patch · golden.log · 사람 판정","textChars":61,"textLines":1,"bbox":[42,668,1040,18]}
+{"kind":"notes","id":"nt/k8jxc2","slide":9,"text":"평가 방법은 historical replay입니다. 과거 법령 개정 시점의 원문과 당시 코드 commit을 고정한 뒤, 검색 전략과 모델을 바꿔가며 같은 문제를 다시 풉니다. RAG 단독, 용어 사전 추가, 상수 매칭 추가, 검증 매핑 추가의 효과를 분리해 측정합니다. 8B와 14B, 4K와 16K 컨텍스트도 같은 데이터셋에서 비교합니다. 각 실행은 run_id로 묶고 입력과 출력 hash, 검색 근거, patch, 테스트 로그, 사람 판정을 저장해 재현 가능하게 만듭니다."}
+{"kind":"slide","id":"sl/g6y9na","slide":10,"title":"데이터가 쌓일수록 모델 자체보다 ‘정답 경로’가 먼저 좋아진다","textShapes":16}
+{"kind":"textbox","id":"sh/0v2507qp","slide":10,"text":"데이터가 쌓일수록 모델 자체보다 ‘정답 경로’가 먼저 좋아진다","textPreview":"데이터가 쌓일수록 모델 자체보다 ‘정답 경로’가 먼저 좋아진다","textChars":34,"textLines":1,"bbox":[42,34,1160,76]}
+{"kind":"textbox","id":"sh/zut4r2p4","slide":10,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1178,660,60,22]}
+{"kind":"shape","id":"sh/ytknyx8j","slide":10,"bbox":[307,332,34,4]}
+{"kind":"textbox","id":"sh/dsbmpsry","slide":10,"text":"초기","textPreview":"초기","textChars":2,"textLines":1,"bbox":[42,160,260,34]}
+{"kind":"shape","id":"sh/cr25wnqd","slide":10,"bbox":[42,210,260,250]}
+{"kind":"textbox","id":"sh/b6t4n29s","slide":10,"text":"RAG·사전·상수로\n후보를 추정","textPreview":"RAG·사전·상수로 | 후보를 추정","textChars":17,"textLines":2,"bbox":[62,242,220,78]}
+{"kind":"textbox","id":"sh/q50nux8n","slide":10,"text":"검색 변동 큼\n사람 검증 부담 큼","textPreview":"검색 변동 큼 | 사람 검증 부담 큼","textChars":18,"textLines":2,"bbox":[62,348,220,78]}
+{"kind":"shape","id":"sh/p4rmlsr2","slide":10,"bbox":[606,332,34,4]}
+{"kind":"textbox","id":"sh/o3i5snqh","slide":10,"text":"1개 시즌","textPreview":"1개 시즌","textChars":5,"textLines":1,"bbox":[341,160,260,34]}
+{"kind":"shape","id":"sh/yxwji5cr","slide":10,"bbox":[341,210,260,250]}
+{"kind":"textbox","id":"sh/ji5kratc","slide":10,"text":"조문↔파일↔심볼\n검증 매핑 축적","textPreview":"조문↔파일↔심볼 | 검증 매핑 축적","textChars":17,"textLines":2,"bbox":[361,242,220,78]}
+{"kind":"textbox","id":"sh/kje1kfux","slide":10,"text":"같은 조문은\n검증 위치로 직행","textPreview":"같은 조문은 | 검증 위치로 직행","textChars":16,"textLines":2,"bbox":[361,348,220,78]}
+{"kind":"shape","id":"sh/lkn2tkbi","slide":10,"bbox":[905,332,34,4]}
+{"kind":"textbox","id":"sh/atcje5cv","slide":10,"text":"복수 시즌","textPreview":"복수 시즌","textChars":5,"textLines":1,"bbox":[640,160,260,34]}
+{"kind":"shape","id":"sh/bu5knatg","slide":10,"bbox":[640,210,260,250]}
+{"kind":"textbox","id":"sh/wve1gfu1","slide":10,"text":"승인·거절·골든 결과\n변경 유형별 데이터","textPreview":"승인·거절·골든 결과 | 변경 유형별 데이터","textChars":22,"textLines":2,"bbox":[660,242,220,78]}
+{"kind":"textbox","id":"sh/xwn2pkb6","slide":10,"text":"정책 threshold와\n후보 랭킹 개선","textPreview":"정책 threshold와 | 후보 랭킹 개선","textChars":22,"textLines":2,"bbox":[660,348,220,78]}
+{"kind":"textbox","id":"sh/mpcjalcj","slide":10,"text":"충분한 데이터","textPreview":"충분한 데이터","textChars":7,"textLines":1,"bbox":[939,160,260,34]}
+{"kind":"shape","id":"sh/nqlkjqt4","slide":10,"bbox":[939,210,260,250]}
+{"kind":"textbox","id":"sh/ru1grm9w","slide":10,"text":"고품질 편집쌍과\n실패 taxonomy","textPreview":"고품질 편집쌍과 | 실패 taxonomy","textChars":20,"textLines":2,"bbox":[959,242,220,78]}
+{"kind":"textbox","id":"sh/qt8zi1sb","slide":10,"text":"reranker·프롬프트·\n선택적 튜닝 검토","textPreview":"reranker·프롬프트· | 선택적 튜닝 검토","textChars":24,"textLines":2,"bbox":[959,348,220,78]}
+{"kind":"shape","id":"sh/dwjytwr2","slide":10,"bbox":[42,514,1154,72]}
+{"kind":"textbox","id":"sh/cvahkrah","slide":10,"text":"개선 기대: 검색 정확도↑ · 생성 컨텍스트↓ · 지연시간↓ · 사람 수정시간↓","textPreview":"개선 기대: 검색 정확도↑ · 생성 컨텍스트↓ · 지연시간↓ · 사람 수정시간↓","textChars":44,"textLines":1,"bbox":[62,535,1114,34]}
+{"kind":"textbox","id":"sh/zy10v698","slide":10,"text":"주의: 향상 폭은 데이터 품질·반복 조문 비율에 좌우됨. 현재 단계에서 수치 보장 불가","textPreview":"주의: 향상 폭은 데이터 품질·반복 조문 비율에 좌우됨. 현재 단계에서 수치 보장 불가","textChars":48,"textLines":1,"bbox":[42,668,1040,18]}
+{"kind":"notes","id":"nt/g6y9na","slide":10,"text":"데이터가 쌓이면 가장 먼저 좋아지는 것은 모델 파라미터가 아니라 검색 경로입니다. 첫 시즌에는 RAG, 용어 사전, 상수 매칭으로 후보를 추정하고 담당자가 맞는 위치를 검증합니다. 다음 시즌 같은 조문이 바뀌면 검증된 파일과 심볼로 바로 갈 수 있어 검색 정확도와 속도가 동시에 개선됩니다. 승인, 거절, 골든 테스트 결과가 쌓이면 변경 유형별 threshold와 후보 랭킹을 조정할 수 있습니다. 충분한 고품질 편집쌍이 확보된 뒤에야 reranker나 선택적 fine-tuning을 검토합니다. 현재는 데이터가 없기 때문에 몇 퍼센트 좋아진다고 보장할 수 없으며, historical replay로 학습 곡선을 측정해야 합니다."}
+{"kind":"slide","id":"sl/htqpgq","slide":11,"title":"완성 기준은 더 큰 모델이 아니라 ‘측정·재현·승인 가능한 변경관리’다","textShapes":14}
+{"kind":"textbox","id":"sh/t8ja94zi","slide":11,"text":"완성 기준은 더 큰 모델이 아니라 ‘측정·재현·승인 가능한 변경관리’다","textPreview":"완성 기준은 더 큰 모델이 아니라 ‘측정·재현·승인 가능한 변경관리’다","textChars":39,"textLines":1,"bbox":[42,34,1160,76]}
+{"kind":"textbox","id":"sh/658re90r","slide":11,"text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[1178,660,60,22]}
+{"kind":"textbox","id":"sh/76hs7uhc","slide":11,"text":"01 기반 고정","textPreview":"01 기반 고정","textChars":8,"textLines":1,"bbox":[42,167,260,34]}
+{"kind":"shape","id":"sh/gva9kjit","slide":11,"bbox":[42,218,260,156]}
+{"kind":"textbox","id":"sh/hwjadoze","slide":11,"text":"변경 정규화·분류\nrun_id·감사 로그","textPreview":"변경 정규화·분류 | run_id·감사 로그","textChars":22,"textLines":2,"bbox":[64,258,216,78]}
+{"kind":"shape","id":"sh/utsri903","slide":11,"bbox":[302,294,39,3]}
+{"kind":"textbox","id":"sh/vu1sbeho","slide":11,"text":"02 평가 구축","textPreview":"02 평가 구축","textChars":8,"textLines":1,"bbox":[341,167,260,34]}
+{"kind":"shape","id":"sh/wz698fip","slide":11,"bbox":[341,218,260,156]}
+{"kind":"textbox","id":"sh/x0zq1kza","slide":11,"text":"historical replay\n검색·패치 지표","textPreview":"historical replay | 검색·패치 지표","textChars":26,"textLines":2,"bbox":[363,258,216,78]}
+{"kind":"shape","id":"sh/5sfm1876","slide":11,"bbox":[601,294,39,3]}
+{"kind":"textbox","id":"sh/kr6l83ql","slide":11,"text":"03 정책 적용","textPreview":"03 정책 적용","textChars":8,"textLines":1,"bbox":[640,167,260,34]}
+{"kind":"shape","id":"sh/jqd4zyp0","slide":11,"bbox":[640,218,260,156]}
+{"kind":"textbox","id":"sh/ip436t8f","slide":11,"text":"변경 유형별\n자동화 허용 범위","textPreview":"변경 유형별 | 자동화 허용 범위","textChars":16,"textLines":2,"bbox":[662,258,216,78]}
+{"kind":"shape","id":"sh/tgfm5s72","slide":11,"bbox":[900,294,39,3]}
+{"kind":"textbox","id":"sh/sf6lcnqh","slide":11,"text":"04 학습 루프","textPreview":"04 학습 루프","textChars":8,"textLines":1,"bbox":[939,167,260,34]}
+{"kind":"shape","id":"sh/7ux43ipw","slide":11,"bbox":[939,218,260,156]}
+{"kind":"textbox","id":"sh/6to3ad8b","slide":11,"text":"검증 매핑·승인 결과\n랭킹과 프롬프트 개선","textPreview":"검증 매핑·승인 결과 | 랭킹과 프롬프트 개선","textChars":23,"textLines":2,"bbox":[961,258,216,78]}
+{"kind":"textbox","id":"sh/hkzm9s7e","slide":11,"text":"로컬 AI의 역할","textPreview":"로컬 AI의 역할","textChars":9,"textLines":1,"bbox":[42,445,300,34]}
+{"kind":"textbox","id":"sh/gjqlgnqt","slide":11,"text":"법령을 이해하고, 근거가 있는 코드 위치에, 검토 가능한 수정안을 제시한다","textPreview":"법령을 이해하고, 근거가 있는 코드 위치에, 검토 가능한 수정안을 제시한다","textChars":41,"textLines":1,"bbox":[42,492,1120,54]}
+{"kind":"textbox","id":"sh/0zyxsv21","slide":11,"text":"실제 반영 권한은 끝까지 시스템과 사람에게 남긴다","textPreview":"실제 반영 권한은 끝까지 시스템과 사람에게 남긴다","textChars":27,"textLines":1,"bbox":[42,566,1120,42]}
+{"kind":"textbox","id":"sh/10re10jm","slide":11,"text":"참고 문서: README.md · docs/architecture/ADR.md · ARCHITECTURE_V2.md · specifications/*","textPreview":"참고 문서: README.md · docs/architecture/ADR.md · ARCHITECTURE_V2.md · specifications/*","textChars":83,"textLines":1,"bbox":[42,668,1040,18]}
+{"kind":"notes","id":"nt/htqpgq","slide":11,"text":"정리하면, 이 프로젝트의 완성 기준은 더 큰 모델을 붙이는 것이 아닙니다. 모든 실행을 측정할 수 있고, 같은 조건에서 재현할 수 있으며, 변경 유형에 따라 자동화 범위를 통제하고, 사람이 근거를 보고 승인할 수 있어야 합니다. 로컬 AI는 법령을 이해하고 관련 코드를 좁혀 검토 가능한 수정안을 제시합니다. 실제 반영 권한은 끝까지 시스템과 사람에게 남깁니다. 이것이 보안이 중요한 기업 환경에서 로컬 모델을 실용적으로 사용하는 방식입니다."}
