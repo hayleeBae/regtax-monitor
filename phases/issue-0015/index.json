@@ -7,7 +7,8 @@
       "name": "domain-decisions",
       "status": "completed",
       "started_at": "2026-07-31T23:41:57+0900",
-      "summary": "app/domain/mappings/{__init__,decisions}.py 신규 — MappingDecisionType/VerifiedReason/RejectedReason/StaleReason enum, frozen MappingDecisionRecord(mapping_id 양수·decision 타입 검증), allowed_reason_codes(REVOKED는 other만), resolve_state(created_at 시간순 stable fold: 빈 이력 None, VERIFIED→STALE→VERIFIED=VERIFIED, REVOKED는 REVOKED 반환하고 후보 미삭제), check_stale(file_missing/symbol_missing/modified_but_valid/None) export. tests/test_mapping_decisions.py 18케이스 추가, verify.sh full 224 passed."
+      "summary": "app/domain/mappings/{__init__,decisions}.py 신규 — MappingDecisionType/VerifiedReason/RejectedReason/StaleReason enum, frozen MappingDecisionRecord(mapping_id 양수·decision 타입 검증), allowed_reason_codes(REVOKED는 other만), resolve_state(created_at 시간순 stable fold: 빈 이력 None, VERIFIED→STALE→VERIFIED=VERIFIED, REVOKED는 REVOKED 반환하고 후보 미삭제), check_stale(file_missing/symbol_missing/modified_but_valid/None) export. tests/test_mapping_decisions.py 18케이스 추가, verify.sh full 224 passed.",
+      "completed_at": "2026-07-31T23:44:25+0900"
     },
     {
       "step": 1,
@@ -25,5 +26,6 @@
       "status": "pending"
     }
   ],
-  "created_at": "2026-07-31T23:41:57+0900"
+  "created_at": "2026-07-31T23:41:57+0900",
+  "total_cost_usd": 0.8827
 }
