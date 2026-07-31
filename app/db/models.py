@@ -57,6 +57,28 @@ class Mapping(Base):
     verified = Column(Boolean, default=False)    # 사람 검증 여부
 
 
+class MappingDecision(Base):
+    """매핑 검증 결정 (append-only — ADR-008).
+
+    `Mapping.verified`는 최신 상태 compatibility cache로 남기고, 실제 이력은
+    이 테이블에 쌓는다. decision/reason_code 값은
+    `app.domain.mappings.decisions`의 enum 값과 일치한다.
+    """
+
+    __tablename__ = "mapping_decision"
+
+    id = Column(Integer, primary_key=True)
+    mapping_id = Column(Integer, ForeignKey("mapping.id"), nullable=False, index=True)
+    decision = Column(String, nullable=False)          # MappingDecisionType.value
+    reason_code = Column(String, nullable=True)
+    reason_text = Column(Text, nullable=True)
+    repository_commit = Column(String, nullable=True)  # 유효성 스냅샷 (best-effort)
+    path_hash = Column(String, nullable=True)
+    symbol_hash = Column(String, nullable=True)
+    actor = Column(String, nullable=False, default="owner")
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
 class Review(Base):
     """담당자 검토"""
 

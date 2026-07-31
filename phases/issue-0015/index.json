@@ -13,7 +13,10 @@
     {
       "step": 1,
       "name": "db-model-migration",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-07-31T23:44:25+0900",
+      "summary": "app/db/models.py에 append-only MappingDecision 테이블 추가(mapping_id FK+index, decision/reason_code/reason_text, repository_commit/path_hash/symbol_hash nullable 스냅샷, actor 기본 owner, created_at). Mapping.verified 컬럼은 compatibility cache로 그대로 보존. database._migrate()는 기존 ADD COLUMN 보정 후 _backfill_legacy_mapping_decisions() 호출 — verified=1이면서 decision 이력이 없는 매핑에만 INSERT...SELECT WHERE NOT EXISTS로 legacy 이벤트(verified/other/system/'legacy verified backfill') 1건 삽입, mapping 또는 mapping_decision 테이블 없으면 skip. tests/test_mapping_decision_migration.py 4케이스(verified만 backfill·3회 반복 idempotency·기존 decision 보유 시 skip·Mapping 행 보존), verify.sh full 228 passed.",
+      "completed_at": "2026-07-31T23:52:00+0900"
     },
     {
       "step": 2,
