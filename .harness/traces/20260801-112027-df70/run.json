@@ -1,7 +1,7 @@
 {
   "run_id": "20260801-112027-df70",
   "started_at": "2026-08-01T11:20:27+0900",
-  "finished_at": null,
+  "finished_at": "2026-08-01T11:26:39+0900",
   "task": "regtax-monitor / issue-0015",
   "stage_entry": "implement",
   "harness_version": "1.1.0",
@@ -9,8 +9,10 @@
     "branch": "feat-issue-0015",
     "base_commit": "6662bf9"
   },
-  "outcome": null,
+  "outcome": "success",
   "failure_refs": [],
   "phase_dir": "issue-0015",
-  "total_steps": 4
+  "total_steps": 4,
+  "final_commit": "f4a5605",
+  "total_cost_usd": 4.153
 }
