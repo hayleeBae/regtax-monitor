@@ -24,7 +24,7 @@
       "status": "completed",
       "started_at": "2026-08-01T11:20:27+0900",
       "summary": "app/mappings/{__init__,repository.py} 신규 — SqlAlchemyMappingDecisionRepository(session): append(record)→행 추가 후 새 id 반환(created_at None이면 utcnow), list_for_mapping(created_at, id 순 정렬 = resolve_state 시간순 규칙과 일치), current_state=list_for_mapping+resolve_state 재사용(상태 로직 미복제), update(*args,**kwargs)는 NotImplementedError('mapping decisions are append-only')로 append-only 강제 — 수정/삭제 메서드 없음. datetime은 audit repository와 동일하게 DB naive UTC 저장/record aware UTC 반환(_naive_utc/_aware_utc). tests/test_mapping_decision_repository.py 6케이스(시간순 이력·created_at 자동 채움·VERIFIED→REVOKED·STALE 후 재검증·mapping_id 격리·update NotImplementedError), verify.sh full 234 passed.",
-      "completed_at": "2026-08-01T11:22:17+0900"
+      "completed_at": "2026-08-01T11:22:37+0900"
     },
     {
       "step": 3,
@@ -33,5 +33,5 @@
     }
   ],
   "created_at": "2026-07-31T23:41:57+0900",
-  "total_cost_usd": 1.9017
+  "total_cost_usd": 2.6854
 }
