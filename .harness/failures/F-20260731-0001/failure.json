@@ -22,10 +22,10 @@
     ]
   },
   "resolution": {
-    "action": null,
-    "description": "한도 리셋(2am KST) 후 step 2를 pending으로 되돌려 재실행 예정. 재실행 성공 시 status=resolved로 갱신.",
-    "commit": null
+    "action": "retry_after_reset",
+    "description": "2am KST 세션 한도 리셋 후 step 2를 pending으로 되돌려 executor 재실행. Step 2·3 정상 완료, verify.sh full 246 passed. 코드 변경 없이 재실행만으로 해소(외부 한도 요인 확인).",
+    "commit": "6732d9c"
   },
-  "status": "open",
+  "status": "resolved",
   "recurrence_of": null
 }
