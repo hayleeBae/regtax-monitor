@@ -23,9 +23,13 @@ app/
 │   ├── docs_index.py    #   참고 문서(해설서) 별도 컬렉션(tax_docs) 인덱싱
 │   ├── term_dict.py     #   암호 컬럼코드↔한글명 사전 (주석에서 자동 수확)
 │   └── const_inventory.py #  법령 수치 리터럴 인벤토리 (값 매칭)
+├── domain/mappings/    # 매핑 검증 결정 순수 도메인 (Issue #0015)
+│   └── decisions.py     #   MappingDecisionType/reason enum, MappingDecisionRecord, resolve_state(), check_stale()
+├── mappings/            # 매핑 결정 영속화
+│   └── repository.py    #   mapping_decision append+list only (수정 미제공, audit 패턴)
 └── db/
-    ├── database.py      #   SQLAlchemy 엔진/세션 (SQLite regtax.db)
-    └── models.py        #   LawChange / Mapping / Proposal 등
+    ├── database.py      #   SQLAlchemy 엔진/세션 (SQLite regtax.db) + init_db()/_migrate() (legacy verified backfill)
+    └── models.py        #   LawChange / Mapping / Proposal / ExecutionRun / AuditEvent / MappingDecision 등
 
 config.py                # pydantic-settings Settings (.env) — 모든 설정의 단일 진입점
 domains.json             # 수집 도메인 레지스트리 (tax/hr)
@@ -42,6 +46,8 @@ scripts/                 # 하네스 (verify.sh, execute.py, trace.py + 자체 �
 - 대상 코드베이스 파일 접근은 반드시 `CodebaseAdapter`를 통해서만.
 - 백엔드 공통 로직(프롬프트·파싱·diff 변환)은 `llm/common.py`에만 — 클라이언트별 복제 금지.
 - 설정 접근은 `config.settings` 단일 인스턴스로만.
+- `app/domain/` 은 순수 계약 — FastAPI, SQLAlchemy, 외부 LLM SDK를 import하지 않는다. 영속화는 `app/audit/`·`app/mappings/` repository가 담당한다.
+- 검증 이력 등 append-only 저장소는 수정/삭제 API를 제공하지 않는다(repository에서 강제).
 
 ## 데이터 흐름
 ```

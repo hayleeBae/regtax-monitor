@@ -35,6 +35,11 @@
 **이유**: 환각의 구조적 차단 + 계산 결과가 바뀌는 개정은 기대값 갱신까지 patch에 포함되도록 강제.
 **트레이드오프**: 골든 케이스 유지 비용. `GOLDEN_TEST_CMD` 미설정 시 검증 생략.
 
+### ADR-008: 매핑 검증을 append-only 결정 이력으로 (Issue #0015)
+**결정**: 단일 `Mapping.verified` boolean을 유지하되, 실제 검증·거절·stale·revoke는 `mapping_decision` append-only 이벤트로 기록한다. `Mapping.verified`는 최신 상태를 담는 compatibility cache로 남기고 이벤트 insert와 같은 트랜잭션에서 갱신한다. 상태는 이벤트를 시간순으로 접는 순수 함수(`resolve_state`)로 계산한다(`VERIFIED→STALE→VERIFIED`=VERIFIED, REVOKED는 직전 verified 취소하되 후보 삭제 안 함). #0013 audit(records/repository) 3층 패턴을 그대로 답습한다.
+**이유**: boolean 하나로는 "누가·왜·어느 commit에서" 검증했는지 추적이 안 되고, #0016 리랭킹(검증 boost·거절 penalty·stale 무효화)의 근거를 만들 수 없다. 기존 `apply`/`get_mappings`가 `verified` 컬럼에 의존하므로 컬럼을 삭제하지 않고 cache로 보존해 회귀를 막는다.
+**트레이드오프**: 검증 상태가 컬럼과 이벤트 두 곳에 존재(cache 동기화 책임). 인증 레이어가 없어 `actor`는 자기신고값(단일 담당자 도구로 수용, 기본 'owner'). 유효성 스냅샷(commit/path_hash/symbol_hash)은 #0015에서 nullable best-effort — 코드 본문은 저장하지 않고 해시만.
+
 ### ADR-007: 도메인 레지스트리(domains.json)로 수집 확장
 **결정**: 수집 대상 법령·고시 검색어를 코드가 아니라 `domains.json`(tax/hr)에서 관리. 파일 없으면 기존 세법 5종 폴백.
 **이유**: 연말정산(세법)을 넘어 인사 법령 전반으로 확장 + 도메인별 담당자 라우팅 기반. 법률만 수집하면 올해 개정(시행령·시행규칙 10건, 법률 0건)을 전부 놓쳤을 상황 — 3계층 수집이 필수임을 실검증.

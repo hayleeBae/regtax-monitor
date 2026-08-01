@@ -14,7 +14,14 @@ from app.collector.law_api import ApiNotGrantedError, LawApiClient
 from app.collector.registry import load_domains
 from app.db.database import init_db, get_session
 from app.db.models import LawChange, Mapping, PatchProposal, Review, SyncState
+from app.domain.mappings.decisions import (
+    MappingDecisionRecord,
+    MappingDecisionType,
+    allowed_reason_codes,
+    resolve_state,
+)
 from app.embedding.indexer import CodeIndexer
+from app.mappings.repository import SqlAlchemyMappingDecisionRepository
 from app.llm import get_llm_client
 from app.audit.sanitizer import stable_settings_hash
 from config import settings
@@ -824,23 +831,169 @@ def get_mappings(
     ]
 
 
+def _load_mapping(db: Session, mapping_id: int) -> Mapping:
+    m = db.get(Mapping, mapping_id)
+    if m is None:
+        raise HTTPException(status_code=404, detail="매핑을 찾을 수 없습니다.")
+    return m
+
+
+def _validate_reason_code(decision, reason_code: str | None) -> None:
+    """reason_code allowlist 검증 (스펙 §3). None은 허용(선택 필드)."""
+    if reason_code is None:
+        return
+    allowed = allowed_reason_codes(decision)
+    if reason_code not in allowed:
+        raise HTTPException(
+            status_code=422,
+            detail=f"'{decision.value}'에 허용되지 않는 reason_code: {reason_code}",
+        )
+
+
+def _record_mapping_decision(
+    db: Session,
+    mapping: Mapping,
+    decision,
+    *,
+    reason_code: str | None = None,
+    reason_text: str | None = None,
+    actor: str | None = None,
+):
+    """결정 이벤트 append + `Mapping.verified` compat cache 갱신 (ADR-008).
+
+    두 쓰기가 같은 트랜잭션이어야 cache 불일치(apply 오작동)를 막을 수 있으므로,
+    commit 하는 쪽인 repository.append() 앞에서 cache 값을 session 에 올려둔다 —
+    같은 commit 으로 이벤트 insert 와 cache update 가 함께 반영된다.
+    유효성 스냅샷(commit/hash)은 #0015 에서 nullable best-effort 다.
+    """
+    record = MappingDecisionRecord(
+        mapping_id=mapping.id,
+        decision=decision,
+        reason_code=reason_code,
+        reason_text=reason_text,
+        actor=actor or "owner",
+        created_at=datetime.now(timezone.utc),
+    )
+    repo = SqlAlchemyMappingDecisionRepository(db)
+    state = resolve_state(repo.list_for_mapping(mapping.id) + (record,))
+    mapping.verified = state is MappingDecisionType.VERIFIED
+    decision_id = repo.append(record)
+    return decision_id, state
+
+
+def _decision_payload(record) -> dict:
+    """결정 1건 직렬화 — 코드 본문은 저장하지도, 반환하지도 않는다(스펙 §7)."""
+    return {
+        "decision": record.decision.value,
+        "reason_code": record.reason_code,
+        "reason_text": record.reason_text,
+        "repository_commit": record.repository_commit,
+        "path_hash": record.path_hash,
+        "symbol_hash": record.symbol_hash,
+        "actor": record.actor,
+        "created_at": record.created_at.isoformat() if record.created_at else None,
+    }
+
+
 @app.patch("/mappings/{mapping_id}/verify")
 def verify_mapping(
     mapping_id: int,
     verified: bool = True,
+    actor: str | None = None,
+    reason_code: str | None = None,
     db: Session = Depends(get_session),
 ) -> dict:
     """
     담당자가 매핑 정확성을 검증한다.
-    verified=true: 이 코드 위치가 해당 조문과 관련 있음을 확인.
-    verified=false: 잘못된 매핑으로 표시 (이후 apply에서 제외됨).
+    verified=true: 이 코드 위치가 해당 조문과 관련 있음을 확인 (VERIFIED 이벤트).
+    verified=false: 직전 검증을 되돌린다 (REVOKED 이벤트, 이후 apply에서 제외됨).
+    거절 사유를 남기려면 POST /mappings/{id}/decisions 로 REJECTED를 기록한다.
     """
-    m = db.get(Mapping, mapping_id)
-    if m is None:
-        raise HTTPException(status_code=404, detail="매핑을 찾을 수 없습니다.")
-    m.verified = verified
-    db.commit()
+    m = _load_mapping(db, mapping_id)
+    decision = (
+        MappingDecisionType.VERIFIED if verified else MappingDecisionType.REVOKED
+    )
+    _validate_reason_code(decision, reason_code)
+    _record_mapping_decision(db, m, decision, reason_code=reason_code, actor=actor)
     return {"mapping_id": mapping_id, "path": m.path, "symbol": m.symbol, "verified": m.verified}
+
+
+class MappingDecisionBody(BaseModel):
+    decision: str
+    reason_code: str | None = None
+    reason_text: str | None = None
+    actor: str | None = None
+
+
+@app.post("/mappings/{mapping_id}/decisions", status_code=201)
+def create_mapping_decision(
+    mapping_id: int,
+    body: MappingDecisionBody,
+    db: Session = Depends(get_session),
+) -> dict:
+    """매핑 결정을 이력에 추가한다 (append-only — 수정·삭제 없음, 스펙 §6)."""
+    m = _load_mapping(db, mapping_id)
+    try:
+        decision = MappingDecisionType(body.decision)
+    except ValueError:
+        allowed = ", ".join(d.value for d in MappingDecisionType)
+        raise HTTPException(
+            status_code=422, detail=f"알 수 없는 decision: {body.decision} (허용: {allowed})"
+        )
+    _validate_reason_code(decision, body.reason_code)
+    decision_id, state = _record_mapping_decision(
+        db,
+        m,
+        decision,
+        reason_code=body.reason_code,
+        reason_text=body.reason_text,
+        actor=body.actor,
+    )
+    return {
+        "mapping_id": mapping_id,
+        "decision_id": decision_id,
+        "decision": decision.value,
+        "reason_code": body.reason_code,
+        "state": state.value if state else None,
+        "verified": m.verified,
+    }
+
+
+@app.get("/mappings/{mapping_id}/decisions")
+def get_mapping_decisions(
+    mapping_id: int,
+    db: Session = Depends(get_session),
+) -> list[dict]:
+    """매핑 결정 이력을 시간순으로 반환한다."""
+    _load_mapping(db, mapping_id)
+    repo = SqlAlchemyMappingDecisionRepository(db)
+    return [_decision_payload(r) for r in repo.list_for_mapping(mapping_id)]
+
+
+@app.get("/mappings/{mapping_id}/state")
+def get_mapping_state(
+    mapping_id: int,
+    db: Session = Depends(get_session),
+) -> dict:
+    """현재 상태 + 마지막 이유 + 검증 당시 commit (스펙 §12 UI 표시용)."""
+    m = _load_mapping(db, mapping_id)
+    repo = SqlAlchemyMappingDecisionRepository(db)
+    history = repo.list_for_mapping(mapping_id)
+    state = resolve_state(history)
+    latest = history[-1] if history else None
+    return {
+        "mapping_id": mapping_id,
+        "path": m.path,
+        "symbol": m.symbol,
+        "state": state.value if state else None,
+        "verified": m.verified,
+        "reason_code": latest.reason_code if latest else None,
+        "reason_text": latest.reason_text if latest else None,
+        "repository_commit": latest.repository_commit if latest else None,
+        "actor": latest.actor if latest else None,
+        "decided_at": latest.created_at.isoformat() if latest and latest.created_at else None,
+        "decision_count": len(history),
+    }
 
 
 @app.post("/changes/{change_id}/apply")

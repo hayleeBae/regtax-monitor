@@ -1,0 +1,31 @@
+{
+  "failure_id": "F-20260731-0001",
+  "ts": "2026-07-31T23:46:42+0900",
+  "run_id": "20260731-234157-b372",
+  "stage": "implement",
+  "step": 2,
+  "trace_refs": [],
+  "symptom": {
+    "category": "env_error",
+    "signal": "step2-output.json: api_error_status=429, result='You've hit your session limit · resets 2am (Asia/Seoul)'. claude 서브프로세스가 세션 한도로 0-turn 종료 → executor는 'Step did not update status'로 표면화. 코드 결함 아님(Step 2 산출물 미생성).",
+    "artifact": "artifacts/escalation-detail.md"
+  },
+  "verified_cause": {
+    "cause_code": "flaky_external",
+    "description": "Anthropic 계정 세션 사용량 한도(429)에 걸려 step 2용 claude 세션이 실행되지 못함. 입력/출력 토큰 0, num_turns 1로 즉시 종료. 코드·검증 게이트와 무관한 외부 계정 한도. 2am(KST) 리셋 후 재개 가능.",
+    "verified_by": "manual: phases/issue-0015/step2-output.json api_error_status=429 확인",
+    "causal_chain": [
+      "누적 사용량이 세션 한도 도달",
+      "executor가 step2용 claude 호출 → 429 즉시 반환(0 turn)",
+      "status 미갱신 → executor가 3회 재시도 모두 429 반복",
+      "3회 실패로 error 처리 + ESCALATION 작성"
+    ]
+  },
+  "resolution": {
+    "action": "retry_after_reset",
+    "description": "2am KST 세션 한도 리셋 후 step 2를 pending으로 되돌려 executor 재실행. Step 2·3 정상 완료, verify.sh full 246 passed. 코드 변경 없이 재실행만으로 해소(외부 한도 요인 확인).",
+    "commit": "6732d9c"
+  },
+  "status": "resolved",
+  "recurrence_of": null
+}

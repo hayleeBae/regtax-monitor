@@ -1,0 +1,125 @@
+{"kind":"deck","id":"pr/b5v3ls","name":"Deck"}
+{"kind":"layout","layoutId":"e0ac07d2-ebd1-496c-96e8-34a2b8cf5ba6","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"1e9a609a-cbaf-41f5-b504-7616d579c058","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/p8vn58","slide":1,"title":"TEAM SHARE","textShapes":4}
+{"kind":"textbox","id":"sh/94zyton6","slide":1,"text":"TEAM SHARE","textPreview":"TEAM SHARE","textChars":10,"textLines":1,"bbox":[42,42,300,30]}
+{"kind":"textbox","id":"sh/mh8fi94v","slide":1,"text":"이 프로젝트에서 AI를\n어떻게 사용하려는가","textPreview":"이 프로젝트에서 AI를 | 어떻게 사용하려는가","textChars":23,"textLines":2,"bbox":[42,182,1010,180]}
+{"kind":"textbox","id":"sh/nihgre50","slide":1,"text":"AI의 특성 → 설계 반영 → 보완 장치 → 향후 확인 지표","textPreview":"AI의 특성 → 설계 반영 → 보완 장치 → 향후 확인 지표","textChars":33,"textLines":1,"bbox":[42,438,1040,52]}
+{"kind":"shape","id":"sh/0f6xgjmp","slide":1,"bbox":[42,586,1196,5]}
+{"kind":"textbox","id":"sh/lgzyp4na","slide":1,"text":"regtax-monitor · 구현 중인 최종 설계안 공유","textPreview":"regtax-monitor · 구현 중인 최종 설계안 공유","textChars":32,"textLines":1,"bbox":[42,616,650,30]}
+{"kind":"notes","id":"nt/p8vn58","slide":1,"text":"오늘은 AI 기술을 깊게 설명하려는 자리가 아닙니다. regtax-monitor에서 AI를 어디에 쓰고, AI가 틀릴 수 있기 때문에 어떤 구조를 넣었는지만 간단히 공유드리겠습니다. 아직 전체 구현이 끝난 상태가 아니므로 최종 성능 리뷰가 아니라 설계 방향 공유입니다."}
+{"kind":"slide","id":"sl/e8ddr8","slide":2,"title":"먼저 AI 모델은 ‘정답을 계산하는 프로그램’이 아니다","textShapes":8}
+{"kind":"textbox","id":"sh/vu5kjepw","slide":2,"text":"먼저 AI 모델은 ‘정답을 계산하는 프로그램’이 아니다","textPreview":"먼저 AI 모델은 ‘정답을 계산하는 프로그램’이 아니다","textChars":30,"textLines":1,"bbox":[42,34,1160,76]}
+{"kind":"textbox","id":"sh/wve1cj6h","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1178,660,60,22]}
+{"kind":"shape","id":"sh/xwn2lo72","slide":2,"bbox":[42,156,554,380]}
+{"kind":"shape","id":"sh/ixw3eton","slide":2,"bbox":[642,156,596,380]}
+{"kind":"textbox","id":"sh/jy5knyp8","slide":2,"text":"잘하는 것","textPreview":"잘하는 것","textChars":5,"textLines":1,"bbox":[72,190,240,38]}
+{"kind":"textbox","id":"sh/kzelg36t","slide":2,"text":"• 긴 글의 핵심 요약\n\n• 서로 다른 표현의 의미 연결\n\n• 주어진 예시를 따라 초안 작성","textPreview":"• 긴 글의 핵심 요약 |  | • 서로 다른 표현의 의미 연결 |  | • 주어진 예시를 따라 초안 작성","textChars":51,"textLines":5,"bbox":[72,258,450,210]}
+{"kind":"textbox","id":"sh/50n2p87e","slide":2,"text":"주의할 것","textPreview":"주의할 것","textChars":5,"textLines":1,"bbox":[674,190,250,38]}
+{"kind":"textbox","id":"sh/61w3idoj","slide":2,"text":"• 그럴듯하지만 틀린 답 생성\n\n• 없는 파일·컬럼을 만들어낼 수 있음\n\n• 입력이 길면 앞 내용을 놓칠 수 있음","textPreview":"• 그럴듯하지만 틀린 답 생성 |  | • 없는 파일·컬럼을 만들어낼 수 있음 |  | • 입력이 길면 앞 내용을 놓칠 수 있음","textChars":63,"textLines":5,"bbox":[674,258,500,210]}
+{"kind":"textbox","id":"sh/72pkryp4","slide":2,"text":"그래서 AI에게 판단 전체를 맡기지 않고, 잘하는 작업만 제한해서 사용한다","textPreview":"그래서 AI에게 판단 전체를 맡기지 않고, 잘하는 작업만 제한해서 사용한다","textChars":41,"textLines":1,"bbox":[42,574,1155,48]}
+{"kind":"textbox","id":"sh/3qd8bihk","slide":2,"text":"용어: 생성 결과의 사실 오류를 보통 ‘환각(hallucination)’이라고 부름","textPreview":"용어: 생성 결과의 사실 오류를 보통 ‘환각(hallucination)’이라고 부름","textChars":46,"textLines":1,"bbox":[42,666,1080,20]}
+{"kind":"notes","id":"nt/e8ddr8","slide":2,"text":"AI 모델은 일반 프로그램처럼 항상 같은 정답을 계산하지 않습니다. 대신 긴 법령을 요약하고, 법령 용어와 코드의 의미를 연결하고, 주어진 코드 예시를 바탕으로 수정 초안을 만드는 데 강점이 있습니다. 반대로 없는 파일이나 컬럼을 그럴듯하게 만들 수 있고, 입력이 너무 길면 중요한 앞부분을 놓칠 수 있습니다. 그래서 이 설계는 AI가 잘하는 부분만 사용하고 나머지는 일반 코드로 통제합니다."}
+{"kind":"slide","id":"sl/bj3vj7","slide":3,"title":"이 프로젝트에서는 AI를 두 군데에만 사용한다","textShapes":8}
+{"kind":"textbox","id":"sh/sj6xczil","slide":3,"text":"이 프로젝트에서는 AI를 두 군데에만 사용한다","textPreview":"이 프로젝트에서는 AI를 두 군데에만 사용한다","textChars":25,"textLines":1,"bbox":[42,34,1160,76]}
+{"kind":"textbox","id":"sh/7ixg3eh0","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1178,660,60,22]}
+{"kind":"shape","id":"sh/6xofa90f","slide":3,"bbox":[42,160,554,380]}
+{"kind":"shape","id":"sh/5wvy14zu","slide":3,"bbox":[642,160,596,380]}
+{"kind":"shape","id":"sh/kvmx8zi9","slide":3,"bbox":[72,190,250,42]}
+{"kind":"textbox","id":"sh/judgzuh4","slide":3,"text":"1. 법령 변경 분석","textPreview":"1. 법령 변경 분석","textChars":11,"textLines":1,"bbox":[84,199,226,24]}
+{"kind":"shape","id":"sh/it4f6p0j","slide":3,"bbox":[674,190,250,42]}
+{"kind":"textbox","id":"sh/pszydoze","slide":3,"text":"2. 코드 수정 초안","textPreview":"2. 코드 수정 초안","textChars":11,"textLines":1,"bbox":[686,199,226,24]}
+{"kind":"textbox","id":"sh/4rqhk3it","slide":3,"text":"개정 전·후 조문을 비교해\n\n• 무엇이 바뀌었는지 요약\n• 시스템 영향이 무엇인지 설명","textPreview":"개정 전·후 조문을 비교해 |  | • 무엇이 바뀌었는지 요약 | • 시스템 영향이 무엇인지 설명","textChars":48,"textLines":4,"bbox":[72,268,450,190]}
+{"kind":"textbox","id":"sh/yp4ridgn","slide":3,"text":"검색으로 찾은 관련 코드만 보고\n\n• SEARCH / REPLACE 편집 생성\n• 사람이 볼 patch 초안 제안","textPreview":"검색으로 찾은 관련 코드만 보고 |  | • SEARCH / REPLACE 편집 생성 | • 사람이 볼 patch 초안 제안","textChars":63,"textLines":4,"bbox":[674,268,500,190]}
+{"kind":"textbox","id":"sh/jqdsbix8","slide":3,"text":"수집 · 파일 검색 · diff 생성 · 테스트 · 승인은 AI가 아닌 시스템이 담당","textPreview":"수집 · 파일 검색 · diff 생성 · 테스트 · 승인은 AI가 아닌 시스템이 담당","textChars":47,"textLines":1,"bbox":[42,574,1155,48]}
+{"kind":"textbox","id":"sh/kr69knet","slide":3,"text":"현재 코드: app/main.py analyze/apply · app/llm/common.py","textPreview":"현재 코드: app/main.py analyze/apply · app/llm/common.py","textChars":52,"textLines":1,"bbox":[42,666,1080,20]}
+{"kind":"notes","id":"nt/bj3vj7","slide":3,"text":"AI가 직접 관여하는 부분은 두 군데입니다. 첫 번째는 법령 변경 전후를 읽고 요약과 영향 분석을 만드는 부분입니다. 두 번째는 관련 코드가 이미 좁혀진 뒤 수정 초안을 만드는 부분입니다. 법령 수집, 실제 파일 검색, diff 생성, 테스트, 승인 같은 작업은 AI가 아니라 일반 코드와 사람이 담당합니다."}
+{"kind":"slide","id":"sl/dxf9b2","slide":4,"title":"로컬 모델은 보안을 얻는 대신 속도와 추론 성능을 일부 포기한다","textShapes":14}
+{"kind":"textbox","id":"sh/xcnqh07a","slide":4,"text":"로컬 모델은 보안을 얻는 대신 속도와 추론 성능을 일부 포기한다","textPreview":"로컬 모델은 보안을 얻는 대신 속도와 추론 성능을 일부 포기한다","textChars":35,"textLines":1,"bbox":[42,34,1160,76]}
+{"kind":"textbox","id":"sh/a9crml8z","slide":4,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1178,660,60,22]}
+{"kind":"shape","id":"sh/ba58fqp4","slide":4,"bbox":[42,165,1196,168]}
+{"kind":"textbox","id":"sh/kze9sfq1","slide":4,"text":"외부 API 모델","textPreview":"외부 API 모델","textChars":9,"textLines":1,"bbox":[68,193,260,40]}
+{"kind":"textbox","id":"sh/l0nqlk7m","slide":4,"text":"장점","textPreview":"장점","textChars":2,"textLines":1,"bbox":[350,193,90,28]}
+{"kind":"textbox","id":"sh/ydwrq58v","slide":4,"text":"초기 품질·속도 유리","textPreview":"초기 품질·속도 유리","textChars":11,"textLines":1,"bbox":[350,233,250,66]}
+{"kind":"textbox","id":"sh/jy58japg","slide":4,"text":"고려사항","textPreview":"고려사항","textChars":4,"textLines":1,"bbox":[650,193,120,28]}
+{"kind":"textbox","id":"sh/83y9wfqx","slide":4,"text":"코드 스니펫 외부 전송 검토 필요\n사용량에 따른 토큰 비용","textPreview":"코드 스니펫 외부 전송 검토 필요 | 사용량에 따른 토큰 비용","textChars":32,"textLines":2,"bbox":[650,233,520,70]}
+{"kind":"shape","id":"sh/t47apk7i","slide":4,"bbox":[42,370,1196,168]}
+{"kind":"textbox","id":"sh/90vqt0ju","slide":4,"text":"로컬 Ollama 모델","textPreview":"로컬 Ollama 모델","textChars":12,"textLines":1,"bbox":[68,398,260,40]}
+{"kind":"textbox","id":"sh/8zmp0v29","slide":4,"text":"장점","textPreview":"장점","textChars":2,"textLines":1,"bbox":[350,398,90,28]}
+{"kind":"textbox","id":"sh/7yd8ra1o","slide":4,"text":"코드가 외부로 나가지 않음","textPreview":"코드가 외부로 나가지 않음","textChars":14,"textLines":1,"bbox":[350,438,250,66]}
+{"kind":"textbox","id":"sh/mx47y5kj","slide":4,"text":"고려사항","textPreview":"고려사항","textChars":4,"textLines":1,"bbox":[650,398,120,28]}
+{"kind":"textbox","id":"sh/h4fqxkj6","slide":4,"text":"CPU에서는 수 분 소요\n복잡한 법률·코드 추론에 한계","textPreview":"CPU에서는 수 분 소요 | 복잡한 법률·코드 추론에 한계","textChars":30,"textLines":2,"bbox":[650,438,520,70]}
+{"kind":"textbox","id":"sh/w36p4f2l","slide":4,"text":"선택 이유: eHR 내부 코드를 외부로 보내지 않는 것이 우선","textPreview":"선택 이유: eHR 내부 코드를 외부로 보내지 않는 것이 우선","textChars":34,"textLines":1,"bbox":[42,584,1155,44]}
+{"kind":"textbox","id":"sh/v2d8va10","slide":4,"text":"생성 백엔드는 LlmClient로 분리하여 필요하면 API형으로 교체 가능","textPreview":"생성 백엔드는 LlmClient로 분리하여 필요하면 API형으로 교체 가능","textChars":41,"textLines":1,"bbox":[42,666,1080,20]}
+{"kind":"notes","id":"nt/dxf9b2","slide":4,"text":"외부 API 모델은 대형 모델을 바로 사용할 수 있어 일반적으로 초기 품질과 속도가 좋습니다. 하지만 내부 코드 스니펫을 외부로 보내는 검토가 필요하고 토큰 비용이 발생합니다. 로컬 Ollama 모델은 코드가 외부로 나가지 않는 대신 CPU에서는 느리고 복잡한 추론 성능이 낮을 수 있습니다. 이 프로젝트는 보안을 우선해 로컬을 기본으로 선택했지만, LlmClient 인터페이스를 두어 백엔드는 교체할 수 있게 했습니다."}
+{"kind":"slide","id":"sl/sncnyb","slide":5,"title":"낮은 모델 성능은 네 단계의 구조로 보완한다","textShapes":12}
+{"kind":"textbox","id":"sh/nydwva9g","slide":5,"text":"낮은 모델 성능은 네 단계의 구조로 보완한다","textPreview":"낮은 모델 성능은 네 단계의 구조로 보완한다","textChars":24,"textLines":1,"bbox":[42,34,1160,76]}
+{"kind":"textbox","id":"sh/oz6xofq1","slide":5,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1178,660,60,22]}
+{"kind":"shape","id":"sh/90fexkr6","slide":5,"bbox":[302,317,39,4]}
+{"kind":"shape","id":"sh/a1ofqp8r","slide":5,"bbox":[42,185,260,280]}
+{"kind":"textbox","id":"sh/bmxwzu9c","slide":5,"text":"1. 후보를 먼저 좁힘","textPreview":"1. 후보를 먼저 좁힘","textChars":12,"textLines":1,"bbox":[62,218,220,62]}
+{"kind":"textbox","id":"sh/wn6xsfqx","slide":5,"text":"RAG + 용어 사전 + 상수 값 매칭","textPreview":"RAG + 용어 사전 + 상수 값 매칭","textChars":21,"textLines":1,"bbox":[62,315,220,100]}
+{"kind":"shape","id":"sh/xofe1kri","slide":5,"bbox":[601,317,39,4]}
+{"kind":"shape","id":"sh/ypofup83","slide":5,"bbox":[341,185,260,280]}
+{"kind":"textbox","id":"sh/jqxw3u9o","slide":5,"text":"2. 출력 범위를 제한","textPreview":"2. 출력 범위를 제한","textChars":12,"textLines":1,"bbox":[361,218,220,62]}
+{"kind":"textbox","id":"sh/ve58ju54","slide":5,"text":"전체 파일 대신 SEARCH / REPLACE만 생성","textPreview":"전체 파일 대신 SEARCH / REPLACE만 생성","textChars":29,"textLines":1,"bbox":[361,315,220,100]}
+{"kind":"shape","id":"sh/adwrap4z","slide":5,"bbox":[900,317,39,4]}
+{"kind":"shape","id":"sh/xg7alkna","slide":5,"bbox":[640,185,260,280]}
+{"kind":"textbox","id":"sh/wfe9cfmp","slide":5,"text":"3. 원본과 대조","textPreview":"3. 원본과 대조","textChars":9,"textLines":1,"bbox":[660,218,220,62]}
+{"kind":"textbox","id":"sh/na58fa58","slide":5,"text":"파일 존재와 SEARCH 앵커 일치를 코드로 검사","textPreview":"파일 존재와 SEARCH 앵커 일치를 코드로 검사","textChars":27,"textLines":1,"bbox":[660,315,220,100]}
+{"kind":"shape","id":"sh/m9wr654n","slide":5,"bbox":[939,185,260,280]}
+{"kind":"textbox","id":"sh/9cnqhkne","slide":5,"text":"4. 적용 전에 검증","textPreview":"4. 적용 전에 검증","textChars":11,"textLines":1,"bbox":[959,218,220,62]}
+{"kind":"textbox","id":"sh/8be98fmt","slide":5,"text":"스크래치 git apply + 골든 테스트 + 사람 승인","textPreview":"스크래치 git apply + 골든 테스트 + 사람 승인","textChars":31,"textLines":1,"bbox":[959,315,220,100]}
+{"kind":"textbox","id":"sh/r6psrelc","slide":5,"text":"핵심: 모델이 틀리지 않게 만드는 것이 아니라, 틀려도 실제 코드에 바로 반영되지 않게 만든다","textPreview":"핵심: 모델이 틀리지 않게 만드는 것이 아니라, 틀려도 실제 코드에 바로 반영되지 않게 만든다","textChars":52,"textLines":1,"bbox":[42,525,1155,72]}
+{"kind":"textbox","id":"sh/65gri94r","slide":5,"text":"앵커 실패 시 실제 원본 주변을 다시 제공해 최대 2회 재시도","textPreview":"앵커 실패 시 실제 원본 주변을 다시 제공해 최대 2회 재시도","textChars":34,"textLines":1,"bbox":[42,666,1080,20]}
+{"kind":"notes","id":"nt/sncnyb","slide":5,"text":"모델 성능을 보완하는 구조는 네 단계입니다. 먼저 전체 저장소를 주지 않고 RAG, 용어 사전, 상수 값 매칭으로 후보를 좁힙니다. 모델에게 전체 파일을 다시 쓰게 하지 않고 SEARCH와 REPLACE 블록만 만들게 합니다. 이후 시스템이 파일 존재와 원본 앵커 일치를 확인합니다. 마지막으로 실제 저장소가 아닌 복사본에서 git apply와 골든 테스트를 실행하고 사람이 승인합니다. 핵심은 모델이 절대 틀리지 않게 만드는 것이 아니라, 틀려도 실제 코드에 바로 반영되지 않게 하는 것입니다."}
+{"kind":"slide","id":"sl/wo8jtz","slide":6,"title":"결과는 단계별로 간단히 확인하고, 최종 평가는 구현 후 진행한다","textShapes":22}
+{"kind":"textbox","id":"sh/krmdgful","slide":6,"text":"결과는 단계별로 간단히 확인하고, 최종 평가는 구현 후 진행한다","textPreview":"결과는 단계별로 간단히 확인하고, 최종 평가는 구현 후 진행한다","textChars":35,"textLines":1,"bbox":[42,34,1160,76]}
+{"kind":"textbox","id":"sh/jqtwnad0","slide":6,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1178,660,60,22]}
+{"kind":"shape","id":"sh/i5kve5cf","slide":6,"bbox":[42,145,565,132]}
+{"kind":"textbox","id":"sh/x4bul0vu","slide":6,"text":"검색","textPreview":"검색","textChars":2,"textLines":1,"bbox":[62,163,95,26]}
+{"kind":"textbox","id":"sh/w32dcvu9","slide":6,"text":"정답 파일이 상위 후보에 있는가?","textPreview":"정답 파일이 상위 후보에 있는가?","textChars":18,"textLines":1,"bbox":[162,163,415,44]}
+{"kind":"textbox","id":"sh/v2tcjqdo","slide":6,"text":"Recall@K · MRR","textPreview":"Recall@K · MRR","textChars":14,"textLines":1,"bbox":[162,221,415,28]}
+{"kind":"shape","id":"sh/a1kvalcj","slide":6,"bbox":[649,145,565,132]}
+{"kind":"textbox","id":"sh/90buh0vy","slide":6,"text":"초안","textPreview":"초안","textChars":2,"textLines":1,"bbox":[669,163,95,26]}
+{"kind":"textbox","id":"sh/8z2d8ved","slide":6,"text":"정해진 형식과 원본 앵커를 지켰는가?","textPreview":"정해진 형식과 원본 앵커를 지켰는가?","textChars":20,"textLines":1,"bbox":[769,163,415,44]}
+{"kind":"textbox","id":"sh/u54rydk3","slide":6,"text":"형식 준수율 · 앵커 성공률","textPreview":"형식 준수율 · 앵커 성공률","textChars":15,"textLines":1,"bbox":[769,221,415,28]}
+{"kind":"shape","id":"sh/f6xs7ilo","slide":6,"bbox":[42,303,565,132]}
+{"kind":"textbox","id":"sh/g7690329","slide":6,"text":"적용","textPreview":"적용","textChars":2,"textLines":1,"bbox":[62,321,95,26]}
+{"kind":"textbox","id":"sh/hsfa983u","slide":6,"text":"생성한 patch가 실제로 적용되는가?","textPreview":"생성한 patch가 실제로 적용되는가?","textChars":21,"textLines":1,"bbox":[162,321,415,44]}
+{"kind":"textbox","id":"sh/614rut47","slide":6,"text":"git apply 성공률","textPreview":"git apply 성공률","textChars":13,"textLines":1,"bbox":[162,379,415,28]}
+{"kind":"shape","id":"sh/72d83ylc","slide":6,"bbox":[649,303,565,132]}
+{"kind":"textbox","id":"sh/s3m9w32x","slide":6,"text":"검증","textPreview":"검증","textChars":2,"textLines":1,"bbox":[669,321,95,26]}
+{"kind":"textbox","id":"sh/t4va583i","slide":6,"text":"기존 계산과 회귀 테스트를 통과하는가?","textPreview":"기존 계산과 회귀 테스트를 통과하는가?","textChars":21,"textLines":1,"bbox":[769,321,415,44]}
+{"kind":"textbox","id":"sh/ixkrqt4v","slide":6,"text":"골든 테스트 통과율","textPreview":"골든 테스트 통과율","textChars":10,"textLines":1,"bbox":[769,379,415,28]}
+{"kind":"shape","id":"sh/jyd8zylg","slide":6,"bbox":[42,461,565,132]}
+{"kind":"textbox","id":"sh/ni9o7u18","slide":6,"text":"사람","textPreview":"사람","textChars":2,"textLines":1,"bbox":[62,479,95,26]}
+{"kind":"textbox","id":"sh/mh07ypkn","slide":6,"text":"수정 없이 승인할 수 있었는가?","textPreview":"수정 없이 승인할 수 있었는가?","textChars":17,"textLines":1,"bbox":[162,479,415,44]}
+{"kind":"textbox","id":"sh/94r69kje","slide":6,"text":"무수정 승인율 · 검토 시간","textPreview":"무수정 승인율 · 검토 시간","textChars":15,"textLines":1,"bbox":[162,537,415,28]}
+{"kind":"shape","id":"sh/83ip0z2t","slide":6,"bbox":[649,461,565,132]}
+{"kind":"textbox","id":"sh/v69obu14","slide":6,"text":"운영","textPreview":"운영","textChars":2,"textLines":1,"bbox":[669,479,95,26]}
+{"kind":"textbox","id":"sh/a5072p0z","slide":6,"text":"업무 시간 안에 결과가 나오는가?","textPreview":"업무 시간 안에 결과가 나오는가?","textChars":18,"textLines":1,"bbox":[769,479,415,44]}
+{"kind":"textbox","id":"sh/x8b6d4ja","slide":6,"text":"처리시간 · timeout · tokens/s","textPreview":"처리시간 · timeout · tokens/s","textChars":25,"textLines":1,"bbox":[769,537,415,28]}
+{"kind":"shape","id":"sh/w72p4zip","slide":6,"bbox":[42,622,1172,34]}
+{"kind":"textbox","id":"sh/bapoza10","slide":6,"text":"현재: 지표 정의 단계  →  구현 완료 후 동일 데이터셋으로 최종 리뷰","textPreview":"현재: 지표 정의 단계  →  구현 완료 후 동일 데이터셋으로 최종 리뷰","textChars":40,"textLines":1,"bbox":[60,628,1136,22]}
+{"kind":"textbox","id":"sh/q9gnq5kf","slide":6,"text":"변경 유형별로 분리 측정: 수치 변경 / 조건 변경 / 구조 변경","textPreview":"변경 유형별로 분리 측정: 수치 변경 / 조건 변경 / 구조 변경","textChars":36,"textLines":1,"bbox":[42,666,1080,20]}
+{"kind":"notes","id":"nt/wo8jtz","slide":6,"text":"모델 결과는 단계별로 간단히 보겠습니다. 검색에서는 정답 파일이 상위 후보에 있는지, 초안에서는 출력 형식과 앵커를 지켰는지, 적용에서는 git apply가 되는지, 검증에서는 골든 테스트를 통과하는지 봅니다. 마지막으로 사람이 수정 없이 승인했는지와 처리 시간도 기록합니다. 지금은 지표를 정의하는 단계이고, 전체 구현이 끝난 뒤 같은 평가 데이터셋으로 최종 리뷰하겠습니다."}
+{"kind":"slide","id":"sl/xoybss","slide":7,"title":"지금 공유할 결론은 세 가지다","textShapes":13}
+{"kind":"textbox","id":"sh/2h0rmxov","slide":7,"text":"지금 공유할 결론은 세 가지다","textPreview":"지금 공유할 결론은 세 가지다","textChars":16,"textLines":1,"bbox":[42,34,1160,76]}
+{"kind":"textbox","id":"sh/pkrqhcn6","slide":7,"text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1178,660,60,22]}
+{"kind":"textbox","id":"sh/4ji9o76l","slide":7,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[42,155,70,36]}
+{"kind":"textbox","id":"sh/r6t8jm5c","slide":7,"text":"AI는 보조 도구","textPreview":"AI는 보조 도구","textChars":9,"textLines":1,"bbox":[128,155,300,40]}
+{"kind":"textbox","id":"sh/q50rqhor","slide":7,"text":"법령을 요약하고 관련 코드의 수정 초안을 만든다","textPreview":"법령을 요약하고 관련 코드의 수정 초안을 만든다","textChars":26,"textLines":1,"bbox":[455,155,720,58]}
+{"kind":"shape","id":"sh/d8bqlwni","slide":7,"bbox":[42,239,1155,2]}
+{"kind":"textbox","id":"sh/c729sr6x","slide":7,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[42,300,70,36]}
+{"kind":"textbox","id":"sh/zat8nm58","slide":7,"text":"안전성은 구조가 담당","textPreview":"안전성은 구조가 담당","textChars":11,"textLines":1,"bbox":[128,300,300,40]}
+{"kind":"textbox","id":"sh/e9kruho3","slide":7,"text":"검색·원본 대조·diff·테스트·승인으로 모델 오류를 제한한다","textPreview":"검색·원본 대조·diff·테스트·승인으로 모델 오류를 제한한다","textChars":34,"textLines":1,"bbox":[455,300,720,58]}
+{"kind":"shape","id":"sh/kz25snql","slide":7,"bbox":[42,384,1155,2]}
+{"kind":"textbox","id":"sh/l0bm1s76","slide":7,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[42,445,70,36]}
+{"kind":"textbox","id":"sh/yxknqd8v","slide":7,"text":"성능 판단은 나중에","textPreview":"성능 판단은 나중에","textChars":10,"textLines":1,"bbox":[128,445,300,40]}
+{"kind":"textbox","id":"sh/jyt4zip0","slide":7,"text":"구현 완료 후 검색·적용·테스트·사람 검토 지표로 확인한다","textPreview":"구현 완료 후 검색·적용·테스트·사람 검토 지표로 확인한다","textChars":32,"textLines":1,"bbox":[455,445,720,58]}
+{"kind":"shape","id":"sh/8325wnqx","slide":7,"bbox":[42,529,1155,2]}
+{"kind":"shape","id":"sh/t4vm5s7i","slide":7,"bbox":[42,588,1155,52]}
+{"kind":"textbox","id":"sh/61knux8r","slide":7,"text":"AI가 코드를 자동으로 고치는 시스템이 아니라, 사람이 검토할 근거와 초안을 만드는 시스템","textPreview":"AI가 코드를 자동으로 고치는 시스템이 아니라, 사람이 검토할 근거와 초안을 만드는 시스템","textChars":50,"textLines":1,"bbox":[60,600,1119,28]}
+{"kind":"textbox","id":"sh/72t43ipc","slide":7,"text":"상세 설계 근거: README.md · docs/architecture/ADR.md · ARCHITECTURE_V2.md","textPreview":"상세 설계 근거: README.md · docs/architecture/ADR.md · ARCHITECTURE_V2.md","textChars":67,"textLines":1,"bbox":[42,666,1080,20]}
+{"kind":"notes","id":"nt/xoybss","slide":7,"text":"정리하면 세 가지입니다. AI는 법령을 요약하고 관련 코드의 수정 초안을 만드는 보조 도구입니다. 안전성은 모델 성능이 아니라 검색, 원본 대조, diff, 테스트, 사람 승인 구조가 담당합니다. 실제 성능 평가는 전체 구현이 끝난 뒤 검색 정확도, patch 적용률, 골든 테스트, 사람 검토 지표로 진행합니다. 지금 단계에서는 이 설계 방향만 팀에서 공통으로 이해하면 됩니다."}

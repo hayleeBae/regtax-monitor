@@ -42,6 +42,41 @@ def _migrate() -> None:
                 if name not in have:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
 
+    _backfill_legacy_mapping_decisions(tables)
+
+
+def _backfill_legacy_mapping_decisions(tables: set) -> None:
+    """기존 `Mapping.verified=True`에 legacy VERIFIED 결정 1건을 채운다 (스펙 §13).
+
+    `init_db()`가 서버 기동마다 호출되므로 idempotent해야 한다 — 이미 결정 이력이
+    있는 매핑은 건너뛰므로 몇 번 실행해도 매핑당 backfill 이벤트는 1건이다.
+    """
+    from datetime import datetime
+
+    from sqlalchemy import text
+
+    if "mapping" not in tables or "mapping_decision" not in tables:
+        return
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO mapping_decision (
+                    mapping_id, decision, reason_code, reason_text, actor, created_at
+                )
+                SELECT m.id, 'verified', 'other', 'legacy verified backfill',
+                       'system', :created_at
+                FROM mapping m
+                WHERE m.verified = 1
+                  AND NOT EXISTS (
+                      SELECT 1 FROM mapping_decision d WHERE d.mapping_id = m.id
+                  )
+                """
+            ),
+            {"created_at": datetime.utcnow().isoformat(sep=" ")},
+        )
+
 
 def get_session():
     db = SessionLocal()

@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>regtax-monitor AI 설계 상세 설명</title>
+  <style>
+    :root{--ink:#182033;--muted:#596276;--line:#d8dee8;--soft:#f6f8fb;--blue:#2268df;--blue2:#eaf2ff;--green:#08785c;--green2:#e9f7f2;--amber:#915600;--amber2:#fff3dc;--dark:#111827}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:var(--ink);font-family:Arial,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;line-height:1.76;background:#fff}a{color:var(--blue)}code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.wrap{width:min(1120px,calc(100% - 40px));margin:auto}
+    header{padding:46px 0 34px;border-bottom:1px solid var(--line);background:var(--soft)}header h1{margin:0 0 12px;font-size:clamp(34px,4vw,50px);line-height:1.2;letter-spacing:-.04em}header p{max-width:900px;margin:0;color:var(--muted);font-size:18px}.state{margin-top:18px;padding:13px 17px;background:var(--blue2);border-left:4px solid var(--blue);font-size:15px}
+    nav{position:sticky;top:0;z-index:10;border-bottom:1px solid var(--line);background:#fffd;backdrop-filter:blur(12px)}nav .wrap{display:flex;gap:5px;overflow:auto;padding:10px 0}nav a{white-space:nowrap;text-decoration:none;color:var(--ink);font-size:14px;font-weight:800;padding:8px 11px;border-radius:7px}nav a:hover{color:var(--blue);background:var(--blue2)}
+    main{padding-bottom:80px}section{scroll-margin-top:76px;padding:56px 0;border-bottom:1px solid var(--line)}section:last-child{border:0}h2{margin:0 0 16px;font-size:clamp(29px,3.5vw,41px);line-height:1.28;letter-spacing:-.035em}h3{margin:39px 0 12px;font-size:26px;line-height:1.38;letter-spacing:-.025em}h4{margin:0 0 9px;font-size:19px}p,li{font-size:17px}p{margin:10px 0}li{margin:7px 0}.intro{max-width:920px;color:var(--muted);font-size:19px}.num{display:inline-flex;width:34px;height:34px;margin-right:9px;align-items:center;justify-content:center;border-radius:50%;background:var(--blue);color:#fff;font-size:15px;vertical-align:5px}
+    .grid2,.grid3,.grid4{display:grid;gap:18px;margin:22px 0}.grid2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid3{grid-template-columns:repeat(3,minmax(0,1fr))}.grid4{grid-template-columns:repeat(4,minmax(0,1fr))}.card{padding:22px;border:1px solid var(--line);border-radius:11px;background:#fff}.card.soft{background:var(--soft)}.card.blue{background:var(--blue2);border-color:#c9ddff}.card.green{background:var(--green2);border-color:#bde4d7}.card.amber{background:var(--amber2);border-color:#edd09d}.card p,.card li{font-size:15.5px}.badge{display:inline-block;margin-bottom:10px;padding:3px 8px;border-radius:999px;color:var(--blue);background:var(--blue2);font-size:12px;font-weight:800}.badge.plan{color:var(--amber);background:var(--amber2)}
+    .flow{margin:24px 0;padding:22px 25px;border-radius:10px;background:var(--dark);color:#ecf3ff;white-space:pre;overflow:auto;font-size:15px;line-height:1.85}.example{margin:22px 0;border:1px solid var(--line);border-radius:10px;overflow:hidden}.example .title{padding:11px 17px;background:var(--soft);font-weight:800}.example .body{padding:18px 20px}.example pre{margin:0;padding:17px;background:var(--dark);color:#eef4ff;border-radius:8px;overflow:auto;line-height:1.65}.callout{margin:26px 0;padding:19px 22px;border-left:5px solid var(--blue);background:var(--soft);font-size:17px;font-weight:700}.note{padding:17px 20px;background:var(--amber2);border-radius:9px;color:#5d4300}.formula{padding:15px 18px;background:var(--blue2);border-radius:9px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;overflow:auto}
+    table{width:100%;margin:22px 0;border-collapse:collapse;font-size:15px}th,td{padding:13px 14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:var(--soft);font-size:14px}td:first-child{font-weight:800}.metric{display:grid;grid-template-columns:180px 1fr 1.1fr;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin:10px 0}.metric>*{padding:14px 16px;border-right:1px solid var(--line)}.metric>*:last-child{border:0}.metric .name{background:var(--soft);font-weight:800}.metric .why{color:var(--muted)}.source{margin-top:30px;color:var(--muted);font-size:13px}footer{padding:26px 0 50px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+    @media(max-width:780px){.grid2,.grid3,.grid4{grid-template-columns:1fr}.metric{grid-template-columns:1fr}.metric>*{border-right:0;border-bottom:1px solid var(--line)}table{display:block;overflow:auto;white-space:nowrap}header{padding-top:30px}}
+    @media print{nav{display:none}section{break-inside:auto}.card,.example,.metric{break-inside:avoid}}
+  </style>
+</head>
+<body>
+<header><div class="wrap">
+  <h1>regtax-monitor의 AI 설계 상세 설명</h1>
+  <p>검색으로 입력을 줄이는 방법, 앵커 기반 편집 형식, 프로젝트에 맞는 평가 지표, 검증 데이터가 쌓인 뒤의 개선 순서를 실제 구현 기준으로 설명합니다.</p>
+  <div class="state"><strong>구분:</strong> 현재 코드에 존재하는 기능은 “현재 구현”, 향후 V2에서 추가할 기능은 “목표 설계”로 표시합니다.</div>
+</div></header>
+<nav><div class="wrap"><a href="#retrieval">1. 검색과 입력 축소</a><a href="#editing">2. 출력 형식과 앵커</a><a href="#evaluation">3. 성능 평가 방법</a><a href="#learning">4. 데이터 축적과 개선</a></div></nav>
+
+<main class="wrap">
+<section id="retrieval">
+  <h2><span class="num">1</span>검색으로 모델이 읽을 양을 어떻게 줄이는가</h2>
+  <p class="intro">전체 저장소를 LLM에 넣는 대신, 먼저 일반 코드가 “이 법령 변경과 관련 있을 가능성이 높은 코드 조각”을 찾습니다. 이 프로젝트에서는 RAG, 용어 사전, 상수 값 매칭을 병행합니다. 세 방법은 서로 대체 관계가 아니라 서로 다른 실패를 보완합니다.</p>
+
+  <h3>왜 전체 코드를 모델에 주지 않는가</h3>
+  <ul>
+    <li><strong>컨텍스트 한계:</strong> 모델이 한 번에 읽을 수 있는 토큰 수는 제한되어 있습니다. Ollama를 16K로 설정해도 실제 eHR 저장소 전체를 넣을 수 없습니다.</li>
+    <li><strong>중요 정보 희석:</strong> 관련 없는 코드가 많아질수록 작은 모델은 법령 변경과 직접 관련된 부분을 놓치기 쉽습니다.</li>
+    <li><strong>속도와 출력 비용:</strong> 입력이 길면 CPU 추론 시간이 늘고, 모델이 불필요한 파일까지 수정할 가능성도 커집니다.</li>
+  </ul>
+  <div class="callout">검색 단계의 목적은 “정답을 확정”하는 것이 아니라, 수천 개 파일을 모델이 처리 가능한 몇 개 후보로 줄이는 것입니다.</div>
+
+  <h3>1-A. RAG란 무엇인가 <span class="badge">현재 구현</span></h3>
+  <p><strong>RAG(Retrieval-Augmented Generation)</strong>는 생성 전에 외부 자료를 검색해 그 결과를 모델의 입력 문맥으로 붙이는 방식입니다. 모델이 저장소를 학습해 기억하도록 만드는 것이 아니라, 질문할 때마다 현재 저장소에서 관련 자료를 가져옵니다.</p>
+  <div class="flow">[인덱싱 시]
+코드 파일 → 구조 단위 청킹 → bge-m3 임베딩 → ChromaDB 저장
+
+[법령 변경 처리 시]
+법령명 + 조문 + 개정 전후 + AI 요약 → bge-m3 임베딩
+                                      ↓
+                          ChromaDB 유사도 검색 top-K
+                                      ↓
+                        path + symbol + snippet 반환</div>
+
+  <h4>① 코드를 수정 지점 단위로 나눈다</h4>
+  <p>파일 전체를 하나의 벡터로 만들면 “이 파일이 관련 있다”까지만 알 수 있고, 모델에 전달할 양도 커집니다. 그래서 파일 유형별로 다음처럼 나눕니다.</p>
+  <table><thead><tr><th>파일 유형</th><th>청킹 단위</th><th>이유</th></tr></thead><tbody>
+    <tr><td>Java</td><td>메서드 단위</td><td>실제 수정 위치와 가까운 계산 메서드를 반환하기 위해서</td></tr>
+    <tr><td>Kotlin/Python</td><td>함수·클래스 단위</td><td>관련 로직만 분리하기 위해서</td></tr>
+    <tr><td>SQL</td><td>세미콜론 기준 문장</td><td>DDL·DML 문장을 별도 후보로 만들기 위해서</td></tr>
+    <tr><td>Mapper XML</td><td>select/insert/update/delete/resultMap 단위</td><td>쿼리 ID와 실제 SQL을 하나의 검색 단위로 만들기 위해서</td></tr>
+  </tbody></table>
+
+  <h4>② 각 청크를 의미 벡터로 바꾼다</h4>
+  <p><code>bge-m3</code> 임베딩 모델은 텍스트를 숫자 배열로 변환합니다. 문장이 정확히 같지 않아도 의미가 가까우면 벡터 거리가 가까워집니다. 코드 청크 벡터는 로컬 ChromaDB에 저장되고, 법령 변경문도 같은 모델로 벡터화하여 가까운 청크를 검색합니다.</p>
+  <div class="example"><div class="title">RAG가 유용한 예</div><div class="body"><p>법령: “자녀에 대한 세액공제 금액을 인상한다.”</p><p>코드: <code>calculateChildTaxCredit(...)</code>, 주석: “자녀공제 계산”</p><p>문자열은 완전히 같지 않지만 의미가 가까우므로 후보가 될 수 있습니다.</p></div></div>
+  <div class="note"><strong>RAG의 한계:</strong> <code>n0200</code>처럼 자연어 의미가 전혀 없는 암호 컬럼명, 또는 코드에 주석이 없는 숫자 리터럴은 의미 검색만으로 찾기 어렵습니다. 그래서 다음 두 방법을 추가했습니다.</div>
+
+  <h3>1-B. 용어 사전은 어떻게 만드는가 <span class="badge">현재 구현</span></h3>
+  <p>eHR 레거시에는 <code>a0121</code>, <code>b0181</code>, <code>n0200</code> 같은 컬럼 코드가 많습니다. 임베딩 모델은 <code>n0200</code>만 보고 “자녀세액공제”라고 알 수 없습니다. 하지만 사람을 위한 한글 설명은 이미 SQL 주석과 VO 필드 주석에 흩어져 있습니다.</p>
+  <div class="example"><div class="title">원본 코드에서 자동 수확하는 패턴</div><div class="body"><pre><code>NVL(rd.n0200, 0) AS n0200  -- 자녀세액공제 공제대상자녀
+private Long l0160 = 0L;   // 대중교통 사용분</code></pre></div></div>
+  <ol>
+    <li><code>.sql</code>, <code>.xml</code>, <code>.java</code> 파일을 로컬에서 순회합니다.</li>
+    <li>정규식 <code>[a-z][0-9]{4}</code>로 컬럼 코드를 찾습니다.</li>
+    <li>같은 줄의 <code>-- 한글주석</code> 또는 <code>// 한글주석</code>을 정제해 코드의 라벨로 저장합니다.</li>
+    <li>같은 코드에 여러 라벨이 있으면 빈도와 한글 정보량을 기준으로 대표 라벨을 선택합니다.</li>
+    <li>별도로 그 코드가 등장하는 파일 목록을 수집합니다. VO Java 파일을 먼저 두고 현행 XML, 연도별 XML 순으로 정렬합니다.</li>
+  </ol>
+  <div class="formula">term_dict = {
+  "n0200": ["자녀세액공제 공제대상자녀", ...],
+  "l0160": ["대중교통 사용분", ...]
+}
+
+term_locations = {
+  "n0200": ["...VO.java", "...Mapper.xml", ...]
+}</div>
+
+  <h4>사전은 두 군데에 사용한다</h4>
+  <div class="grid2">
+    <article class="card blue"><h4>임베딩 청크 보강</h4><p>코드 청크에 <code>n0200</code>이 있으면 임베딩 전에 다음 헤더를 붙입니다.</p><p><code>[관련 항목] n0200=자녀세액공제 공제대상자녀</code></p><p>원래 의미가 없던 코드가 자연어 검색에 잡힐 수 있게 됩니다.</p></article>
+    <article class="card"><h4>정확 어휘 매칭</h4><p>법령 변경문에 “자녀세액공제”가 실제로 포함되면 그 라벨을 가진 코드를 직접 후보로 올립니다.</p><p>3글자 이상 한글 토큰만 사용하고, 여러 코드에서 흔한 단어는 IDF 방식으로 낮게 평가합니다.</p></article>
+  </div>
+  <div class="formula">용어 점수 ≈ 매칭 토큰 길이 × log(1 + 전체 코드 수 / 해당 토큰을 가진 코드 수)</div>
+  <p>즉 “공제”처럼 흔한 단어보다 “자녀세액공제”처럼 길고 희소한 단어를 더 신뢰합니다. 사전은 사람이 별도 엑셀로 관리하는 것이 아니라 코드 원본에서 자동 재생성되므로 원본 코드 변경 없이 사용할 수 있습니다.</p>
+
+  <h3>1-C. 상수 값 매칭은 어떻게 하는가 <span class="badge">현재 구현</span></h3>
+  <p>수치 개정은 의미보다 값 자체가 강한 단서입니다. 법령에는 “15만원을 25만원으로”, 코드에는 <code>150000L</code>, <code>0.15</code>, <code>upperLimit="14000000"</code>처럼 나타납니다.</p>
+  <div class="grid2">
+    <article class="card"><h4>코드 상수 인벤토리 생성</h4><p>저장소를 스캔해 법령성 숫자 리터럴을 <strong>정규화된 값 → 파일·줄번호·원문</strong>으로 저장합니다.</p><ul><li>금액과 소수 비율은 수집</li><li>작은 정수는 “시간·일·개월·나이” 같은 단위 힌트가 있을 때만 수집</li><li>일반 loop index 같은 오탐은 최대한 제외</li></ul></article>
+    <article class="card blue"><h4>법령 숫자 정규화</h4><p>개정문 표현을 코드 숫자 형식으로 바꿉니다.</p><ul><li><code>15만원 → 150000</code></li><li><code>1천500만원 → 15000000</code></li><li><code>15% → 0.15</code>와 <code>15</code></li><li><code>100분의 6 → 0.06</code></li><li><code>52시간 → 52</code></li></ul></article>
+  </div>
+  <p>정규화된 법령 값과 인벤토리 key가 정확히 같은 위치만 후보로 만듭니다. 같은 숫자가 여러 파일에 흔하면 점수를 낮추고, 큰 금액처럼 희소한 값이 적은 파일에서 발견되면 점수를 높입니다.</p>
+  <div class="formula">상수 점수 ≈ 값의 유효 자릿수 × log(1 + 전체 파일 수 / 해당 값이 등장한 파일 수)</div>
+  <div class="example"><div class="title">상수 매칭 예</div><div class="body"><p>개정 전후에 <strong>15만원 → 25만원</strong>이 있으면 우선 기존 값 <code>150000</code>과 신규 값 <code>250000</code>을 추출합니다. 코드 인벤토리에서 <code>150000</code>이 등장한 파일을 찾고, 이 위치를 RAG 후보와 함께 매핑 후보로 저장합니다.</p><p>단, 숫자가 같다는 이유만으로 정답은 아닙니다. 다른 공제의 15만원일 수 있으므로 법령·조문·용어 문맥과 사람 검증이 필요합니다.</p></div></div>
+
+  <h3>세 검색 결과는 어떻게 합치는가</h3>
+  <p>현재 <code>/changes/{id}/map</code>은 법령명, 조문, AI 요약, 개정 전후 텍스트를 하나의 query로 만들고 세 provider의 후보를 합칩니다.</p>
+  <table><thead><tr><th>Provider</th><th>후보 근거</th><th>강점</th><th>대표 실패</th></tr></thead><tbody>
+    <tr><td>RAG</td><td>벡터 의미 유사도</td><td>표현이 달라도 의미 후보 탐색</td><td>암호 코드, 주석 없는 숫자</td></tr>
+    <tr><td>용어 사전</td><td>한글 토큰 정확 일치 → 코드 → 파일</td><td>레거시 컬럼 코드 연결</td><td>주석이 틀렸거나 너무 일반적인 용어</td></tr>
+    <tr><td>상수 매칭</td><td>정규화된 숫자 정확 일치</td><td>금액·세율·기준값 개정</td><td>같은 값이 여러 업무에서 재사용</td></tr>
+  </tbody></table>
+  <p>후보는 <code>path</code>, <code>symbol</code>, <code>confidence</code>로 Mapping 테이블에 저장합니다. 현재는 RAG 점수와 사전/상수 점수를 각 confidence 범위로 환산합니다. V2에서는 provider별 점수 정규화와 검증 이력 기반 재정렬을 추가할 계획입니다.</p>
+  <p class="source">근거 코드: <code>app/embedding/indexer.py</code>, <code>term_dict.py</code>, <code>const_inventory.py</code>, <code>app/main.py:map_change</code></p>
+</section>
+
+<section id="editing">
+  <h2><span class="num">2</span>모델 출력 형식을 어떻게 제한하고, 앵커를 어떻게 사용하는가</h2>
+  <p class="intro">LLM에게 “알아서 코드를 수정해줘”라고 요청하면 설명문, Markdown, 전체 파일, 존재하지 않는 경로 등 다양한 형식이 나올 수 있습니다. 이 프로젝트는 프롬프트와 파서를 하나의 계약처럼 사용해 출력 범위를 편집 블록으로 제한합니다.</p>
+
+  <h3>왜 모델에게 unified diff를 직접 요구하지 않는가</h3>
+  <ul>
+    <li>diff의 줄번호와 hunk 위치는 원본 파일 상태에 민감합니다.</li>
+    <li>작은 모델은 <code>@@ -42,7 +42,7 @@</code> 같은 메타데이터를 정확히 계산하는 데 토큰과 능력을 낭비합니다.</li>
+    <li>모델이 diff 문법을 지켰더라도 원본에 없는 코드를 기준으로 수정할 수 있습니다.</li>
+  </ul>
+  <p>그래서 모델은 “어떤 기존 문자열을 어떤 문자열로 바꿀지”만 말하고, 정확한 unified diff는 서버가 실제 원본을 읽어 만듭니다.</p>
+
+  <h3>출력 제한은 프롬프트 + 정규식 파서 + 원본 검증으로 구성된다 <span class="badge">현재 구현</span></h3>
+  <div class="flow">1. 프롬프트에서 허용 형식을 명시
+2. 모델 응답에서 @@@FILE / SEARCH / REPLACE / END 블록만 정규식으로 추출
+3. FILE을 CodebaseAdapter로 읽음
+4. SEARCH가 원본 문자열에 정확히 존재하는지 검사
+5. 존재할 때만 첫 번째 일치 지점을 REPLACE로 치환
+6. 원본과 변경본을 difflib로 비교해 unified diff 생성</div>
+
+  <div class="example"><div class="title">프롬프트가 모델에 요구하는 편집 계약</div><div class="body"><pre><code>@@@FILE: tax/IncomeTaxCalculator.java
+@@@SEARCH
+private static final long CHILD_CREDIT = 150000L;
+@@@REPLACE
+private static final long CHILD_CREDIT = 250000L;
+@@@END</code></pre></div></div>
+  <p>설명 문장은 허용하지 않고, 편집이 여러 개라면 이 블록을 반복하도록 합니다. 신규 코드를 추가할 때도 위치를 임의로 말하지 않고, 실제로 존재하는 주변 줄을 SEARCH에 포함한 뒤 REPLACE에 “기존 줄 + 신규 줄”을 넣습니다.</p>
+
+  <h3>원본 문자열을 앵커로 사용한다는 의미</h3>
+  <p><strong>앵커(anchor)</strong>는 수정 위치를 찾기 위한 기준점입니다. 이 프로젝트에서는 줄번호가 아니라 <code>SEARCH</code> 블록의 정확한 문자열이 앵커입니다.</p>
+  <div class="grid2">
+    <article class="card blue"><h4>줄번호 방식</h4><p>“42번째 줄을 바꾼다.”</p><p>다른 개발자가 위에 주석 한 줄만 추가해도 실제 대상은 43번째 줄이 됩니다. 모델이 줄번호를 계산해야 합니다.</p></article>
+    <article class="card green"><h4>문자열 앵커 방식</h4><p>“원본에 정확히 이 코드가 있는 위치를 바꾼다.”</p><p>위쪽 줄 수가 달라져도 문자열이 그대로 있으면 위치를 찾을 수 있습니다. 반대로 원본과 다르면 안전하게 실패합니다.</p></article>
+  </div>
+  <div class="formula">if SEARCH is not empty and SEARCH in original_file:
+    changed_file = original_file.replace(SEARCH, REPLACE, 1)
+else:
+    실패로 기록하고 diff에 반영하지 않음</div>
+  <p><code>replace(..., 1)</code>로 첫 번째 일치만 바꾸므로 동일 문자열이 여러 곳에 있을 때 무차별 변경을 피합니다. 더 안전하게 하려면 SEARCH에 메서드명이나 주변 문맥을 포함해 유일하게 만들어야 합니다.</p>
+
+  <h3>앵커가 맞지 않으면 어떻게 하는가</h3>
+  <p>소형 모델은 제공된 코드를 그대로 복사하라는 지시를 받아도 공백, 주석, 변수명을 조금 바꿔 쓸 수 있습니다. 이 경우 첫 시도는 적용하지 않습니다.</p>
+  <ol>
+    <li>실패한 SEARCH에서 가장 식별력 있는 긴 줄을 고릅니다.</li>
+    <li>실제 원본의 각 줄과 문자열 유사도를 비교해 가장 비슷한 위치를 찾습니다.</li>
+    <li>그 위치의 앞뒤 25줄을 실제 원본 발췌로 만듭니다.</li>
+    <li>모델에 실패한 SEARCH, 의도한 REPLACE, 실제 발췌를 함께 제공하고 “발췌에서 그대로 복사하라”고 요청합니다.</li>
+    <li>최대 2회까지 다시 파싱하고 원본과 대조합니다.</li>
+  </ol>
+  <div class="note"><strong>중요:</strong> 재시도는 틀린 앵커를 억지로 fuzzy 적용하는 것이 아닙니다. fuzzy matching은 모델에게 보여줄 실제 주변 코드를 찾는 데만 사용합니다. 최종 적용 조건은 여전히 SEARCH의 정확 일치입니다.</div>
+
+  <h3>이 방식으로 막을 수 있는 것과 없는 것</h3>
+  <table><thead><tr><th>막을 수 있는 오류</th><th>이 방식만으로 막을 수 없는 오류</th></tr></thead><tbody>
+    <tr><td>존재하지 않는 파일 수정</td><td>존재하는 파일의 잘못된 업무 로직 수정</td></tr>
+    <tr><td>원본에 없는 코드를 기준으로 한 diff</td><td>법령 자체를 잘못 해석한 경우</td></tr>
+    <tr><td>공백·변수명 복사 오류</td><td>수정해야 할 다른 파일을 누락한 경우</td></tr>
+    <tr><td>모델이 만든 잘못된 diff 줄번호</td><td>문법은 맞지만 계산 결과가 틀린 경우</td></tr>
+  </tbody></table>
+  <p>그래서 다음 단계에 스크래치 <code>git apply</code>, 골든 테스트, 사람 승인이 필요합니다. 앵커는 모델의 <strong>위치 지정 오류</strong>를 줄이는 장치이지 업무 정확성 보증 장치가 아닙니다.</p>
+  <p class="source">근거 코드: <code>app/llm/common.py</code>의 propose_prompt, parse_edits, build_unified_diff, propose_and_build</p>
+</section>
+
+<section id="evaluation">
+  <h2><span class="num">3</span>일반적인 LLM 성능 지표 대신 무엇을 볼 것인가</h2>
+  <p class="intro">범용 LLM 지표가 의미 없는 것은 아닙니다. 다만 이 프로젝트의 최종 질문은 “모델이 언어를 얼마나 잘 생성하는가”가 아니라 “법령 변경을 놓치지 않고, 관련 코드를 찾아, 검토 가능한 patch를 만드는가”입니다. 따라서 범용 지표만으로 프로젝트 가치를 판단할 수 없습니다.</p>
+
+  <h3>보편적으로 사용하는 LLM 평가 방식</h3>
+  <table><thead><tr><th>평가 방식</th><th>무엇을 보는가</th><th>이 프로젝트에서 부족한 이유</th></tr></thead><tbody>
+    <tr><td>Perplexity</td><td>다음 토큰을 얼마나 잘 예측하는지</td><td>언어 모델 자체 비교에는 유용하지만 정답 파일 탐색이나 patch 적용 가능성을 말해주지 않습니다.</td></tr>
+    <tr><td>범용 벤치마크 정확도</td><td>지식·추론·코딩 문제 정답률</td><td>모델 후보를 고르는 참고 자료일 뿐, 사내 레거시 코드와 세법 용어에서의 성능을 보장하지 않습니다.</td></tr>
+    <tr><td>BLEU / ROUGE</td><td>생성문과 정답문의 단어·구문 겹침</td><td>동일 의미의 다른 표현을 낮게 평가하고, 요약 문체가 달라도 업무 사실이 맞을 수 있습니다.</td></tr>
+    <tr><td>BERTScore / 의미 유사도</td><td>정답과 생성문의 의미적 가까움</td><td>요약 평가 보조로는 가능하지만, 없는 파일 생성이나 잘못된 숫자 변경을 직접 잡지 못합니다.</td></tr>
+    <tr><td>LLM-as-a-Judge</td><td>다른 대형 모델이 품질을 채점</td><td>비용·재현성·외부 전송 문제가 있고 judge도 틀릴 수 있습니다. 로컬 보안 목표와 충돌할 수 있습니다.</td></tr>
+    <tr><td>Code pass@k</td><td>k개 코드 생성 중 테스트를 통과한 비율</td><td>가까운 개념이지만 이 프로젝트는 검색, 기존 코드 최소 수정, 불필요 파일 방지, 사람 승인까지 봐야 합니다.</td></tr>
+  </tbody></table>
+
+  <h3>왜 이 프로젝트에서는 파이프라인 지표가 필요한가</h3>
+  <div class="example"><div class="title">요약이 훌륭해도 실패할 수 있다</div><div class="body"><p>모델이 법령을 정확히 요약했지만 RAG가 잘못된 파일을 전달하면 patch는 실패합니다. 반대로 요약 문장은 평범해도 상수 매칭이 정확한 파일을 찾고 patch가 골든 테스트를 통과하면 실제 업무에는 유용합니다.</p></div></div>
+  <p>따라서 전체를 하나의 “LLM 점수”로 합치지 않고, <strong>분류 → 검색 → 생성 → 적용 → 검증 → 사람</strong> 단계별로 측정합니다. 그래야 낮은 성능의 원인이 모델인지 검색인지 데이터인지 구분할 수 있습니다.</p>
+
+  <h3>프로젝트에서 볼 지표와 계산 방식 <span class="badge plan">목표 설계</span></h3>
+  <div class="metric"><div class="name">Case Hit@K</div><div>상위 K개 후보에 정답 파일이 하나라도 있으면 1, 없으면 0</div><div class="why">담당자가 확인할 후보 안에 정답이 들어왔는지 봅니다.</div></div>
+  <div class="metric"><div class="name">File Recall@K</div><div>top-K에서 발견한 정답 파일 수 ÷ 전체 정답 파일 수</div><div class="why">Service는 찾았지만 Mapper·테스트를 누락한 경우를 드러냅니다.</div></div>
+  <div class="metric"><div class="name">Precision@K</div><div>top-K 후보 중 정답 파일 수 ÷ 실제 반환 후보 수</div><div class="why">정답을 포함하더라도 무관 파일이 너무 많아 검토 부담이 커지는지 봅니다.</div></div>
+  <div class="metric"><div class="name">MRR</div><div>각 case의 첫 정답 순위 역수 평균. 1위=1, 2위=0.5, 미검색=0</div><div class="why">정답이 단순 포함되는지보다 얼마나 위에 노출되는지 봅니다.</div></div>
+  <div class="metric"><div class="name">Provider 기여도</div><div>정답 후보가 RAG·사전·상수 중 어디에서 왔는지 기록</div><div class="why">각 보완 장치가 실제로 어떤 변경 유형에 도움이 되는지 ablation으로 비교합니다.</div></div>
+  <div class="metric"><div class="name">형식 준수율</div><div>요구한 JSON 또는 편집 블록을 파싱할 수 있었던 응답 비율</div><div class="why">모델이 인터페이스 계약을 지키는지 봅니다. 업무 정확도와는 별도 지표입니다.</div></div>
+  <div class="metric"><div class="name">Anchor 1차 성공률</div><div>첫 응답 SEARCH가 원본에 정확히 존재한 편집 비율</div><div class="why">모델의 코드 복사·위치 지정 안정성을 봅니다.</div></div>
+  <div class="metric"><div class="name">Anchor 재시도 성공률</div><div>1차 실패 중 원본 발췌 재시도로 성공한 비율</div><div class="why">재시도 구조가 실제로 소형 모델 약점을 보완하는지 확인합니다.</div></div>
+  <div class="metric"><div class="name">Expected replacement 정확도</div><div>정답 데이터의 before→after 변경을 실제 patch가 포함한 비율</div><div class="why">diff가 적용만 되는 것이 아니라 필요한 값을 올바르게 바꿨는지 봅니다.</div></div>
+  <div class="metric"><div class="name">Unnecessary file rate</div><div>patch에 포함된 파일 중 정답 범위 밖 파일 비율</div><div class="why">환각이나 과도한 수정 범위를 직접 측정합니다.</div></div>
+  <div class="metric"><div class="name">git apply 성공률</div><div>생성 diff가 스크래치 저장소에 적용된 case 비율</div><div class="why">patch 형식과 원본 정합성을 확인합니다.</div></div>
+  <div class="metric"><div class="name">Golden pass rate</div><div>patch 적용 후 지정된 회귀 테스트를 통과한 case 비율</div><div class="why">“적용 가능”과 “계산 결과가 맞음”을 구분합니다.</div></div>
+  <div class="metric"><div class="name">무수정 승인율</div><div>사람이 patch를 수정하지 않고 승인한 비율</div><div class="why">최종적으로 초안이 실무 시간을 줄였는지 봅니다.</div></div>
+  <div class="metric"><div class="name">검토 시간</div><div>후보 확인부터 승인·거절까지 걸린 시간</div><div class="why">자동화율이 낮아도 기존 수작업보다 빨라졌는지 평가합니다.</div></div>
+  <div class="metric"><div class="name">운영 지표</div><div>단계별 p50/p95 지연, tokens/s, timeout, 재시도 수</div><div class="why">현재 PC에서 실용적인지, 14B·GPU·vLLM 전환이 필요한지 판단합니다.</div></div>
+
+  <h3>자유형 요약은 어떻게 평가할 것인가</h3>
+  <p>요약 전체 문장을 정답 문장과 비교하지 않습니다. 대신 case마다 반드시 포함해야 하는 구조화 사실과 포함하면 안 되는 주장을 정의합니다.</p>
+  <div class="example"><div class="title">자녀세액공제 평가 case 예</div><div class="body"><pre><code>required_facts:
+  - old_value: 150000
+  - new_value: 250000
+  - impact_keyword: 자녀세액공제
+
+forbidden_claims:
+  - "시행일이 2025년이다"</code></pre></div></div>
+  <p>숫자 정규화, 필수 키워드, JSON 필드 존재, 금지 주장 포함 여부는 일반 코드로 검사할 수 있습니다. 자유로운 문체를 벌점 주지 않으면서 업무 사실 오류를 측정할 수 있습니다.</p>
+
+  <h3>평가 실행 방식</h3>
+  <ol>
+    <li>법령 입력, 정답 파일·심볼, 기대 before→after, 금지 파일, 골든 명령을 YAML case로 정의합니다.</li>
+    <li>동일한 repository fixture 또는 과거 commit에서 실행합니다.</li>
+    <li>동일 case에 대해 <code>RAG only</code>, <code>+용어 사전</code>, <code>+상수</code>, <code>+검증 매핑</code>을 비교합니다.</li>
+    <li>모델을 비교할 때는 검색 후보·프롬프트·컨텍스트 등 다른 조건을 고정합니다.</li>
+    <li>각 실행의 모델, prompt version, commit, 설정, 결과 artifact를 run_id로 저장합니다.</li>
+    <li>수치 변경, 조건 변경, 구조 변경을 별도로 집계합니다.</li>
+  </ol>
+  <div class="callout">평가의 최종 질문은 “이 모델이 좋은가?”가 아니라 “어느 변경 유형에서, 어느 단계까지, 사람에게 실질적인 도움을 주는가?”입니다.</div>
+  <p class="source">근거 사양: <code>docs/specifications/EVALUATION_SPEC.md</code>, <code>HISTORICAL_REPLAY_SPEC.md</code>, <code>AUDIT_AND_TRACEABILITY_SPEC.md</code></p>
+</section>
+
+<section id="learning">
+  <h2><span class="num">4</span>데이터가 쌓이면 무엇을 어떻게 개선하는가</h2>
+  <p class="intro">보편적으로 “데이터가 쌓이면 파인튜닝”을 떠올릴 수 있습니다. 하지만 이 업무에서는 코드 위치와 법령이 계속 바뀌므로, 처음부터 모델 파라미터에 지식을 넣는 것보다 검증된 매핑과 검색 랭킹을 개선하는 편이 비용이 낮고 수정·추적이 쉽습니다.</p>
+
+  <h3>첫 번째 자산: 검증된 매핑이란 무엇인가</h3>
+  <p>Mapping은 단순히 “이 파일이 비슷해 보인다”는 검색 결과가 아닙니다. 법령 조문과 코드 위치의 연결을 저장하는 레코드입니다.</p>
+  <div class="formula">Mapping 예
+law/article : 소득세법 제59조의2
+change_type : value_change
+repository  : eHR
+path        : src/.../IncomeTaxService.java
+symbol      : calculateChildTaxCredit
+confidence  : 0.92
+verified    : true</div>
+  <p>현재는 담당자가 후보를 확인해 <code>verified=true</code>로 표시하고, apply 단계에서 검증 매핑이 하나라도 있으면 confidence 후보보다 먼저 사용합니다. 즉 다음 patch 생성 때 다시 RAG 결과를 무조건 신뢰하지 않고 사람이 확인한 파일을 모델 입력에 우선 포함합니다.</p>
+
+  <h3>V2에서는 검증 매핑을 어떻게 안전하게 재사용하는가 <span class="badge plan">목표 설계</span></h3>
+  <p>“한 번 검증됐으니 영원히 정답”으로 사용하면 위험합니다. 코드 이동과 업무 변경을 고려해 다음 정보와 이력을 저장합니다.</p>
+  <div class="grid2">
+    <article class="card blue"><h4>검증 시점 정보</h4><ul><li>repository commit</li><li>relative path와 file hash</li><li>symbol/anchor snippet hash</li><li>검증자와 검증 이유</li><li>법령·조문·변경 유형</li></ul></article>
+    <article class="card"><h4>결정 이력</h4><ul><li>VERIFIED: 관련 위치로 확인</li><li>REJECTED: 잘못된 후보</li><li>STALE: 파일 이동·삭제·내용 변경</li><li>REVOKED: 이전 검증 취소</li></ul><p>삭제하지 않고 append-only로 남깁니다.</p></article>
+  </div>
+
+  <h4>새 변경이 들어왔을 때 적용 순서</h4>
+  <div class="flow">새 법령 변경 수집
+   ↓
+stable law/article + change_type으로 과거 Mapping 조회
+   ↓
+현재 commit에서 path · symbol · hash 유효성 검사
+   ├─ exact valid verified       → 강한 가점
+   ├─ compatible verified        → 중간 가점
+   ├─ golden/historical confirmed→ 추가 가점
+   ├─ rejected same context      → 감점
+   └─ stale                      → 가점 제거 + 경고
+   ↓
+RAG · 사전 · 상수 후보와 함께 재정렬
+   ↓
+상위 후보만 모델에 제공</div>
+  <p>예를 들어 지난해 “소득세법 제59조의2 금액 변경”이 <code>calculateChildTaxCredit</code>와 관련 있다고 검증됐고 현재 symbol이 여전히 존재하면, 올해 같은 조문의 금액 변경에서 이 위치에 가점을 줍니다. 단, 같은 파일이 다른 법령에서 거절됐다는 이유로 전역 차단하지 않고 법령·조문·변경 유형 문맥이 같은 경우에만 강하게 반영합니다.</p>
+  <div class="note"><strong>매핑이 주는 개선:</strong> 모델이 더 똑똑해지는 것이 아니라, 모델에게 주는 입력이 더 정확해집니다. 그 결과 정답 후보 순위가 올라가고, 입력 파일 수와 검토 시간이 줄며, 잘못된 파일 편집 가능성이 낮아집니다.</div>
+
+  <h3>왜 파인튜닝보다 매핑과 검색 개선이 먼저인가</h3>
+  <table><thead><tr><th>검토 항목</th><th>검증 매핑·검색 개선</th><th>파인튜닝</th></tr></thead><tbody>
+    <tr><td>새 코드 반영</td><td>재인덱싱·hash 검증으로 즉시 반영</td><td>학습 당시 코드에 고정되며 재학습 필요</td></tr>
+    <tr><td>오류 수정</td><td>매핑 revoke/reject로 특정 근거 수정 가능</td><td>어떤 학습 샘플이 어떤 출력을 만들었는지 추적 어려움</td></tr>
+    <tr><td>근거 제시</td><td>어떤 조문·파일·검증 이력 때문에 후보가 올랐는지 설명 가능</td><td>모델 파라미터 내부 지식은 설명이 어려움</td></tr>
+    <tr><td>필요 데이터</td><td>조문↔파일 검증 몇 건부터 활용 가능</td><td>일관된 입력·정답 편집쌍이 충분히 필요</td></tr>
+    <tr><td>비용</td><td>DB·검색 로직 중심</td><td>학습 GPU, 데이터 정제, 모델 버전 관리 필요</td></tr>
+  </tbody></table>
+  <p>또한 fine-tuning은 최신 저장소의 정확한 파일 내용을 기억시키는 방법으로 적합하지 않습니다. 자주 바뀌는 사실은 RAG로 제공하고, 파인튜닝은 반복되는 행동 패턴이나 출력 형식을 학습시키는 데 더 적합합니다.</p>
+
+  <h3>데이터가 쌓였을 때의 개선 우선순위</h3>
+  <div class="grid4">
+    <article class="card blue"><h4>1. 검증 매핑</h4><p>정답 path/symbol을 우선하고 stale을 검사합니다. 가장 적은 데이터로 즉시 활용할 수 있습니다.</p></article>
+    <article class="card"><h4>2. Reranker</h4><p>RAG·사전·상수·검증 이력 후보의 순서를 학습하거나 규칙 점수를 조정합니다.</p></article>
+    <article class="card"><h4>3. Prompt/Few-shot</h4><p>승인된 좋은 편집과 대표 실패를 예시로 제공해 출력 형식과 수정 범위를 안정화합니다.</p></article>
+    <article class="card amber"><h4>4. 선택적 튜닝</h4><p>충분한 고품질 데이터가 확인된 후 LoRA/SFT 등을 검토합니다.</p></article>
+  </div>
+
+  <h3>매핑만으로 부족할 때 사용할 차선책</h3>
+  <ol>
+    <li><strong>검색 reranker:</strong> 초기 후보를 넓게 수집한 뒤 법령·조문·코드 쌍을 다시 점수화합니다. 전체 생성 모델을 튜닝하는 것보다 작고 평가가 쉽습니다.</li>
+    <li><strong>Few-shot 예시:</strong> 같은 변경 유형의 승인된 SEARCH/REPLACE 예시를 프롬프트에 1~3개 제공합니다. 모델 재학습 없이 빠르게 검증할 수 있습니다.</li>
+    <li><strong>모델 라우팅:</strong> 요약·수치 변경은 4B/8B, 조건·다중 파일 변경은 14B 또는 GPU 서버처럼 난이도별 모델을 사용합니다.</li>
+    <li><strong>구조화 출력 강화:</strong> JSON schema, grammar-constrained decoding을 지원하는 추론 서버로 형식 이탈을 줄입니다.</li>
+    <li><strong>외부 대형 모델의 제한적 사용:</strong> 보안 승인이 가능한 비민감 fixture 또는 익명화된 평가에서만 비교 기준으로 사용합니다.</li>
+  </ol>
+
+  <h3>파인튜닝은 언제 검토하는가</h3>
+  <p>다음 조건이 충족될 때 선택적으로 검토합니다.</p>
+  <ul>
+    <li>승인된 법령 입력 → 관련 코드 → 최종 patch 쌍이 충분히 누적되어 있습니다.</li>
+    <li>거절·수정 이유가 기록되어 어떤 행동을 학습시킬지 정의할 수 있습니다.</li>
+    <li>기본 모델 + RAG + reranker + few-shot 대비 개선 여부를 측정할 고정 평가셋이 있습니다.</li>
+    <li>데이터에 내부 코드와 개인정보가 섞이지 않도록 학습·배포 경계를 통제할 수 있습니다.</li>
+  </ul>
+  <p>튜닝 대상도 “세법 지식을 전부 암기”가 아니라 다음처럼 좁게 잡는 것이 현실적입니다.</p>
+  <div class="grid3">
+    <article class="card green"><h4>출력 계약 준수</h4><p>설명 없이 정확한 편집 블록을 생성하고 SEARCH를 원본에서 복사하는 행동</p></article>
+    <article class="card green"><h4>변경 유형별 편집 습관</h4><p>수치 변경은 기존 상수만 최소 수정하고 불필요한 구조 변경을 피하는 행동</p></article>
+    <article class="card green"><h4>사내 코드 패턴</h4><p>VO·Mapper·Service가 함께 바뀌는 반복적인 구성 패턴을 따르는 행동</p></article>
+  </div>
+  <p>학습 방법은 전체 파라미터 튜닝보다 LoRA/QLoRA 같은 경량 SFT가 현실적이지만, 실제 선택은 데이터 규모와 장비에서 8B·14B 모델별로 평가해야 합니다. 튜닝 후에도 RAG, 앵커 검증, 골든 테스트, 사람 승인 구조는 유지합니다.</p>
+
+  <h3>개선 효과는 어떻게 증명하는가</h3>
+  <p>데이터를 추가할 때마다 동일 평가셋에서 단계별 ablation을 실행합니다.</p>
+  <div class="formula">Baseline: RAG only
+Experiment A: RAG + 용어 사전 + 상수
+Experiment B: A + verified reranking
+Experiment C: B + few-shot
+Experiment D: C + reranker 또는 fine-tuned model
+
+비교: Recall@K, MRR, unnecessary file rate,
+      anchor success, git apply, golden pass,
+      무수정 승인율, 검토 시간, latency</div>
+  <p>이 비교를 통해 매핑이 실제로 검색을 개선했는지, fine-tuning이 단순히 문장을 더 그럴듯하게 만든 것이 아니라 patch 품질과 업무 시간을 개선했는지 확인합니다.</p>
+  <div class="callout">데이터 활용의 순서: 검증된 위치를 재사용한다 → 후보 순위를 개선한다 → 좋은 예시를 프롬프트에 넣는다 → 그래도 반복적인 한계가 남고 데이터가 충분할 때만 파인튜닝한다.</div>
+  <p class="source">근거 사양: <code>docs/specifications/VERIFIED_MAPPING_SPEC.md</code>, <code>RETRIEVAL_EXPERIMENT_SPEC.md</code>, <code>EVALUATION_SPEC.md</code></p>
+</section>
+</main>
+
+<footer><div class="wrap">현재 저장소의 구현과 V2 사양을 기준으로 작성했습니다. 최종 성능 수치는 전체 기능 구현 후 고정 평가셋과 historical replay로 검증합니다.</div></footer>
+</body>
+</html>

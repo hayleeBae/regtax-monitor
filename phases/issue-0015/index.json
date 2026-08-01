@@ -1,0 +1,41 @@
+{
+  "project": "regtax-monitor",
+  "phase": "issue-0015",
+  "steps": [
+    {
+      "step": 0,
+      "name": "domain-decisions",
+      "status": "completed",
+      "started_at": "2026-07-31T23:41:57+0900",
+      "summary": "app/domain/mappings/{__init__,decisions}.py 신규 — MappingDecisionType/VerifiedReason/RejectedReason/StaleReason enum, frozen MappingDecisionRecord(mapping_id 양수·decision 타입 검증), allowed_reason_codes(REVOKED는 other만), resolve_state(created_at 시간순 stable fold: 빈 이력 None, VERIFIED→STALE→VERIFIED=VERIFIED, REVOKED는 REVOKED 반환하고 후보 미삭제), check_stale(file_missing/symbol_missing/modified_but_valid/None) export. tests/test_mapping_decisions.py 18케이스 추가, verify.sh full 224 passed.",
+      "completed_at": "2026-07-31T23:44:25+0900"
+    },
+    {
+      "step": 1,
+      "name": "db-model-migration",
+      "status": "completed",
+      "started_at": "2026-07-31T23:44:25+0900",
+      "summary": "app/db/models.py에 append-only MappingDecision 테이블 추가(mapping_id FK+index, decision/reason_code/reason_text, repository_commit/path_hash/symbol_hash nullable 스냅샷, actor 기본 owner, created_at). Mapping.verified 컬럼은 compatibility cache로 그대로 보존. database._migrate()는 기존 ADD COLUMN 보정 후 _backfill_legacy_mapping_decisions() 호출 — verified=1이면서 decision 이력이 없는 매핑에만 INSERT...SELECT WHERE NOT EXISTS로 legacy 이벤트(verified/other/system/'legacy verified backfill') 1건 삽입, mapping 또는 mapping_decision 테이블 없으면 skip. tests/test_mapping_decision_migration.py 4케이스(verified만 backfill·3회 반복 idempotency·기존 decision 보유 시 skip·Mapping 행 보존), verify.sh full 228 passed.",
+      "completed_at": "2026-07-31T23:46:30+0900"
+    },
+    {
+      "step": 2,
+      "name": "repository",
+      "status": "completed",
+      "started_at": "2026-08-01T11:20:27+0900",
+      "summary": "app/mappings/{__init__,repository.py} 신규 — SqlAlchemyMappingDecisionRepository(session): append(record)→행 추가 후 새 id 반환(created_at None이면 utcnow), list_for_mapping(created_at, id 순 정렬 = resolve_state 시간순 규칙과 일치), current_state=list_for_mapping+resolve_state 재사용(상태 로직 미복제), update(*args,**kwargs)는 NotImplementedError('mapping decisions are append-only')로 append-only 강제 — 수정/삭제 메서드 없음. datetime은 audit repository와 동일하게 DB naive UTC 저장/record aware UTC 반환(_naive_utc/_aware_utc). tests/test_mapping_decision_repository.py 6케이스(시간순 이력·created_at 자동 채움·VERIFIED→REVOKED·STALE 후 재검증·mapping_id 격리·update NotImplementedError), verify.sh full 234 passed.",
+      "completed_at": "2026-08-01T11:22:37+0900"
+    },
+    {
+      "step": 3,
+      "name": "api-endpoints",
+      "status": "completed",
+      "started_at": "2026-08-01T11:22:38+0900",
+      "summary": "app/main.py: PATCH /mappings/{id}/verify는 route·응답 키(mapping_id/path/symbol/verified) 그대로 두고 optional actor·reason_code 쿼리만 추가 — true→VERIFIED, false→REVOKED 이벤트 append. 신규 POST/GET /mappings/{id}/decisions, GET /mappings/{id}/state 추가(decision·reason_code는 allowed_reason_codes allowlist 검증, 불일치·미지의 decision은 422, 매핑 없으면 404, 응답은 해시/사유만 — 코드 본문 없음). 공통 _record_mapping_decision()이 repo.append() 직전에 Mapping.verified=resolve_state(...)==VERIFIED를 session에 올려 이벤트 insert와 compat cache 갱신을 한 commit으로 처리(ADR-008). tests/test_mapping_decision_api.py 12케이스(verify 회귀·revoke·apply/verified_only 필터 회귀·rejected 이력/state·stale 후 재검증·invalid reason_code 4종·404·매핑 간 이력 격리), verify.sh full 246 passed.",
+      "completed_at": "2026-08-01T11:26:39+0900"
+    }
+  ],
+  "created_at": "2026-07-31T23:41:57+0900",
+  "total_cost_usd": 4.153,
+  "completed_at": "2026-08-01T11:26:39+0900"
+}
