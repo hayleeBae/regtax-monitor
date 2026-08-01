@@ -40,6 +40,11 @@
 **이유**: boolean 하나로는 "누가·왜·어느 commit에서" 검증했는지 추적이 안 되고, #0016 리랭킹(검증 boost·거절 penalty·stale 무효화)의 근거를 만들 수 없다. 기존 `apply`/`get_mappings`가 `verified` 컬럼에 의존하므로 컬럼을 삭제하지 않고 cache로 보존해 회귀를 막는다.
 **트레이드오프**: 검증 상태가 컬럼과 이벤트 두 곳에 존재(cache 동기화 책임). 인증 레이어가 없어 `actor`는 자기신고값(단일 담당자 도구로 수용, 기본 'owner'). 유효성 스냅샷(commit/path_hash/symbol_hash)은 #0015에서 nullable best-effort — 코드 본문은 저장하지 않고 해시만.
 
+### ADR-009: 검증 이력 기반 검색 재정렬은 후처리 rerank 단계로 (Issue #0016)
+**결정**: #0015의 결정 이력(verified/rejected/stale/golden/historical/legacy)을 검색 점수에 반영하되, 기존 source 가중치(`_merge_candidates`)에 섞지 않고 merge·rank **뒤에 별도 rerank 단계**로 delta를 적용해 재정렬한다. 순수 도메인(`app/domain/mappings/reranking.py`: `classify_reuse`, `rerank_delta`, `RERANK_VERSION`)과 DB lookup(`app/mappings/reranking_lookup.py`)을 분리한다. boost/penalty는 후보 위치의 이력을 쿼리(article_id + change_type)와 대조해 **exact/compatible/unrelated로 문맥 게이팅**한 뒤 exact·compatible에만 적용한다(스펙 §9·§11). 기본 활성(config `verified_reranking_enabled=True`, flag로 off 가능), 버전은 `SCORING_VERSION`을 유지하고 응답에 별도 `rerank_version`을 노출한다.
+**이유**: 검증 매핑 자산을 검색 품질로 환원하는 것이 이 시스템의 핵심 가치(ADR-005)지만, 매핑을 무관 개정에 과적합하면 "개정을 놓침"보다 나쁜 오탐을 만든다 — 문맥 게이팅으로 다른 법령의 거절이 영구 차단이 되지 않게 한다. 후처리 분리는 ablation으로 전후 성능을 수치 입증(로드맵 원칙: 측정 먼저)하고 §1 scoring을 안정적으로 유지한다.
+**트레이드오프**: rerank 단계가 검색 지연에 소량 추가. stale 신호가 merge(-0.50, content drift)와 rerank(결정 STALE)에서 겹칠 수 있어 **총 penalty를 -0.50으로 cap**해 이중 계산을 막는다. rerank가 켜지면 순위가 바뀌므로 회귀는 flag off·reranker 미주입 시 동일 결과로 방어하고 ablation으로 검증한다.
+
 ### ADR-007: 도메인 레지스트리(domains.json)로 수집 확장
 **결정**: 수집 대상 법령·고시 검색어를 코드가 아니라 `domains.json`(tax/hr)에서 관리. 파일 없으면 기존 세법 5종 폴백.
 **이유**: 연말정산(세법)을 넘어 인사 법령 전반으로 확장 + 도메인별 담당자 라우팅 기반. 법률만 수집하면 올해 개정(시행령·시행규칙 10건, 법률 0건)을 전부 놓쳤을 상황 — 3계층 수집이 필수임을 실검증.
