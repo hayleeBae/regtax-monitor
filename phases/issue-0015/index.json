@@ -21,10 +21,10 @@
     {
       "step": 2,
       "name": "repository",
-      "status": "error",
-      "started_at": "2026-07-31T23:46:30+0900",
-      "error_message": "[3회 시도 후 실패] Step did not update status",
-      "failed_at": "2026-07-31T23:46:42+0900"
+      "status": "completed",
+      "started_at": "2026-08-01T11:20:27+0900",
+      "summary": "app/mappings/{__init__,repository.py} 신규 — SqlAlchemyMappingDecisionRepository(session): append(record)→행 추가 후 새 id 반환(created_at None이면 utcnow), list_for_mapping(created_at, id 순 정렬 = resolve_state 시간순 규칙과 일치), current_state=list_for_mapping+resolve_state 재사용(상태 로직 미복제), update(*args,**kwargs)는 NotImplementedError('mapping decisions are append-only')로 append-only 강제 — 수정/삭제 메서드 없음. datetime은 audit repository와 동일하게 DB naive UTC 저장/record aware UTC 반환(_naive_utc/_aware_utc). tests/test_mapping_decision_repository.py 6케이스(시간순 이력·created_at 자동 채움·VERIFIED→REVOKED·STALE 후 재검증·mapping_id 격리·update NotImplementedError), verify.sh full 234 passed.",
+      "completed_at": "2026-08-01T11:22:17+0900"
     },
     {
       "step": 3,
