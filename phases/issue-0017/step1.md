@@ -52,7 +52,7 @@ fixture YAML은 이 이슈의 **유일한 외부 입력 지점**이다. 아래 �
 #### (3) `golden_command` 실행파일 allowlist
 
 - 값이 있으면 `shlex.split()`으로 토큰화하고 **첫 토큰**을 allowlist와 대조한다. 파싱 실패(따옴표 불균형 등)도 오류다.
-- allowlist는 모듈 상수로 명시하고 최소한 `mvn`, `gradle`, `./gradlew`, `pytest`, `bash`를 포함한다.
+- allowlist는 모듈 상수로 명시하고 최소한 `mvn`, `gradle`, `./gradlew`, `pytest`를 포함한다. **범용 셸(`bash`/`sh`/`zsh`)은 넣지 마라** — 허용 도구는 replay 대상 repo 안의 스크립트를 실행하지만 `bash -c "<문자열>"`은 fixture YAML에 적힌 문자열을 그대로 실행해 allowlist를 무의미하게 만든다.
 - 첫 토큰이 절대경로거나 `/`를 포함하면 거부한다(`./gradlew`는 예외로 허용).
 - 이유(주석으로 남겨라): `config.golden_test_cmd`는 운영자가 `.env`에 직접 넣는 값이지만 fixture YAML은 **파일로 주고받을 수 있어 신뢰 수준이 다르다.** 입구에서 막는다(ADR-010).
 - 이 step은 명령을 **실행하지 않는다.** 검증만 한다.

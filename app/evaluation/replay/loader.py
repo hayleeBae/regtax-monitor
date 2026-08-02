@@ -53,14 +53,21 @@ REVISION_PATTERN = re.compile(r"^[A-Za-z0-9._/-]+$")
 """git revision 허용 문자 집합 — SHA·태그명(`case1/base`)까지만 통과한다(ADR-010)."""
 
 GOLDEN_COMMAND_ALLOWLIST: frozenset[str] = frozenset(
-    {"mvn", "gradle", "./gradlew", "pytest", "bash"}
+    {"mvn", "gradle", "./gradlew", "pytest"}
 )
 """`golden_command` 첫 토큰(실행파일)로 허용하는 값.
 
 `config.golden_test_cmd` 는 운영자가 `.env` 에 직접 넣는 값이지만 fixture YAML 은
 **파일로 주고받을 수 있어 신뢰 수준이 다르다** — 같은 명령이라도 출처가 다르므로
-입구에서 실행파일을 대조한다(ADR-010). 이 step 은 명령을 실행하지 않고 검증만
+입구에서 실행파일을 대조한다(ADR-010). 이 로더는 명령을 실행하지 않고 검증만
 한다(실행은 #0018, 그때도 shell 없이 인자 배열로 넘긴다).
+
+**범용 셸(`bash`/`sh`/`zsh`)은 넣지 않는다.** 허용된 빌드·테스트 도구는 *replay 대상
+repo 안의* 빌드 스크립트를 실행하며, 그 repo를 신뢰하는 것은 replay 의 전제다. 반면
+`bash -c "<문자열>"` 은 *fixture YAML 에 적힌 문자열* 을 실행한다 — 신뢰 경계가 다른
+별개 채널이고, allowlist 를 둔 이유 자체를 무력화한다(`bash -c "curl … | sh"` 가
+통과해 버린다). 골든 검증이 셸 스크립트여야 한다면 그 스크립트를 호출하는 도구를
+allowlist 에 명시적으로 추가하라.
 """
 
 

