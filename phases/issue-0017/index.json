@@ -21,7 +21,10 @@
     {
       "step": 2,
       "name": "replay-mock-repos",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-08-02T22:51:57+0900",
+      "summary": "evaluation/fixtures/replay_sources/{case1_value_change,case2_condition_test,case3_unrelated_noise}/{base,answer} 전체 스냅샷 커밋(합성 Java) — case1=상수 1개(CHILD_TAX_CREDIT 150000→250000), case2=조건(monthsWorked<12→<6)+대응 테스트 2파일, case3=코드+무관 README 문서 변경. scripts/build_replay_repos.py 신규(argparse main(argv)->int, --case/--quiet): base 커밋→태그 <case>/base, answer 트리 교체 커밋→태그 <case>/answer. 출력 루트 OUTPUT_ROOT=evaluation/fixtures/replay_repos/ 는 코드 고정(임의 경로 삭제 CLI 옵션 없음), 삭제 전 ensure_within 로 루트 하위·심볼릭링크 검사, git 은 shell=False+timeout 120s 단일 래퍼로만 호출하고 신원은 -c/env 주입(전역 config 미변경), 커밋 날짜 고정으로 재빌드 SHA 동일. .gitignore 에 replay_repos/ 추가. tests/test_replay_repo_builder.py 26건 추가(423 passed).",
+      "completed_at": "2026-08-02T23:05:00+0900"
     },
     {
       "step": 3,
