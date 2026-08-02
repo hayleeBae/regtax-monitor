@@ -89,6 +89,54 @@ def test_feature_flags_skip_disabled_provider() -> None:
     assert response.provider_statuses["constant_match"].status == "disabled"
 
 
+def test_query_context_fields_default_to_none_for_positional_callers() -> None:
+    query = RetrievalQuery("query")
+
+    assert query.article_id is None
+    assert query.change_type is None
+    assert query.domain is None
+    assert query.top_k_per_provider == 8
+
+
+def test_query_context_does_not_change_response_or_query_hash() -> None:
+    """#0016 step 1은 통로만 넓힌다 — 문맥 유무로 결과가 달라지면 안 된다."""
+
+    def _run(query):
+        rag = _Provider(
+            RetrievalSource.RAG,
+            [
+                _candidate(RetrievalSource.RAG, "src/A.java", score=0.9),
+                _candidate(RetrievalSource.RAG, "src/B.java", score=0.7),
+            ],
+        )
+        const = _Provider(
+            RetrievalSource.CONSTANT_MATCH,
+            [_candidate(RetrievalSource.CONSTANT_MATCH, "src/A.java", score=1.0)],
+        )
+        return RetrievalOrchestrator([rag, const]).retrieve(query)
+
+    plain = _run(RetrievalQuery("query"))
+    contextual = _run(
+        RetrievalQuery("query", article_id="법령001:제59조의4", change_type="limit")
+    )
+
+    assert contextual.query_hash == plain.query_hash
+    assert contextual.candidates == plain.candidates
+    assert contextual.scoring_version == plain.scoring_version
+    assert contextual.warnings == plain.warnings
+    # 응답 계약(키 집합)도 그대로다 — duration만 측정마다 달라진다.
+    plain_payload = plain.to_dict()
+    contextual_payload = contextual.to_dict()
+    assert contextual_payload.keys() == plain_payload.keys()
+    for key in plain_payload:
+        if key in ("duration_ms", "provider_statuses"):
+            continue
+        assert contextual_payload[key] == plain_payload[key]
+    assert contextual_payload["provider_statuses"].keys() == (
+        plain_payload["provider_statuses"].keys()
+    )
+
+
 def test_top_k_ranking_and_compatibility_views() -> None:
     rag = _Provider(
         RetrievalSource.RAG,

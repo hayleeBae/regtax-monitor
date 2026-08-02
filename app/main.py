@@ -727,7 +727,10 @@ def map_change(change_id: int, k: int = 5, db: Session = Depends(get_session)) -
 
     article_id = f"{row.law_id}:{row.article_no}"
     service, _adapter = _make_mapping_service(db, article_id)
-    result = service.map(query, top_k=k)
+    # change_type은 레거시 자유 문자열(rate/limit/…)일 수 있고 None일 수도 있다 — 그대로 넘긴다.
+    result = service.map(
+        query, top_k=k, article_id=article_id, change_type=row.change_type
+    )
     audit.record(
         AuditEventType.RETRIEVAL_COMPLETED,
         {
@@ -1056,7 +1059,10 @@ def apply(
         row.law_name, row.article_no, row.ai_summary, row.before_text, row.after_text,
     ]))
     try:
-        policy_candidates = mapping_service.map(query, top_k=5).candidates
+        # map 엔드포인트와 같은 문맥을 넘겨 두 경로가 같은 후보 집합을 보게 한다.
+        policy_candidates = mapping_service.map(
+            query, top_k=5, article_id=article_id, change_type=row.change_type
+        ).candidates
     except Exception:
         policy_candidates = ()
     policy_input = PolicyInput(

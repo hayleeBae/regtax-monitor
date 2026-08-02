@@ -66,13 +66,21 @@ class MappingService:
         query_text: str,
         top_k: int = 5,
         enabled_sources: frozenset[RetrievalSource] | None = None,
+        article_id: str | None = None,
+        change_type: str | None = None,
     ) -> MappingResult:
         config = RetrievalConfig(
             enabled_sources=enabled_sources or RetrievalConfig().enabled_sources,
             final_top_k=top_k,
         )
         response = self.orchestrator.retrieve(
-            RetrievalQuery(query_text, top_k_per_provider=top_k), config
+            RetrievalQuery(
+                query_text,
+                top_k_per_provider=top_k,
+                article_id=article_id,
+                change_type=change_type,
+            ),
+            config,
         )
         return MappingResult(tuple(response.candidates), response.to_dict())
 

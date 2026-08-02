@@ -39,6 +39,47 @@ def test_mapping_service_returns_orchestrator_compatibility_payload() -> None:
     assert "rag_hits" in result.compatibility_payload
 
 
+class _CapturingOrchestrator:
+    """넘어온 RetrievalQuery를 그대로 붙잡아 두는 가짜 orchestrator."""
+
+    def __init__(self) -> None:
+        self.queries = []
+
+    def retrieve(self, query, config=None):
+        self.queries.append(query)
+
+        class Response:
+            candidates = ()
+
+            def to_dict(self):
+                return {"candidates": []}
+
+        return Response()
+
+
+def test_mapping_service_map_works_without_context_arguments() -> None:
+    orchestrator = _CapturingOrchestrator()
+    MappingService(orchestrator).map("법령 변경")
+
+    query = orchestrator.queries[0]
+    assert query.article_id is None
+    assert query.change_type is None
+
+
+def test_mapping_service_forwards_query_context_to_orchestrator() -> None:
+    orchestrator = _CapturingOrchestrator()
+    MappingService(orchestrator).map(
+        "법령 변경", top_k=5, article_id="법령001:제59조의4", change_type="limit"
+    )
+
+    query = orchestrator.queries[0]
+    assert query.text == "법령 변경"
+    assert query.article_id == "법령001:제59조의4"
+    # 레거시 자유 문자열은 변환 없이 그대로 전달된다.
+    assert query.change_type == "limit"
+    assert query.top_k_per_provider == 5
+
+
 def test_proposal_service_blocks_structural_without_calling_generator() -> None:
     calls = []
     service = ProposalService()

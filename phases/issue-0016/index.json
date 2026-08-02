@@ -13,7 +13,10 @@
     {
       "step": 1,
       "name": "query-context",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-08-02T14:27:09+0900",
+      "summary": "검색 seam 통로만 확장(rerank 로직 없음): RetrievalQuery에 article_id/change_type을 기존 필드 뒤 기본값 None으로 추가(query_hash는 text만 해싱 유지), MappingService.map()에 동일 인자 추가 후 그대로 전달, app/main.py의 map 엔드포인트(730행)와 초안 생성 policy_candidates(1059행) 두 호출부에 article_id=f\"{law_id}:{article_no}\"·change_type=row.change_type(레거시 문자열 무변환) 배선. 회귀 고정 테스트 4건 추가 — RetrievalQuery(\"query\") 위치 인자 호환·문맥 유무 응답/query_hash/payload 키 동일, MappingService.map() 무인자 동작·문맥 전달 캡처. verify.sh full 277 passed, 기존 테스트 무수정.",
+      "completed_at": "2026-08-02T14:34:00+0900"
     },
     {
       "step": 2,

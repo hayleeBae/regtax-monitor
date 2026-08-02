@@ -32,9 +32,13 @@ class RetrievalQuery:
     domain: str | None = None
     repository_commit: str | None = None
     top_k_per_provider: int = 8
+    # 문맥 게이팅(ADR-009 보강 1항)용 — 기본값 None으로 기존 위치 인자 호출을 유지한다.
+    article_id: str | None = None
+    change_type: str | None = None
 
     @property
     def query_hash(self) -> str:
+        # 문맥은 해시에 넣지 않는다 — audit 기록·기존 테스트가 해시 안정성에 의존한다.
         return "sha256:" + hashlib.sha256(self.text.encode("utf-8")).hexdigest()
 
 
