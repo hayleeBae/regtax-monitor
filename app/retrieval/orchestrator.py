@@ -5,9 +5,10 @@ from __future__ import annotations
 import hashlib
 import time
 from dataclasses import dataclass, field, replace
-from typing import Protocol, Sequence
+from typing import Mapping, Protocol, Sequence
 
 from app.domain.common.enums import RetrievalSource
+from app.domain.mappings.reranking import DecisionContext, rerank_delta
 from app.domain.retrieval import RetrievalCandidate, RetrievalEvidence
 
 
@@ -57,6 +58,20 @@ class RetrievalProvider(Protocol):
     def retrieve(self, query: RetrievalQuery) -> ProviderResult: ...
 
 
+class CandidateReranker(Protocol):
+    """merge 결과 후보에 붙는 결정 이력을 공급하는 seam(구현체는 #0016 step 3).
+
+    반환 키는 `candidate.dedup_key` 다 — merge 이후의 후보 동일성 판정이 이미
+    dedup_key 기준이므로 다른 키를 쓰면 매칭이 어긋난다.
+    """
+
+    version: str
+
+    def contexts_for(
+        self, query: RetrievalQuery, candidates: Sequence[RetrievalCandidate]
+    ) -> Mapping[str, Sequence[DecisionContext]]: ...
+
+
 @dataclass(frozen=True)
 class ProviderStatus:
     status: str
@@ -75,6 +90,8 @@ class RetrievalConfig:
         default_factory=lambda: dict(DEFAULT_WEIGHTS)
     )
     scoring_version: str = SCORING_VERSION
+    # 검증 이력 rerank 는 기본 활성(ADR-009). off 면 rerank 단계를 통째로 건너뛴다.
+    rerank_enabled: bool = True
 
     def __post_init__(self) -> None:
         if self.final_top_k < 1:
@@ -90,6 +107,8 @@ class RetrievalResponse:
     repository_commit: str | None
     warnings: tuple[str, ...]
     duration_ms: int
+    # rerank 가 실행되지 않았으면 None — SCORING_VERSION 과 별개로 노출한다(ADR-009).
+    rerank_version: str | None = None
 
     def to_dict(self) -> dict:
         public = [candidate.to_dict() for candidate in self.candidates]
@@ -105,6 +124,7 @@ class RetrievalResponse:
                 for key, value in self.provider_statuses.items()
             },
             "scoring_version": self.scoring_version,
+            "rerank_version": self.rerank_version,
             "query_hash": self.query_hash,
             "repository_commit": self.repository_commit,
             "warnings": list(self.warnings),
@@ -120,8 +140,13 @@ class RetrievalResponse:
 
 
 class RetrievalOrchestrator:
-    def __init__(self, providers: Sequence[RetrievalProvider]) -> None:
+    def __init__(
+        self,
+        providers: Sequence[RetrievalProvider],
+        reranker: CandidateReranker | None = None,
+    ) -> None:
         self.providers = tuple(providers)
+        self.reranker = reranker
 
     def retrieve(
         self,
@@ -157,7 +182,13 @@ class RetrievalOrchestrator:
             )
         if enabled_count and success_count == 0:
             raise RetrievalError("RETRIEVAL_ERROR: all enabled providers failed")
+        # 단계 순서 고정: merge → rerank → 정렬 → final_top_k 절단 → rank 부여.
+        # rerank 를 절단 뒤에 두면 상위 K 밖의 검증 후보가 boost 를 받아도 올라올 수
+        # 없다(ADR-009 보강 2항).
         merged = _merge_candidates(candidates, config, warnings)
+        rerank_version: str | None = None
+        if self.reranker is not None and config.rerank_enabled:
+            merged, rerank_version = self._rerank(query, merged, warnings)
         ranked = tuple(
             replace(candidate, rank=index)
             for index, candidate in enumerate(merged[: config.final_top_k], start=1)
@@ -171,7 +202,51 @@ class RetrievalOrchestrator:
             query.repository_commit,
             tuple(warnings),
             duration,
+            rerank_version,
         )
+
+    def _rerank(
+        self,
+        query: RetrievalQuery,
+        merged: list[RetrievalCandidate],
+        warnings: list[str],
+    ) -> tuple[list[RetrievalCandidate], str | None]:
+        """검증 이력 delta 를 적용하고 재정렬한다. 점수 규칙은 도메인 모듈이 단일 출처다.
+
+        검증 이력 조회 실패가 검색 전체를 죽이면 "개정을 놓침"으로 이어지므로,
+        provider 실패와 같은 방식으로 warning 만 남기고 rerank 없이 진행한다
+        (RETRIEVAL_EXPERIMENT_SPEC §16 "verified DB 실패: warning").
+        """
+        reranker = self.reranker
+        assert reranker is not None
+        try:
+            version = reranker.version
+            contexts = reranker.contexts_for(query, tuple(merged))
+            reranked: list[RetrievalCandidate] = []
+            for candidate in merged:
+                entries = contexts.get(candidate.dedup_key) or ()
+                if not entries:
+                    reranked.append(candidate)
+                    continue
+                delta = rerank_delta(
+                    entries,
+                    query_article_id=query.article_id,
+                    query_change_type=query.change_type,
+                    # merge 가 이미 stale -0.50 을 적용했으면 rerank 는 얹지 않는다
+                    # (ADR-009 보강 3항 — 총 -0.50 cap).
+                    merge_stale_applied=candidate.stale,
+                )
+                if not delta:
+                    reranked.append(candidate)
+                    continue
+                score = round(max(0.0, min(1.0, candidate.final_score + delta)), 6)
+                reranked.append(replace(candidate, final_score=score))
+        except Exception as exc:
+            warnings.append(f"rerank: {exc}")
+            return merged, None
+        # 동점 시 결과가 흔들리면 ablation 재현성이 깨진다 — merge 와 같은 정렬 키.
+        reranked.sort(key=lambda item: (-item.final_score, item.location.path))
+        return reranked, version
 
 
 def _merge_candidates(
