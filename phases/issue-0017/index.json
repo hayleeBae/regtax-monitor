@@ -32,9 +32,9 @@
       "status": "completed",
       "started_at": "2026-08-02T23:00:30+0900",
       "summary": "evaluation/fixtures/replay/mock_cases.yaml 신규 — mock 3건(replay_mock_value_change=소득세법 제59조의2 150000L→250000L, replay_mock_condition_test=근로기준법 제60조 monthsWorked<12→<6 로직+테스트 2파일 relevant, replay_mock_unrelated_noise=최저임금 10030L→10320L + README.md excluded). 전부 path(프로젝트 상대)·태그 revision(<case>/base,answer)·privacy_mode full·golden_command 없음. 회사 실데이터용 evaluation/datasets/company_replay.template.yaml 신규 — path_env: EHR_REPO_ROOT, revision placeholder REPLACE_WITH_*_REVISION(로더 문자 규칙 통과), privacy_mode metadata_only 기본, evaluation/private/ 복사·커밋 금지 주석. tests/test_replay_fixtures.py 28건 추가(로더 통과·태그 존재·before/after 대조는 replay_repos 미빌드 시 skip, 템플릿 절대경로·40자 SHA 부재 회귀). 로더/빌더 무수정, 451 passed.",
-      "completed_at": "2026-08-02T23:07:00+0900"
+      "completed_at": "2026-08-02T23:04:33+0900"
     }
   ],
   "created_at": "2026-08-02T22:45:26+0900",
-  "total_cost_usd": 5.6857
+  "total_cost_usd": 7.4051
 }
