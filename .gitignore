@@ -24,3 +24,6 @@ validate_out.log
 evaluation/results/
 evaluation/private/
 evaluation/chroma_*/
+# replay mock git repo — scripts/build_replay_repos.py 가 매번 빌드한다 (ADR-010)
+# 원본 트리 evaluation/fixtures/replay_sources/ 는 커밋 대상이므로 무시하지 않는다.
+evaluation/fixtures/replay_repos/

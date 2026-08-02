@@ -1,0 +1,41 @@
+{
+  "project": "regtax-monitor",
+  "phase": "issue-0017",
+  "steps": [
+    {
+      "step": 0,
+      "name": "replay-schema",
+      "status": "completed",
+      "started_at": "2026-08-02T22:45:26+0900",
+      "summary": "app/evaluation/replay/{__init__,fixture}.py 신규 — PrivacyMode·ArtifactKind·allowed_artifacts(화이트리스트)·REPLAY_SCHEMA_VERSION·ReplayRepository/Scope/Execution/Fixture export. FULL=전체, REDACTED=diff_structure·file_path·metric·hash·count, METADATA_ONLY=metric·hash·count. tests/test_replay_fixture.py 추가(335 passed).",
+      "completed_at": "2026-08-02T22:47:41+0900"
+    },
+    {
+      "step": 1,
+      "name": "replay-loader",
+      "status": "completed",
+      "started_at": "2026-08-02T22:47:41+0900",
+      "summary": "app/evaluation/replay/loader.py 신규(ReplayFixtureLoader, __init__ export) + tests/test_replay_loader.py(62건). 검증 4종 — repo 위치 path XOR path_env(path=상대경로만·절대/'..' 거부, path_env=[A-Z][A-Z0-9_]* 이름만이며 값은 읽지 않음), revision 문자 제한([A-Za-z0-9._/-], 빈값·'..'·^·~·:·공백·'-' 시작 거부), golden_command shlex 첫 토큰 allowlist(mvn/gradle/./gradlew/pytest/bash, 경로 실행파일·따옴표 불균형 거부), scope 경로 traversal(relevant/excluded/expected_replacements). 부가: schema_version {1}, source_type {local_git}, privacy_mode 어휘(생략 시 metadata_only), timeout 1..3600, case_id 중복, relevant∩excluded. DatasetValidationError.details 에 오류 누적. 397 passed.",
+      "completed_at": "2026-08-02T22:51:56+0900"
+    },
+    {
+      "step": 2,
+      "name": "replay-mock-repos",
+      "status": "completed",
+      "started_at": "2026-08-02T22:51:57+0900",
+      "summary": "evaluation/fixtures/replay_sources/{case1_value_change,case2_condition_test,case3_unrelated_noise}/{base,answer} 전체 스냅샷 커밋(합성 Java) — case1=상수 1개(CHILD_TAX_CREDIT 150000→250000), case2=조건(monthsWorked<12→<6)+대응 테스트 2파일, case3=코드+무관 README 문서 변경. scripts/build_replay_repos.py 신규(argparse main(argv)->int, --case/--quiet): base 커밋→태그 <case>/base, answer 트리 교체 커밋→태그 <case>/answer. 출력 루트 OUTPUT_ROOT=evaluation/fixtures/replay_repos/ 는 코드 고정(임의 경로 삭제 CLI 옵션 없음), 삭제 전 ensure_within 로 루트 하위·심볼릭링크 검사, git 은 shell=False+timeout 120s 단일 래퍼로만 호출하고 신원은 -c/env 주입(전역 config 미변경), 커밋 날짜 고정으로 재빌드 SHA 동일. .gitignore 에 replay_repos/ 추가. tests/test_replay_repo_builder.py 26건 추가(423 passed).",
+      "completed_at": "2026-08-02T23:00:29+0900"
+    },
+    {
+      "step": 3,
+      "name": "replay-fixtures",
+      "status": "completed",
+      "started_at": "2026-08-02T23:00:30+0900",
+      "summary": "evaluation/fixtures/replay/mock_cases.yaml 신규 — mock 3건(replay_mock_value_change=소득세법 제59조의2 150000L→250000L, replay_mock_condition_test=근로기준법 제60조 monthsWorked<12→<6 로직+테스트 2파일 relevant, replay_mock_unrelated_noise=최저임금 10030L→10320L + README.md excluded). 전부 path(프로젝트 상대)·태그 revision(<case>/base,answer)·privacy_mode full·golden_command 없음. 회사 실데이터용 evaluation/datasets/company_replay.template.yaml 신규 — path_env: EHR_REPO_ROOT, revision placeholder REPLACE_WITH_*_REVISION(로더 문자 규칙 통과), privacy_mode metadata_only 기본, evaluation/private/ 복사·커밋 금지 주석. tests/test_replay_fixtures.py 28건 추가(로더 통과·태그 존재·before/after 대조는 replay_repos 미빌드 시 skip, 템플릿 절대경로·40자 SHA 부재 회귀). 로더/빌더 무수정, 451 passed.",
+      "completed_at": "2026-08-02T23:04:33+0900"
+    }
+  ],
+  "created_at": "2026-08-02T22:45:26+0900",
+  "total_cost_usd": 7.4051,
+  "completed_at": "2026-08-02T23:04:33+0900"
+}

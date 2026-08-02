@@ -1,0 +1,64 @@
+# 회사 맥북에서 evaluation/private/company_replay.yaml 로 복사한 뒤 실제 값으로 채운다.
+# evaluation/private/ 는 .gitignore 대상이다 — 채워 넣은 실데이터 fixture 는 절대
+# 커밋하지 않는다. 이 템플릿 파일 자체에는 실제 경로·commit SHA·코드 본문이 없으므로
+# 커밋 대상이다.
+#
+# HISTORICAL_REPLAY_SPEC §3·§8, ADR-010.
+#
+# 규칙:
+# - repo 절대경로는 YAML 이 아니라 **환경변수**로 주입한다(path_env). 실행 전에
+#   `export EHR_REPO_ROOT=<eHR repo 절대경로>` 를 설정한다. 로더는 이 변수 이름만
+#   읽고 값을 해석하지 않으므로 절대경로가 fixture 파일이나 오류 메시지에 남지 않는다.
+# - privacy_mode 는 metadata_only 가 기본이다(SPEC §8) — 실행 산출물로 지표·해시·
+#   개수만 남고 diff 본문과 코드 조각은 저장되지 않는다. 디버깅이 꼭 필요한 로컬
+#   환경에서만 redacted(파일 경로·diff 구조까지)로 올린다. full 은 회사 코드에 쓰지
+#   않는다.
+# - base_commit/answer_commit 은 아래 placeholder 를 실제 revision 으로 바꾼다.
+#   허용 문자는 [A-Za-z0-9._/-] 이며 '-' 로 시작하거나 '..' 를 포함할 수 없다.
+# - scope 경로는 repo 내부 **상대 경로**다. 절대경로와 '..' 는 거부된다.
+# - answer commit 전체를 정답으로 쓰지 않는다(SPEC §2). 개정과 무관한 변경(문서,
+#   리팩토링, 다른 티켓의 수정)은 excluded_paths 에 직접 적는다.
+
+cases:
+  - schema_version: "1"
+    case_id: "company_replay_001"
+
+    law:
+      law_name: "법령명 입력"
+      tier: "law"                       # law | enforcement_decree | enforcement_rule | admin_rule
+      article: "조문 입력"
+      before_text: "개정 전 문구 입력"
+      after_text: "개정 후 문구 입력"
+      effective_date: "2026-01-01"
+
+    repository:
+      source_type: "local_git"
+      # 절대경로 대신 환경변수 이름만 적는다. path 와 동시에 쓸 수 없다.
+      path_env: "EHR_REPO_ROOT"
+      # 개정 반영 직전 commit / 실제 반영 commit 으로 교체한다.
+      base_commit: "REPLACE_WITH_BASE_COMMIT_REVISION"
+      answer_commit: "REPLACE_WITH_ANSWER_COMMIT_REVISION"
+
+    scope:
+      # 개정 때문에 실제로 고쳐야 했던 파일만 적는다.
+      relevant_paths:
+        - "실제/상대/경로/Service.java"
+      # answer commit 에 섞여 있지만 개정과 무관한 변경.
+      excluded_paths:
+        - "docs/무관한문서.md"
+      expected_replacements:
+        - path: "실제/상대/경로/Service.java"
+          before: "변경 전 코드 값"
+          after: "변경 후 코드 값"
+          match_mode: "exact"           # exact | normalized_text
+
+    execution:
+      privacy_mode: "metadata_only"     # metadata_only | redacted | full
+      timeout_seconds: 1800
+      # 골든 테스트가 있으면 주석을 풀고 실제 명령으로 바꾼다. 첫 토큰(실행파일)은
+      # mvn / gradle / ./gradlew / pytest / bash 만 허용된다.
+      # golden_command: "mvn -q test -Dtest=YearEndGoldenTest"
+
+    metadata:
+      # 사람이 base/answer/scope 를 직접 확인했으면 true 로 둔다.
+      reviewed: false

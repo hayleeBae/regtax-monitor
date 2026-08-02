@@ -1,0 +1,146 @@
+# replay mock fixture 3건 — HISTORICAL_REPLAY_SPEC §3·§10, Issue #0017
+#
+# Step 2 의 원본 트리(evaluation/fixtures/replay_sources/)로 빌드된 mock git repo
+# 3개에 1:1 대응한다. 빌드가 선행되어야 repository.path 가 실제로 존재한다.
+#
+#   python3 scripts/build_replay_repos.py   # → evaluation/fixtures/replay_repos/
+#
+# 규칙:
+# - 합성 코드이므로 privacy_mode 는 "full" 이다. 반출 위험이 없으므로 diff·snippet 을
+#   저장해 두는 편이 #0018 디버깅에 유리하다. 실데이터는 metadata_only 를 쓴다
+#   (evaluation/datasets/company_replay.template.yaml 참조).
+# - base/answer 는 commit SHA 가 아니라 빌드 스크립트가 붙이는 **태그**다. repo 는
+#   매번 새로 빌드되어 SHA 가 달라질 수 있지만 태그 이름은 고정이다.
+# - golden_command 는 두지 않는다. mock repo 에는 빌드 도구가 없다.
+# - relevant_paths/excluded_paths 는 **repo 내부 상대 경로**다.
+# - README.md 는 어느 케이스에서도 정답이 아니다 — answer commit 전체를 정답으로
+#   쓰지 않는다는 원칙(SPEC §2)을 데이터로 못박는다. case3 는 answer commit 에
+#   실제로 README 변경이 섞여 있어 이 배제가 지표에 영향을 준다.
+
+cases:
+
+  # -----------------------------------------------------------------------
+  # case1: 단일 value change (SPEC §10-1)
+  # -----------------------------------------------------------------------
+
+  - schema_version: "1"
+    case_id: "replay_mock_value_change"
+
+    law:
+      law_name: "소득세법"
+      tier: "law"
+      article: "제59조의2"
+      before_text: "종합소득이 있는 거주자의 기본공제대상자에 해당하는 자녀에 대해서는 1명당 연 15만원을 종합소득산출세액에서 공제한다."
+      after_text: "종합소득이 있는 거주자의 기본공제대상자에 해당하는 자녀에 대해서는 1명당 연 25만원을 종합소득산출세액에서 공제한다."
+      effective_date: "2026-01-01"
+
+    repository:
+      source_type: "local_git"
+      path: "evaluation/fixtures/replay_repos/case1_value_change"
+      base_commit: "case1_value_change/base"
+      answer_commit: "case1_value_change/answer"
+
+    scope:
+      relevant_paths:
+        - "src/main/java/com/example/tax/TaxConstants.java"
+      excluded_paths:
+        - "README.md"
+      expected_replacements:
+        - path: "src/main/java/com/example/tax/TaxConstants.java"
+          before: "150000L"
+          after: "250000L"
+          match_mode: "exact"
+
+    execution:
+      privacy_mode: "full"
+      timeout_seconds: 600
+
+    metadata:
+      reviewed: true
+
+  # -----------------------------------------------------------------------
+  # case2: 조건 변경 + 테스트 동시 수정 (SPEC §10-2)
+  # relevant_paths 에 로직과 테스트를 둘 다 넣는다 — 요건 개정은 테스트를 같이
+  # 고쳐야 정답이며, 로직만 고친 결과를 만점으로 보면 안 된다.
+  # -----------------------------------------------------------------------
+
+  - schema_version: "1"
+    case_id: "replay_mock_condition_test"
+
+    law:
+      law_name: "근로기준법"
+      tier: "law"
+      article: "제60조 제1항"
+      before_text: "사용자는 1년간 80퍼센트 이상 출근한 근로자에게 15일의 유급휴가를 주어야 한다."
+      after_text: "사용자는 계속하여 근로한 기간이 6개월 이상이고 그 기간 동안 80퍼센트 이상 출근한 근로자에게 15일의 유급휴가를 주어야 한다."
+      effective_date: "2026-01-01"
+
+    repository:
+      source_type: "local_git"
+      path: "evaluation/fixtures/replay_repos/case2_condition_test"
+      base_commit: "case2_condition_test/base"
+      answer_commit: "case2_condition_test/answer"
+
+    scope:
+      relevant_paths:
+        - "src/main/java/com/example/hr/AnnualLeaveService.java"
+        - "src/test/java/com/example/hr/AnnualLeaveServiceTest.java"
+      excluded_paths:
+        - "README.md"
+      expected_replacements:
+        - path: "src/main/java/com/example/hr/AnnualLeaveService.java"
+          before: "monthsWorked < 12"
+          after: "monthsWorked < 6"
+          match_mode: "exact"
+        - path: "src/test/java/com/example/hr/AnnualLeaveServiceTest.java"
+          before: "isEligibleForAnnualLeave(12, 0.8)"
+          after: "isEligibleForAnnualLeave(6, 0.8)"
+          match_mode: "exact"
+
+    execution:
+      privacy_mode: "full"
+      timeout_seconds: 600
+
+    metadata:
+      reviewed: true
+
+  # -----------------------------------------------------------------------
+  # case3: answer commit 에 무관한 문서 변경 혼입 (SPEC §10-3)
+  # README.md 변경은 개정과 무관하므로 excluded_paths 로 정답에서 뺀다. 이 배제가
+  # 없으면 "문서까지 고쳐야 만점"이 되어 지표가 왜곡된다(SPEC §2·§13).
+  # -----------------------------------------------------------------------
+
+  - schema_version: "1"
+    case_id: "replay_mock_unrelated_noise"
+
+    law:
+      law_name: "최저임금법"
+      tier: "law"
+      article: "제6조"
+      before_text: "2025년 적용 최저임금은 시간급 10,030원으로 한다."
+      after_text: "2026년 적용 최저임금은 시간급 10,320원으로 한다."
+      effective_date: "2026-01-01"
+
+    repository:
+      source_type: "local_git"
+      path: "evaluation/fixtures/replay_repos/case3_unrelated_noise"
+      base_commit: "case3_unrelated_noise/base"
+      answer_commit: "case3_unrelated_noise/answer"
+
+    scope:
+      relevant_paths:
+        - "src/main/java/com/example/hr/MinimumWageValidator.java"
+      excluded_paths:
+        - "README.md"
+      expected_replacements:
+        - path: "src/main/java/com/example/hr/MinimumWageValidator.java"
+          before: "10030L"
+          after: "10320L"
+          match_mode: "exact"
+
+    execution:
+      privacy_mode: "full"
+      timeout_seconds: 600
+
+    metadata:
+      reviewed: true

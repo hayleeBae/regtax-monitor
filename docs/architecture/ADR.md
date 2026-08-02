@@ -54,6 +54,11 @@
 
 **추가 트레이드오프**: `RetrievalQuery`·`MappingService.map()` 시그니처가 넓어진다(기본값으로 하위 호환 유지). rerank가 절단 전으로 오면 merge 결과 전체를 대상으로 lookup해야 해 DB 조회량이 K가 아니라 후보 수에 비례한다 — article_id 단위 1회 조회로 묶어 흡수한다.
 
+### ADR-010: 과거 개정 replay fixture는 EvaluationCase와 분리한 별도 스키마로 (Issue #0017)
+**결정**: HISTORICAL_REPLAY_SPEC §3 의 replay fixture 를 `EvaluationCase`(#0005) 확장이 아니라 **별도 `ReplayFixture` 스키마**로 만든다(`app/evaluation/replay/fixture.py` 순수 dataclass + `loader.py` YAML 로더, `ExpectedReplacement` 만 재사용). repo 위치는 `path`(프로젝트 상대, mock 전용)와 `path_env`(환경변수 이름, 실데이터 전용) 중 **정확히 하나**만 허용한다. `base_commit`/`answer_commit` 은 SHA 가 아니라 git revision 문자열을 허용하되 `[A-Za-z0-9._/-]` 로 제한하고 `..`·`^`·`~` 를 거부한다 — mock fixture 는 태그(`case1/base`)를 쓴다. mock git repo 3건은 커밋하지 않고, 커밋된 평범한 파일 트리(`evaluation/fixtures/replay_sources/`)에서 빌드 스크립트가 gitignore 된 위치에 생성한다. `privacy_mode`(full/redacted/metadata_only)는 #0017 에서 어휘와 "모드별 저장 가능 artifact" 순수 함수까지만 정의하고, 실제 저장 억제는 #0018 runner 책임이다. `golden_command` 는 로더가 첫 토큰을 실행파일 allowlist 와 대조해 거부한다.
+**이유**: `DatasetLoader` 는 benchmark·runner·테스트 등 다수가 의존해 확장 시 회귀 위험이 크고, 스펙의 YAML 모양(`source_type`/`path_env`/`scope`/`privacy_mode`)이 애초에 `EvaluationCase` 와 다르다 — 억지로 합치면 두 용도가 서로의 검증 규칙을 오염시킨다. 경로를 환경변수로 분리하는 것은 **회사 repo 절대경로가 YAML 에 남아 외부로 나가는 것**을 막기 위해서다(CLAUDE.md 코드 반출 금지). revision 을 문자 집합으로 제한하는 것은 fixture YAML 이 이 이슈의 유일한 외부 입력 지점이고 git 인자 주입의 출발점이기 때문이다. `golden_command` 는 config(`golden_test_cmd`)와 달리 **파일로 전달받을 수 있어 신뢰 수준이 다르므로** 입구에서 막는다.
+**트레이드오프**: 유사한 스키마가 두 벌 존재(케이스 평가용 / replay 용) — 대신 #0018 이 소비할 계약이 좁고 명확해진다. mock git repo 를 빌드해야 해서 fixture 실행 전 준비 단계가 하나 늘고, 태그 기반이라 fixture YAML 이 특정 빌드 스크립트에 결합된다. allowlist 는 정당한 골든 명령을 막을 수 있어 목록 유지 비용이 생긴다.
+
 ### ADR-007: 도메인 레지스트리(domains.json)로 수집 확장
 **결정**: 수집 대상 법령·고시 검색어를 코드가 아니라 `domains.json`(tax/hr)에서 관리. 파일 없으면 기존 세법 5종 폴백.
 **이유**: 연말정산(세법)을 넘어 인사 법령 전반으로 확장 + 도메인별 담당자 라우팅 기반. 법률만 수집하면 올해 개정(시행령·시행규칙 10건, 법률 0건)을 전부 놓쳤을 상황 — 3계층 수집이 필수임을 실검증.
