@@ -1,0 +1,34 @@
+{
+  "project": "regtax-monitor",
+  "phase": "issue-0016",
+  "steps": [
+    {
+      "step": 0,
+      "name": "rerank-domain",
+      "status": "completed",
+      "started_at": "2026-08-02T14:24:16+0900",
+      "summary": "app/domain/mappings/reranking.py 신규(순수 도메인) + tests/test_mapping_reranking.py — ReuseClass/DecisionContext/classify_reuse/rerank_delta/RERANK_VERSION/COMPATIBLE_CHANGE_TYPES export. 게이팅: 조문 불일치·무문맥은 UNRELATED, 레거시 change_type은 완전일치만 EXACT(V2 변환표 없음). delta: exact verified +0.35 / compatible +0.20 / golden·historical 각 +0.05 / legacy -0.15 / exact rejected -0.30(반복 거절 2회+ 시 -0.50) / STALE은 boost 제거 + merge 미적용 시에만 -0.50, REVOKED는 0, 최종 [-0.50,+0.45] clamp."
+    },
+    {
+      "step": 1,
+      "name": "query-context",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "rerank-stage",
+      "status": "pending"
+    },
+    {
+      "step": 3,
+      "name": "reranking-lookup",
+      "status": "pending"
+    },
+    {
+      "step": 4,
+      "name": "rerank-ablation",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-08-02T14:24:16+0900"
+}
