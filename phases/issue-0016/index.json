@@ -24,7 +24,7 @@
       "status": "completed",
       "started_at": "2026-08-02T14:29:14+0900",
       "summary": "orchestrator에 후처리 rerank 단계 배선(점수 규칙은 도메인 모듈 그대로 사용, 수치 무복제): CandidateReranker Protocol(version + contexts_for → dedup_key 키 매핑) 추가, RetrievalOrchestrator(providers, reranker=None) 주입, RetrievalConfig.rerank_enabled=True(기본 활성), RetrievalResponse.rerank_version(str|None) + to_dict 키 추가(SCORING_VERSION은 retrieval-scoring-v1 유지). 단계 순서 merge→rerank(delta+clamp[0,1]·round6, replace로 새 인스턴스)→(-final_score, path) 정렬→final_top_k 절단→rank로 고정. stale은 candidate.stale을 merge_stale_applied로 전달해 이중 계산 차단(_merge_candidates 무수정). reranker 미주입·flag off면 단계 통째 skip, 예외는 warnings에 'rerank: {exc}'만 남기고 rerank 없이 진행(rerank_version=None). 테스트 6건 추가(절단 전 rerank 회귀 포함) — verify.sh full 283 passed.",
-      "completed_at": "2026-08-02T14:33:40+0900"
+      "completed_at": "2026-08-02T14:32:44+0900"
     },
     {
       "step": 3,
@@ -38,5 +38,5 @@
     }
   ],
   "created_at": "2026-08-02T14:24:16+0900",
-  "total_cost_usd": 2.2413
+  "total_cost_usd": 3.8626
 }
