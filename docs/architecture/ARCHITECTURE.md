@@ -55,8 +55,9 @@ scripts/                 # 하네스 (verify.sh, execute.py, trace.py + 자체 �
 ```
 법제처 API → collect(LawChange 저장, domain/tier 태깅)
   → analyze(LLM 요약 + 해설서 RAG 컨텍스트)
-  → map(RAG + 사전 정확매칭 + 상수 값매칭 → orchestrator merge·rank
-         → (#0016) 검증 이력 rerank: 문맥 게이팅 boost/penalty 재정렬 → Mapping, 담당자 verify로 정확도 축적)
+  → map(RAG + 사전 정확매칭 + 상수 값매칭 → orchestrator merge
+         → (#0016) 검증 이력 rerank: 문맥 게이팅 boost/penalty (절단 전)
+         → 정렬 → final_top_k 절단 → rank 부여 → Mapping, 담당자 verify로 정확도 축적)
   → apply(LLM 앵커 편집 → unified diff → 골든 테스트 자동 검증 → Proposal)
   → approve/reject(사람 승인 게이트 → patch 파일 출력)
 ```
