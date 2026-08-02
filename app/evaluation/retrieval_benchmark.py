@@ -18,6 +18,7 @@ from app.evaluation.metrics import (
     reciprocal_rank,
 )
 from app.evaluation.case import EvaluationCase
+from app.domain.mappings.reranking import RERANK_VERSION
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,8 @@ class RetrievalExperimentConfig:
     top_k: int = 5
     scoring_version: str = "retrieval-scoring-v1"
     normalization_version: str = "retrieval-normalization-v1"
+    # 기존 5개 실험은 rerank 없이 측정한다 — 과거 결과와 비교 가능해야 한다.
+    rerank_enabled: bool = False
 
 
 @dataclass(frozen=True)
@@ -44,7 +47,21 @@ class BenchmarkResult:
     summary: dict[str, dict]
 
 
+ALL_SOURCES: tuple[str, ...] = (
+    "verified_mapping",
+    "rag",
+    "term_dictionary",
+    "constant_match",
+)
+
+
 def default_experiments() -> tuple[RetrievalExperimentConfig, ...]:
+    """기존 5개 실험 뒤에 rerank on/off 쌍을 붙인다.
+
+    앞의 5개는 id·순서·소스 조합을 바꾸지 않는다(과거 벤치마크와 비교 가능성).
+    뒤의 두 변형은 provider 조합·top_k·정렬 조건이 완전히 같고 `rerank_enabled`
+    하나만 다르다 — 다른 조건이 섞이면 차이의 원인을 rerank 로 특정할 수 없다.
+    """
     return (
         RetrievalExperimentConfig("rag_only", ("rag",)),
         RetrievalExperimentConfig("rag_dict", ("rag", "term_dictionary")),
@@ -55,6 +72,12 @@ def default_experiments() -> tuple[RetrievalExperimentConfig, ...]:
         RetrievalExperimentConfig(
             "verified_hybrid",
             ("verified_mapping", "rag", "term_dictionary", "constant_match"),
+        ),
+        RetrievalExperimentConfig(
+            "verified_rerank_off", ALL_SOURCES, rerank_enabled=False
+        ),
+        RetrievalExperimentConfig(
+            "verified_rerank_on", ALL_SOURCES, rerank_enabled=True
         ),
     )
 
@@ -98,6 +121,8 @@ class RetrievalBenchmark:
         environment = {
             "python_version": platform.python_version(),
             "platform": platform.platform(),
+            # rerank 규칙 버전은 scoring_version 과 별개로 남긴다(ADR-009, 스펙 §14 재현성).
+            "rerank_version": RERANK_VERSION,
             "experiments": [
                 {
                     "experiment_id": item.experiment_id,
@@ -105,6 +130,7 @@ class RetrievalBenchmark:
                     "top_k": item.top_k,
                     "scoring_version": item.scoring_version,
                     "normalization_version": item.normalization_version,
+                    "rerank_enabled": item.rerank_enabled,
                 }
                 for item in self.experiments
             ],
@@ -157,6 +183,18 @@ def _compact_json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
 
+def case_article_id(case: EvaluationCase) -> str | None:
+    """케이스의 법령 정보로 rerank 게이팅용 조문 식별자를 만든다.
+
+    조문이 없는 케이스(고시 등)는 None 이다 — 법령명만으로 묶으면 서로 다른
+    개정이 같은 문맥으로 취급돼 무관 boost 가 생긴다(스펙 §9·§11).
+    """
+    article = (case.law.article or "").strip()
+    if not article:
+        return None
+    return f"{case.law.law_name}:{article}"
+
+
 def run_orchestrator_cases(orchestrator, cases: Sequence[EvaluationCase], experiment) -> tuple[BenchmarkCase, ...]:
     """동일 case들을 지정 provider 조합으로 실행한다."""
     from app.domain.common.enums import RetrievalSource
@@ -172,8 +210,19 @@ def run_orchestrator_cases(orchestrator, cases: Sequence[EvaluationCase], experi
         )
         started = time.monotonic()
         response = orchestrator.retrieve(
-            RetrievalQuery(text, domain=case.domain, top_k_per_provider=experiment.top_k),
-            RetrievalConfig(enabled_sources=enabled, final_top_k=experiment.top_k),
+            RetrievalQuery(
+                text,
+                domain=case.domain,
+                top_k_per_provider=experiment.top_k,
+                article_id=case_article_id(case),
+                # 데이터셋의 change_type 은 V2 어휘라 그대로 넘긴다(변환 금지).
+                change_type=case.expected.change_type,
+            ),
+            RetrievalConfig(
+                enabled_sources=enabled,
+                final_top_k=experiment.top_k,
+                rerank_enabled=experiment.rerank_enabled,
+            ),
         )
         failures = sum(status.status == "error" for status in response.provider_statuses.values())
         results.append(
@@ -213,10 +262,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--persist-dir", default="./chroma_data")
     parser.add_argument("--build-index", action="store_true")
     parser.add_argument("--refresh-caches", action="store_true")
+    # 결정 이력 fixture(선택). 없으면 reranker 미주입 — 기존 동작과 동일하다.
+    parser.add_argument("--decisions", type=Path)
     args = parser.parse_args(argv)
 
     from app.embedding.indexer import CodeIndexer
     from app.codebase.mock_adapter import MockCodebaseAdapter
+    from app.evaluation.decision_fixtures import (
+        FixtureDecisionReranker,
+        load_decision_fixtures,
+    )
     from app.evaluation.loader import DatasetLoader
     from app.retrieval.orchestrator import RetrievalOrchestrator
     from app.retrieval.providers import (
@@ -233,13 +288,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     indexer = CodeIndexer(args.persist_dir)
     adapter = MockCodebaseAdapter(repo_root=repo_root, indexer=indexer)
     index_count = ensure_benchmark_index(indexer, adapter, args.build_index)
+    # 벤치마크는 DB 없이 재현 가능해야 한다 — SQLAlchemy lookup 대신 파일 fixture.
+    reranker = (
+        FixtureDecisionReranker(load_decision_fixtures(args.decisions))
+        if args.decisions
+        else None
+    )
     orchestrator = RetrievalOrchestrator(
         (
             VerifiedMappingProvider(lambda _query: ()),
             RagProvider(lambda text, k: indexer.search(text, k=k)),
             DictionaryProvider(repo_root, refresh_cache=args.refresh_caches),
             ConstantProvider(repo_root, refresh_cache=args.refresh_caches),
-        )
+        ),
+        reranker,
     )
     benchmark = RetrievalBenchmark(
         lambda experiment: run_orchestrator_cases(orchestrator, cases, experiment),
@@ -248,6 +310,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             "index_chunk_count": index_count,
             "persist_dir": str(Path(args.persist_dir).resolve()),
             "repository_root": str(Path(repo_root).resolve()),
+            "decisions_fixture": (
+                str(Path(args.decisions).resolve()) if args.decisions else None
+            ),
         },
     )
     result = benchmark.run(args.result_dir, args.run_name)
