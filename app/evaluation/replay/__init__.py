@@ -13,9 +13,15 @@ from app.evaluation.replay.fixture import (
     ReplayScope,
     allowed_artifacts,
 )
+from app.evaluation.replay.loader import (
+    GOLDEN_COMMAND_ALLOWLIST,
+    ReplayFixtureLoader,
+)
 
 __all__ = [
+    "GOLDEN_COMMAND_ALLOWLIST",
     "REPLAY_SCHEMA_VERSION",
+    "ReplayFixtureLoader",
     "ArtifactKind",
     "PrivacyMode",
     "ReplayExecution",
