@@ -1,0 +1,49 @@
+{
+  "project": "regtax-monitor",
+  "phase": "issue-0016",
+  "steps": [
+    {
+      "step": 0,
+      "name": "rerank-domain",
+      "status": "completed",
+      "started_at": "2026-08-02T14:24:16+0900",
+      "summary": "app/domain/mappings/reranking.py 신규(순수 도메인) + tests/test_mapping_reranking.py — ReuseClass/DecisionContext/classify_reuse/rerank_delta/RERANK_VERSION/COMPATIBLE_CHANGE_TYPES export. 게이팅: 조문 불일치·무문맥은 UNRELATED, 레거시 change_type은 완전일치만 EXACT(V2 변환표 없음). delta: exact verified +0.35 / compatible +0.20 / golden·historical 각 +0.05 / legacy -0.15 / exact rejected -0.30(반복 거절 2회+ 시 -0.50) / STALE은 boost 제거 + merge 미적용 시에만 -0.50, REVOKED는 0, 최종 [-0.50,+0.45] clamp.",
+      "completed_at": "2026-08-02T14:27:09+0900"
+    },
+    {
+      "step": 1,
+      "name": "query-context",
+      "status": "completed",
+      "started_at": "2026-08-02T14:27:09+0900",
+      "summary": "검색 seam 통로만 확장(rerank 로직 없음): RetrievalQuery에 article_id/change_type을 기존 필드 뒤 기본값 None으로 추가(query_hash는 text만 해싱 유지), MappingService.map()에 동일 인자 추가 후 그대로 전달, app/main.py의 map 엔드포인트(730행)와 초안 생성 policy_candidates(1059행) 두 호출부에 article_id=f\"{law_id}:{article_no}\"·change_type=row.change_type(레거시 문자열 무변환) 배선. 회귀 고정 테스트 4건 추가 — RetrievalQuery(\"query\") 위치 인자 호환·문맥 유무 응답/query_hash/payload 키 동일, MappingService.map() 무인자 동작·문맥 전달 캡처. verify.sh full 277 passed, 기존 테스트 무수정.",
+      "completed_at": "2026-08-02T14:29:13+0900"
+    },
+    {
+      "step": 2,
+      "name": "rerank-stage",
+      "status": "completed",
+      "started_at": "2026-08-02T14:29:14+0900",
+      "summary": "orchestrator에 후처리 rerank 단계 배선(점수 규칙은 도메인 모듈 그대로 사용, 수치 무복제): CandidateReranker Protocol(version + contexts_for → dedup_key 키 매핑) 추가, RetrievalOrchestrator(providers, reranker=None) 주입, RetrievalConfig.rerank_enabled=True(기본 활성), RetrievalResponse.rerank_version(str|None) + to_dict 키 추가(SCORING_VERSION은 retrieval-scoring-v1 유지). 단계 순서 merge→rerank(delta+clamp[0,1]·round6, replace로 새 인스턴스)→(-final_score, path) 정렬→final_top_k 절단→rank로 고정. stale은 candidate.stale을 merge_stale_applied로 전달해 이중 계산 차단(_merge_candidates 무수정). reranker 미주입·flag off면 단계 통째 skip, 예외는 warnings에 'rerank: {exc}'만 남기고 rerank 없이 진행(rerank_version=None). 테스트 6건 추가(절단 전 rerank 회귀 포함) — verify.sh full 283 passed.",
+      "completed_at": "2026-08-02T14:32:44+0900"
+    },
+    {
+      "step": 3,
+      "name": "reranking-lookup",
+      "status": "completed",
+      "started_at": "2026-08-02T14:32:44+0900",
+      "summary": "app/mappings/reranking_lookup.py 신규 — CandidateReranker 구현체 SqlAlchemyDecisionContextLookup(session, article_id), version=RERANK_VERSION. 조회 전략: Mapping.verified 필터 없이(거절 이력=verified False라 필터 시 rejected penalty 사망) article_id 단위 2쿼리 고정(매핑 1회 + 결정 이력 IN 1회, mapping_id·created_at·id 정렬)으로 N+1 차단. 키는 CandidateLocation(path, symbol or None).dedup_key 재사용(계산식 무복제), ValueError(빈 값·절대경로·상위 탈출)면 해당 매핑만 skip. 문맥: state=resolve_state(#0015 재사용), reason_code=마지막 결정, rejection_count=REJECTED 수, golden/historical=VERIFIED 이력의 reason_code, legacy=backfill 값(actor 'system' + reason_text 'legacy verified backfill') 일치, article_id·change_type=Mapping 행. 이력 없는 매핑은 미포함, 같은 dedup_key 매핑은 tuple로 합침. 읽기 전용(쓰기 없음)·점수 수치 없음. config.verified_reranking_enabled=True(+.env.example) 추가, app/main.py _make_mapping_service에서 flag True일 때만 RetrievalOrchestrator(providers, reranker=...) 주입(verified_lookup·VerifiedMappingProvider 무수정). 테스트 15건 신규 + 배선 회귀 2건(flag off→rerank_version None·기존 키 유지, flag on→verified-rerank-v1) — verify.sh full 300 passed.",
+      "completed_at": "2026-08-02T14:39:07+0900"
+    },
+    {
+      "step": 4,
+      "name": "rerank-ablation",
+      "status": "completed",
+      "started_at": "2026-08-02T14:39:07+0900",
+      "summary": "rerank on/off ablation 배선: RetrievalExperimentConfig.rerank_enabled=False 추가 + default_experiments() 끝에 verified_rerank_off/verified_rerank_on 2건(둘 다 ALL_SOURCES=verified_mapping+rag+term_dictionary+constant_match, top_k·scoring/normalization version 동일, rerank_enabled만 상이). 기존 5개 실험 id·순서·조합 무변경(전부 rerank_enabled=False). run_orchestrator_cases가 RetrievalConfig(rerank_enabled=...)와 RetrievalQuery(article_id=case_article_id(case)=f'{law_name}:{article}'·조문 없으면 None, change_type=case.expected.change_type)를 전달. environment.json에 실험별 rerank_enabled + 최상위 rerank_version(verified-rerank-v1)·decisions_fixture 기록. 신규 app/evaluation/decision_fixtures.py — DecisionFixtureEntry/FixtureDecisionReranker/load_decision_fixtures(도메인 DecisionContext 그대로 생성, 평행 정의 없음, 점수 수치 없음, DB·SQLAlchemy 무의존; 위치 매칭은 path+선택 symbol, 반환 키는 candidate.dedup_key; 없는 파일 FileNotFoundError·빈 파일 ()). fixture evaluation/fixtures/decisions/core_decisions.yaml 5건(정답 파일 exact verified / 오답 파일 exact rejected / 데이터셋에 없는 조문 verified=게이팅 대조군 / 정답 파일 stale / 호환 type verified). CLI --decisions <path> 선택 옵션(미지정 시 reranker=None). 테스트 11건 추가/갱신 — 실험 목록 단언 갱신, off/on 공정 비교 고정, fixture 로더·reranker 키·runner 문맥 배선(가짜 orchestrator, 임베딩/DB/LLM 미사용). 우월성 단언 없음(스펙 §14). verify.sh full 310 passed. 로컬 ablation(evaluation/results/rerank-ablation-0016, --persist-dir ./evaluation/chroma_mock_tax): off R@1 1.000/R@5 1.000/MRR 1.000/P@5 0.500 → on R@1 0.909(-0.091)/R@5 1.000/MRR 0.955(-0.045)/P@5 0.500. 유일한 변동은 tax_year_end_deadline_date_001(RR 1.0→0.5) — stale 이력이 붙은 정답 파일이 rank 1→2로 내려간 것으로, stale이 강제 정답 처리되지 않음을 수치로 보여준다. verified boost의 상승 효과는 관측 불가(mock index 2청크로 baseline이 이미 R@1 1.000 saturate). --decisions 미지정 시 on/off 결과 동일하고 기존 5개 실험이 과거 baseline과 일치.",
+      "completed_at": "2026-08-02T14:45:48+0900"
+    }
+  ],
+  "created_at": "2026-08-02T14:24:16+0900",
+  "total_cost_usd": 9.8684,
+  "completed_at": "2026-08-02T14:45:48+0900"
+}

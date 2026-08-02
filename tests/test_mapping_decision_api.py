@@ -11,8 +11,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app import main
 from app.db.database import get_session
 from app.db.models import Base, LawChange, Mapping
+from app.domain.mappings.reranking import RERANK_VERSION
 from app.main import app
 
 ARTICLE_ID = "L-1:12"
@@ -213,6 +215,84 @@ def test_unknown_mapping_returns_404(client):
         client.post("/mappings/999/decisions", json={"decision": "verified"}).status_code
         == 404
     )
+
+
+@pytest.fixture()
+def light_retrieval(monkeypatch, tmp_path):
+    """map 엔드포인트를 무거운 의존성 없이 태우기 위한 대역.
+
+    ChromaDB·임베딩 모델·실제 repo 를 건드리지 않되 `_make_mapping_service` 의
+    배선(Provider 구성 + reranker 주입)은 실제 코드를 그대로 실행한다.
+    """
+    from config import settings as app_settings
+
+    class _Indexer:
+        pass
+
+    class _Adapter:
+        def search(self, text, k=5):
+            return []
+
+        def read_file(self, path):
+            return "code"
+
+        def list_files(self):
+            return []
+
+        def repository_revision(self):
+            return "rev-1"
+
+    monkeypatch.setattr(main, "CodeIndexer", lambda *a, **kw: _Indexer())
+    monkeypatch.setattr(main, "_make_adapter", lambda indexer=None: _Adapter())
+    monkeypatch.setattr(app_settings, "audit_artifact_dir", str(tmp_path / "audit"))
+    return app_settings
+
+
+def _map_payload(client, session):
+    session.query(Mapping).filter(Mapping.id == 1).update({"verified": True})
+    session.commit()
+    response = client.post("/changes/1/map")
+    assert response.status_code == 200
+    return response.json()
+
+
+def test_map_omits_rerank_version_when_flag_is_disabled(
+    client, session, light_retrieval, monkeypatch
+):
+    monkeypatch.setattr(light_retrieval, "verified_reranking_enabled", False)
+
+    payload = _map_payload(client, session)
+
+    assert payload["rerank_version"] is None
+    assert payload["scoring_version"] == "retrieval-scoring-v1"
+    # 기존 응답 키가 그대로여야 한다 (#0009 회귀 기준선).
+    for key in (
+        "law_change_id",
+        "candidates",
+        "provider_statuses",
+        "query_hash",
+        "repository_commit",
+        "warnings",
+        "duration_ms",
+        "rag_hits",
+        "dict_matches",
+        "const_matches",
+        "saved",
+        "run_id",
+        "audit_incomplete",
+    ):
+        assert key in payload
+
+
+def test_map_reports_rerank_version_when_flag_is_enabled(
+    client, session, light_retrieval, monkeypatch
+):
+    monkeypatch.setattr(light_retrieval, "verified_reranking_enabled", True)
+
+    payload = _map_payload(client, session)
+
+    assert payload["rerank_version"] == RERANK_VERSION
+    assert payload["warnings"] == []
 
 
 def test_histories_of_different_mappings_do_not_mix(client):

@@ -40,6 +40,20 @@
 **이유**: boolean 하나로는 "누가·왜·어느 commit에서" 검증했는지 추적이 안 되고, #0016 리랭킹(검증 boost·거절 penalty·stale 무효화)의 근거를 만들 수 없다. 기존 `apply`/`get_mappings`가 `verified` 컬럼에 의존하므로 컬럼을 삭제하지 않고 cache로 보존해 회귀를 막는다.
 **트레이드오프**: 검증 상태가 컬럼과 이벤트 두 곳에 존재(cache 동기화 책임). 인증 레이어가 없어 `actor`는 자기신고값(단일 담당자 도구로 수용, 기본 'owner'). 유효성 스냅샷(commit/path_hash/symbol_hash)은 #0015에서 nullable best-effort — 코드 본문은 저장하지 않고 해시만.
 
+### ADR-009: 검증 이력 기반 검색 재정렬은 후처리 rerank 단계로 (Issue #0016)
+**결정**: #0015의 결정 이력(verified/rejected/stale/golden/historical/legacy)을 검색 점수에 반영하되, 기존 source 가중치(`_merge_candidates`)에 섞지 않고 merge·rank **뒤에 별도 rerank 단계**로 delta를 적용해 재정렬한다. 순수 도메인(`app/domain/mappings/reranking.py`: `classify_reuse`, `rerank_delta`, `RERANK_VERSION`)과 DB lookup(`app/mappings/reranking_lookup.py`)을 분리한다. boost/penalty는 후보 위치의 이력을 쿼리(article_id + change_type)와 대조해 **exact/compatible/unrelated로 문맥 게이팅**한 뒤 exact·compatible에만 적용한다(스펙 §9·§11). 기본 활성(config `verified_reranking_enabled=True`, flag로 off 가능), 버전은 `SCORING_VERSION`을 유지하고 응답에 별도 `rerank_version`을 노출한다.
+**이유**: 검증 매핑 자산을 검색 품질로 환원하는 것이 이 시스템의 핵심 가치(ADR-005)지만, 매핑을 무관 개정에 과적합하면 "개정을 놓침"보다 나쁜 오탐을 만든다 — 문맥 게이팅으로 다른 법령의 거절이 영구 차단이 되지 않게 한다. 후처리 분리는 ablation으로 전후 성능을 수치 입증(로드맵 원칙: 측정 먼저)하고 §1 scoring을 안정적으로 유지한다.
+**트레이드오프**: rerank 단계가 검색 지연에 소량 추가. stale 신호가 merge(-0.50, content drift)와 rerank(결정 STALE)에서 겹칠 수 있어 **총 penalty를 -0.50으로 cap**해 이중 계산을 막는다. rerank가 켜지면 순위가 바뀌므로 회귀는 flag off·reranker 미주입 시 동일 결과로 방어하고 ablation으로 검증한다.
+
+#### ADR-009 보강 (2026-08-02, 구현 착수 전 코드 검토)
+설계 승인 후 기존 코드를 대조해 확인한 세 가지를 결정에 추가한다. 셋 다 위 결정을 바꾸지 않고 성립 조건을 못 박는 것이다.
+
+1. **쿼리 문맥은 `RetrievalQuery`로 나른다.** 문맥 게이팅에 필요한 `article_id`·`change_type`이 현재 검색 seam에 없다 — `article_id`는 `_make_mapping_service` 클로저에만 있고 `change_type`은 전달되지 않는다. `RetrievalQuery`에 `article_id: str | None`·`change_type: str | None`을 **기본값 None으로** 추가하고 `MappingService.map()`이 이를 받아 넘긴다. 기본값을 두는 이유는 기존 호출자(ablation runner, 테스트)가 그대로 동작해야 하기 때문이고, 두 값이 없으면 rerank는 게이팅 불가로 판단해 delta 0을 반환한다(무문맥 boost 금지 — 스펙 §9).
+2. **rerank는 `final_top_k` 절단 전에 실행한다.** 현재 orchestrator는 merge 직후 `final_top_k`로 자르고 rank를 매긴다. 절단 뒤에 rerank를 두면 상위 K 밖의 검증 후보가 boost를 받아도 올라올 수 없어 "유효한 verified 후보가 상단으로 이동"(#0016 수용 기준)이 구조적으로 불가능하다. 순서는 **merge → rerank → 정렬 → 절단 → rank 부여**로 고정한다.
+3. **stale cap은 merge 적용분을 후보에 실어 계산한다.** `_merge_candidates`는 stale에 -0.50을 적용한 뒤 `max(0.0, ...)`로 클램프하므로, rerank 시점에는 페널티가 이미 바닥에 흡수돼 얼마가 적용됐는지 알 수 없다. merge가 stale 페널티를 적용했다는 사실을 후보에 실어(`RetrievalCandidate.stale` 재사용) rerank가 STALE 결정 페널티를 **추가로 얹지 않도록** 한다 — 총 -0.50 cap은 이 방식으로 보장한다.
+
+**추가 트레이드오프**: `RetrievalQuery`·`MappingService.map()` 시그니처가 넓어진다(기본값으로 하위 호환 유지). rerank가 절단 전으로 오면 merge 결과 전체를 대상으로 lookup해야 해 DB 조회량이 K가 아니라 후보 수에 비례한다 — article_id 단위 1회 조회로 묶어 흡수한다.
+
 ### ADR-007: 도메인 레지스트리(domains.json)로 수집 확장
 **결정**: 수집 대상 법령·고시 검색어를 코드가 아니라 `domains.json`(tax/hr)에서 관리. 파일 없으면 기존 세법 5종 폴백.
 **이유**: 연말정산(세법)을 넘어 인사 법령 전반으로 확장 + 도메인별 담당자 라우팅 기반. 법률만 수집하면 올해 개정(시행령·시행규칙 10건, 법률 0건)을 전부 놓쳤을 상황 — 3계층 수집이 필수임을 실검증.

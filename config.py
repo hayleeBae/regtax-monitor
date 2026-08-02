@@ -56,5 +56,9 @@ class Settings(BaseSettings):
     # MCP는 읽기 전용이며 patch 본문은 별도 opt-in 전까지 노출하지 않는다.
     mcp_expose_patch_drafts: bool = False
 
+    # #0016 검증 이력 기반 검색 재정렬 (ADR-009, 기본 활성).
+    # False면 reranker를 주입하지 않아 #0009 검색 결과와 동일해진다(ablation 대조군).
+    verified_reranking_enabled: bool = True
+
 
 settings = Settings()

@@ -23,10 +23,12 @@ app/
 │   ├── docs_index.py    #   참고 문서(해설서) 별도 컬렉션(tax_docs) 인덱싱
 │   ├── term_dict.py     #   암호 컬럼코드↔한글명 사전 (주석에서 자동 수확)
 │   └── const_inventory.py #  법령 수치 리터럴 인벤토리 (값 매칭)
-├── domain/mappings/    # 매핑 검증 결정 순수 도메인 (Issue #0015)
-│   └── decisions.py     #   MappingDecisionType/reason enum, MappingDecisionRecord, resolve_state(), check_stale()
+├── domain/mappings/    # 매핑 검증 결정 순수 도메인 (Issue #0015~#0016)
+│   ├── decisions.py     #   MappingDecisionType/reason enum, MappingDecisionRecord, resolve_state(), check_stale()
+│   └── reranking.py     #   (#0016) DecisionContext, classify_reuse, rerank_delta, RERANK_VERSION — 문맥 게이팅 검색 재정렬
 ├── mappings/            # 매핑 결정 영속화
-│   └── repository.py    #   mapping_decision append+list only (수정 미제공, audit 패턴)
+│   ├── repository.py    #   mapping_decision append+list only (수정 미제공, audit 패턴)
+│   └── reranking_lookup.py #  (#0016) MappingDecision⨝Mapping → location별 DecisionContext 빌드 (DB 접근)
 └── db/
     ├── database.py      #   SQLAlchemy 엔진/세션 (SQLite regtax.db) + init_db()/_migrate() (legacy verified backfill)
     └── models.py        #   LawChange / Mapping / Proposal / ExecutionRun / AuditEvent / MappingDecision 등
@@ -53,7 +55,9 @@ scripts/                 # 하네스 (verify.sh, execute.py, trace.py + 자체 �
 ```
 법제처 API → collect(LawChange 저장, domain/tier 태깅)
   → analyze(LLM 요약 + 해설서 RAG 컨텍스트)
-  → map(RAG + 사전 정확매칭 + 상수 값매칭 → Mapping, 담당자 verify로 정확도 축적)
+  → map(RAG + 사전 정확매칭 + 상수 값매칭 → orchestrator merge
+         → (#0016) 검증 이력 rerank: 문맥 게이팅 boost/penalty (절단 전)
+         → 정렬 → final_top_k 절단 → rank 부여 → Mapping, 담당자 verify로 정확도 축적)
   → apply(LLM 앵커 편집 → unified diff → 골든 테스트 자동 검증 → Proposal)
   → approve/reject(사람 승인 게이트 → patch 파일 출력)
 ```

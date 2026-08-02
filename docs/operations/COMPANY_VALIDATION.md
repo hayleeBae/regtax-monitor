@@ -42,6 +42,31 @@ case id:
 provider 오류:
 ```
 
+## 4-1. 검증 이력 rerank 발동 확인 (Issue #0016)
+
+#0016 rerank는 검증 매핑의 `(path, symbol)`이 검색 후보의 `(path, symbol)`과
+**정확히 일치**할 때만 적용된다(`CandidateLocation.dedup_key` 기준). 그런데 후보의
+symbol은 검색원마다 다르다 — RAG는 청크 심볼, 용어 사전은 컬럼 코드, 상수 매칭은
+값 문자열. 실제 `mapping` 테이블에 어떤 symbol이 쌓이느냐에 따라 rerank가 한 번도
+발동하지 않을 수 있다. 집 mock의 ablation fixture는 파일 단위로 느슨하게 매칭해서
+이 격차가 드러나지 않으므로, 회사에서만 확인 가능하다.
+
+검증 매핑이 쌓인 뒤 사례 3~5건에 대해 아래를 기록한다(실제 경로·symbol 값은 적지
+않고 일치 여부만).
+
+```text
+검증 매핑 수:
+rerank 발동 건수 (응답 rerank_version 존재 + 순위 변동):
+symbol 일치로 매칭된 건수 / symbol 불일치로 미매칭된 건수:
+정답 파일 rank 변화 (rerank off → on):
+stale 이력 후보의 rank 변화:
+```
+
+`stale 이력 후보의 rank 변화`는 별도 판단 대기 항목이다 — 현재 stale은 boost 제거에
+더해 -0.50 penalty를 받아 이력이 전혀 없는 후보보다 아래로 내려간다(스펙 §10 문언
+그대로). 정답이 부당하게 밀리는 사례가 관측되면 penalty를 중립화(boost 제거만)하는
+방향으로 스펙 §10 수치 개정을 검토한다.
+
 ## 5. Private dataset
 
 ```bash
@@ -63,6 +88,7 @@ Ollama 모델과 context length:
 인덱싱 파일 수 / chunk 수 / 소요시간:
 검색 사례 수:
 정답 rank 요약:
+rerank 발동 건수 / symbol 미매칭 건수:
 provider 오류:
 기타 경고(context shift, timeout, SSL):
 ```
