@@ -75,7 +75,14 @@ def _make_mapping_service(db: Session, article_id: str):
         DictionaryProvider(settings.repo_root),
         ConstantProvider(repo_root),
     )
-    return MappingService(RetrievalOrchestrator(providers)), adapter
+    # provider(후보 생성)와 reranker(순위 조정)는 별개 역할이다 — 위 verified_lookup을
+    # 대체하지 않고 검증 이력 문맥만 덧붙인다(ADR-009).
+    reranker = None
+    if settings.verified_reranking_enabled:
+        from app.mappings.reranking_lookup import SqlAlchemyDecisionContextLookup
+
+        reranker = SqlAlchemyDecisionContextLookup(db, article_id)
+    return MappingService(RetrievalOrchestrator(providers, reranker=reranker)), adapter
 
 
 def _start_audit(db: Session, run_type, row):
