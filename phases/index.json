@@ -9,6 +9,10 @@
       "dir": "issue-0016",
       "status": "completed",
       "completed_at": "2026-08-02T14:45:48+0900"
+    },
+    {
+      "dir": "issue-0017",
+      "status": "pending"
     }
   ]
 }

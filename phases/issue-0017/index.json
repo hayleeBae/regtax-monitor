@@ -1,0 +1,29 @@
+{
+  "project": "regtax-monitor",
+  "phase": "issue-0017",
+  "steps": [
+    {
+      "step": 0,
+      "name": "replay-schema",
+      "status": "completed",
+      "started_at": "2026-08-02T22:45:26+0900",
+      "summary": "app/evaluation/replay/{__init__,fixture}.py 신규 — PrivacyMode·ArtifactKind·allowed_artifacts(화이트리스트)·REPLAY_SCHEMA_VERSION·ReplayRepository/Scope/Execution/Fixture export. FULL=전체, REDACTED=diff_structure·file_path·metric·hash·count, METADATA_ONLY=metric·hash·count. tests/test_replay_fixture.py 추가(335 passed)."
+    },
+    {
+      "step": 1,
+      "name": "replay-loader",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "replay-mock-repos",
+      "status": "pending"
+    },
+    {
+      "step": 3,
+      "name": "replay-fixtures",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-08-02T22:45:26+0900"
+}
