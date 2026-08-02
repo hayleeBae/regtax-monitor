@@ -40,9 +40,9 @@
       "status": "completed",
       "started_at": "2026-08-02T14:39:07+0900",
       "summary": "rerank on/off ablation 배선: RetrievalExperimentConfig.rerank_enabled=False 추가 + default_experiments() 끝에 verified_rerank_off/verified_rerank_on 2건(둘 다 ALL_SOURCES=verified_mapping+rag+term_dictionary+constant_match, top_k·scoring/normalization version 동일, rerank_enabled만 상이). 기존 5개 실험 id·순서·조합 무변경(전부 rerank_enabled=False). run_orchestrator_cases가 RetrievalConfig(rerank_enabled=...)와 RetrievalQuery(article_id=case_article_id(case)=f'{law_name}:{article}'·조문 없으면 None, change_type=case.expected.change_type)를 전달. environment.json에 실험별 rerank_enabled + 최상위 rerank_version(verified-rerank-v1)·decisions_fixture 기록. 신규 app/evaluation/decision_fixtures.py — DecisionFixtureEntry/FixtureDecisionReranker/load_decision_fixtures(도메인 DecisionContext 그대로 생성, 평행 정의 없음, 점수 수치 없음, DB·SQLAlchemy 무의존; 위치 매칭은 path+선택 symbol, 반환 키는 candidate.dedup_key; 없는 파일 FileNotFoundError·빈 파일 ()). fixture evaluation/fixtures/decisions/core_decisions.yaml 5건(정답 파일 exact verified / 오답 파일 exact rejected / 데이터셋에 없는 조문 verified=게이팅 대조군 / 정답 파일 stale / 호환 type verified). CLI --decisions <path> 선택 옵션(미지정 시 reranker=None). 테스트 11건 추가/갱신 — 실험 목록 단언 갱신, off/on 공정 비교 고정, fixture 로더·reranker 키·runner 문맥 배선(가짜 orchestrator, 임베딩/DB/LLM 미사용). 우월성 단언 없음(스펙 §14). verify.sh full 310 passed. 로컬 ablation(evaluation/results/rerank-ablation-0016, --persist-dir ./evaluation/chroma_mock_tax): off R@1 1.000/R@5 1.000/MRR 1.000/P@5 0.500 → on R@1 0.909(-0.091)/R@5 1.000/MRR 0.955(-0.045)/P@5 0.500. 유일한 변동은 tax_year_end_deadline_date_001(RR 1.0→0.5) — stale 이력이 붙은 정답 파일이 rank 1→2로 내려간 것으로, stale이 강제 정답 처리되지 않음을 수치로 보여준다. verified boost의 상승 효과는 관측 불가(mock index 2청크로 baseline이 이미 R@1 1.000 saturate). --decisions 미지정 시 on/off 결과 동일하고 기존 5개 실험이 과거 baseline과 일치.",
-      "completed_at": "2026-08-02T14:47:00+0900"
+      "completed_at": "2026-08-02T14:45:48+0900"
     }
   ],
   "created_at": "2026-08-02T14:24:16+0900",
-  "total_cost_usd": 7.0341
+  "total_cost_usd": 9.8684
 }
