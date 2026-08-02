@@ -29,6 +29,13 @@ app/
 ├── mappings/            # 매핑 결정 영속화
 │   ├── repository.py    #   mapping_decision append+list only (수정 미제공, audit 패턴)
 │   └── reranking_lookup.py #  (#0016) MappingDecision⨝Mapping → location별 DecisionContext 빌드 (DB 접근)
+├── evaluation/          # 평가·측정 (데이터셋, 지표, ablation)
+│   ├── case.py          #   EvaluationCase 스키마 + loader.py (검색·분류·patch 평가용)
+│   ├── retrieval_benchmark.py # provider 조합·rerank on/off ablation
+│   ├── decision_fixtures.py   # (#0016) ablation용 파일 기반 결정 이력
+│   └── replay/          #   (#0017) 과거 개정 replay fixture — EvaluationCase와 별도 스키마
+│       ├── fixture.py   #     ReplayFixture/ReplayScope/PrivacyMode (순수 계약, #0018이 소비)
+│       └── loader.py    #     YAML 로더 — path XOR path_env, revision 문자 제한, golden_command allowlist
 └── db/
     ├── database.py      #   SQLAlchemy 엔진/세션 (SQLite regtax.db) + init_db()/_migrate() (legacy verified backfill)
     └── models.py        #   LawChange / Mapping / Proposal / ExecutionRun / AuditEvent / MappingDecision 등
@@ -38,6 +45,14 @@ domains.json             # 수집 도메인 레지스트리 (tax/hr)
 run.py                   # uvicorn 런처 (:8000)
 static/index.html        # 대시보드 UI (단일 파일, 바닐라 JS)
 mock_repo/               # 집 개발용 가짜 eHR (Java/SQL/XML + 골든 테스트)
+evaluation/
+├── datasets/            # 평가 데이터셋 (core.yaml + company_private 템플릿)
+├── fixtures/
+│   ├── repositories/    #   mock 코드 fixture
+│   ├── decisions/       #   (#0016) rerank ablation용 결정 이력
+│   └── replay_sources/  #   (#0017) replay mock repo의 base/answer 파일 트리 — 커밋 대상
+├── private/             # 회사 실데이터 (데이터셋 + replay fixture) — gitignore
+└── results/             # 벤치마크 산출물 — gitignore
 tests/                   # 앱 테스트 (pytest)
 scripts/                 # 하네스 (verify.sh, execute.py, trace.py + 자체 테스트)
 ```
@@ -50,6 +65,8 @@ scripts/                 # 하네스 (verify.sh, execute.py, trace.py + 자체 �
 - 설정 접근은 `config.settings` 단일 인스턴스로만.
 - `app/domain/` 은 순수 계약 — FastAPI, SQLAlchemy, 외부 LLM SDK를 import하지 않는다. 영속화는 `app/audit/`·`app/mappings/` repository가 담당한다.
 - 검증 이력 등 append-only 저장소는 수정/삭제 API를 제공하지 않는다(repository에서 강제).
+- `app/evaluation/`은 DB·FastAPI 없이 실행 가능해야 한다 — 평가·ablation은 서버 기동과 무관하게 재현 가능해야 하기 때문이다.
+- replay fixture(`app/evaluation/replay/`)는 **선언만 담는 계약**이다 — git 실행·worktree·파일 쓰기를 하지 않는다(#0018 runner 책임). 실제 repo 절대경로는 YAML이 아니라 환경변수로만 들어온다.
 
 ## 데이터 흐름
 ```
