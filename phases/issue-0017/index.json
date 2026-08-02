@@ -16,7 +16,7 @@
       "status": "completed",
       "started_at": "2026-08-02T22:47:41+0900",
       "summary": "app/evaluation/replay/loader.py 신규(ReplayFixtureLoader, __init__ export) + tests/test_replay_loader.py(62건). 검증 4종 — repo 위치 path XOR path_env(path=상대경로만·절대/'..' 거부, path_env=[A-Z][A-Z0-9_]* 이름만이며 값은 읽지 않음), revision 문자 제한([A-Za-z0-9._/-], 빈값·'..'·^·~·:·공백·'-' 시작 거부), golden_command shlex 첫 토큰 allowlist(mvn/gradle/./gradlew/pytest/bash, 경로 실행파일·따옴표 불균형 거부), scope 경로 traversal(relevant/excluded/expected_replacements). 부가: schema_version {1}, source_type {local_git}, privacy_mode 어휘(생략 시 metadata_only), timeout 1..3600, case_id 중복, relevant∩excluded. DatasetValidationError.details 에 오류 누적. 397 passed.",
-      "completed_at": "2026-08-02T23:05:00+0900"
+      "completed_at": "2026-08-02T22:51:56+0900"
     },
     {
       "step": 2,
@@ -30,5 +30,5 @@
     }
   ],
   "created_at": "2026-08-02T22:45:26+0900",
-  "total_cost_usd": 0.9748
+  "total_cost_usd": 2.593
 }
