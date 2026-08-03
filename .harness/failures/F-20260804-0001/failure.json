@@ -23,9 +23,9 @@
   },
   "resolution": {
     "action": "retry_after_reset",
-    "description": "1:10am KST 세션 한도 리셋 후 step 5를 pending으로 되돌리고 executor 재실행. 코드 변경 없이 재실행만으로 해소되는지 확인 중.",
-    "commit": null
+    "description": "1:10am KST 세션 한도 리셋 후 step 5를 pending으로 되돌리고 executor 재실행. ESCALATION.md 가드를 원인 확인 후 삭제. 코드 변경 없이 재실행만으로 step 5 정상 완료 (verify.sh full 711 passed, CLI 스모크 3종 통과, worktree 누수 없음) — 외부 한도 요인 확정.",
+    "commit": "c417e6a"
   },
-  "status": "open",
+  "status": "resolved",
   "recurrence_of": "F-20260731-0001"
 }
