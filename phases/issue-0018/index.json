@@ -1,0 +1,39 @@
+{
+  "project": "regtax-monitor",
+  "phase": "issue-0018",
+  "steps": [
+    {
+      "step": 0,
+      "name": "git-allowlist",
+      "status": "completed",
+      "started_at": "2026-08-03T23:52:08+0900",
+      "summary": "app/evaluation/replay/git_cmd.py 신규 — 서브커맨드 allowlist(rev-parse/cat-file/diff/show/worktree/status/apply, worktree는 add|remove|prune만), 금지 인자(-c/--exec-path/--upload-pack/--receive-pack/-C/--git-dir/--work-tree/--namespace, 정확일치 또는 이름= 접두만) + apply 전용 거부(--index/--cached/-3/--3way). run_git(args, *, cwd, timeout=120, check=True, git_bin=\"git\") -> CompletedProcess: shell=False 단일 subprocess.run, 전 호출 timeout, GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE 제거, 실패·타임아웃·git 미설치는 GitCommandError(4000자 클립), allowlist 위반은 GitCommandNotAllowed. 헬퍼 rev_parse/worktree_add/worktree_remove/worktree_prune/diff_name_status/show_file 전부 run_git 경유. tests/test_replay_git_cmd.py 71건 추가"
+    },
+    {
+      "step": 1,
+      "name": "worktree-lifecycle",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "answer-diff",
+      "status": "pending"
+    },
+    {
+      "step": 3,
+      "name": "replay-metrics",
+      "status": "pending"
+    },
+    {
+      "step": 4,
+      "name": "golden-exec",
+      "status": "pending"
+    },
+    {
+      "step": 5,
+      "name": "replay-runner",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-08-03T23:52:08+0900"
+}
