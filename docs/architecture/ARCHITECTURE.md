@@ -40,7 +40,7 @@ app/
 │       ├── worktree.py  #     [실행] (#0018) repo 경로 해석(path_env) + dirty/commit 사전검증 + 임시 detached worktree 컨텍스트 (finally cleanup)
 │       ├── answer_diff.py #   [실행] (#0018) answer commit 변경 추출(commit 대 commit, worktree 불필요) → scope 필터로 정답 집합 + fixture 기대교체 대조
 │       ├── runner.py    #     [실행] (#0018) 임시 detached worktree 생성 → pipeline seam 호출 → 비교 → finally cleanup
-│       └── report.py    #     [실행] (#0018) 지표 산출 + privacy_mode 게이팅 (allowed_artifacts 소비 지점)
+│       └── report.py    #     [실행] (#0018) 스펙 §7 지표 산출(순수 계산) + privacy_mode 게이팅 저장 (allowed_artifacts 소비 지점, replay_report.json/md + environment.json)
 └── db/
     ├── database.py      #   SQLAlchemy 엔진/세션 (SQLite regtax.db) + init_db()/_migrate() (legacy verified backfill)
     └── models.py        #   LawChange / Mapping / Proposal / ExecutionRun / AuditEvent / MappingDecision 등

@@ -29,7 +29,10 @@
     {
       "step": 3,
       "name": "replay-metrics",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-08-04T00:10:32+0900",
+      "summary": "app/evaluation/replay/report.py 신규 — ReplayOutcome(case_id/answer/replacement_checks/expected_replacements/generated_files/generated_replacements(GeneratedReplacement path·before·after)/retrieved_paths/git_apply_ok/golden_status/golden_output/generated_diff/answer_diff_text/duration_ms) → compute_metrics(순수 함수, git·파일 접근 없음) → ReplayMetrics. 지표(스펙 §7): relevant_path_recall_at_k K=(1,3,5,10), primary_rank(없으면 None), expected_replacement_accuracy(경로+match_mode 포함 키, normalized_text 는 공백 정규화), file_coverage, unnecessary_file_rate(기준 = in_scope ∪ excluded), changed_file_jaccard(replay 신규, 둘 다 비면 1.0), git_apply, golden_result, normalized_diff_similarity(참고값). Recall/coverage/unnecessary/replacement rate/rank 는 app/evaluation/metrics 기존 함수 재사용. _verdict = fixture 일관성 + accuracy 1.0 + coverage 1.0 + git_apply is not False + golden in {passed, skipped, None} — 유사도는 참조하지 않음. write_report(outcomes, output_dir, privacy_mode, environment) 는 allowed_artifacts(privacy_mode)(#0017)를 호출해 허용 종류만 넣는 화이트리스트 구성: FILE_PATH 미허용 → path 대신 path_hash(sha256 16자), DIFF_STRUCTURE 미허용 → answer_files/generated_files 자체를 생략(집계 counts 만), DIFF_BODY 미허용 → generated_diff/answer_diff 생략, GOLDEN_OUTPUT 미허용 → golden_result 상태 문자열만, CODE_SNIPPET 미허용 → before/after 대신 matched boolean. 출력 replay_report.json + replay_report.md + environment.json(정렬 키·고정 들여쓰기로 결정적). ARCHITECTURE.md replay 트리의 report.py 설명 갱신(레이어 규칙 문장 무수정). tests/test_replay_report.py 37건 추가(손계산 지표, primary_rank None, 모드별 게이팅을 저장 파일 텍스트로 검사, allowed_artifacts monkeypatch 로 단일 출처 확인, 유사도만 바꿔도 판정 불변, 2회 저장 바이트 동일, 빈 outcomes)",
+      "completed_at": "2026-08-04T00:22:00+0900"
     },
     {
       "step": 4,
