@@ -40,7 +40,7 @@
       "status": "completed",
       "started_at": "2026-08-04T00:18:04+0900",
       "summary": "app/evaluation/replay/golden_exec.py 신규 — fixture golden_command 를 임시 worktree 안에서 shell 없이 실행(#0017 secscan 발견 #1 해소). validate_golden_args(tokens): 실행파일은 loader.py 의 GOLDEN_COMMAND_ALLOWLIST 를 import 해 재확인(복제 없음, 로더 미경유 호출 경로 이중 방어), 인자 거부 규칙 = 절대경로(--opt=/abs 값 포함) / '..' 경로 구성요소(문자열 포함이 아니라 구분자 분해 후 판정) / 대상 재지정 옵션 FORBIDDEN_ARG_NAMES(-f --file -p --plugin -C --project-dir --rootdir -b --build-file --settings -s) — 정확 이름 또는 '이름=' 접두만 매칭해 --fail-fast 류 오탐 없음. 위반은 GoldenCommandNotAllowed. GoldenResult(status: passed|failed|error|skipped, output, duration_s, exit_code) + run_golden(command, worktree, timeout_seconds): 빈 명령은 skipped, shlex.split → 검증 → subprocess.run(shell=False, cwd=worktree 고정, capture_output, text, timeout), env 는 상속하되 GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE 제거, 출력 4000자 뒷부분 유지. 타임아웃·검증 위반·도구 부재·cwd 부재는 예외를 던지지 않고 status=error 결과로 표현(스펙 §9, runner 가 다음 케이스를 계속 진행). app/golden.py 는 import·호출하지 않음(ADR-011 신뢰 경계 분리). ARCHITECTURE.md replay 트리에 golden_exec.py 실행 계층 추가. tests/test_replay_golden_exec.py 43건 추가(우회 8종 개별 거부, 정상 8종 통과, allowlist 단일 출처, cwd/shell=False/env 인자 고정, 타임아웃 무예외, 출력 상한, pytest 로 실제 성공·실패·cwd 실행). verify.sh full 672 passed",
-      "completed_at": "2026-08-04T00:31:00+0900"
+      "completed_at": "2026-08-04T00:23:49+0900"
     },
     {
       "step": 5,
@@ -49,5 +49,5 @@
     }
   ],
   "created_at": "2026-08-03T23:52:08+0900",
-  "total_cost_usd": 9.1963
+  "total_cost_usd": 11.5116
 }
