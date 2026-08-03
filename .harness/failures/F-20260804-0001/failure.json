@@ -1,0 +1,31 @@
+{
+  "failure_id": "F-20260804-0001",
+  "ts": "2026-08-04T00:24:04+0900",
+  "run_id": "20260803-235208-6a1d",
+  "stage": "implement",
+  "step": 5,
+  "trace_refs": [],
+  "symptom": {
+    "category": "env_error",
+    "signal": "step5-output.json: api_error_status=429, result='You've hit your session limit · resets 1:10am (Asia/Seoul)', num_turns=1, 입력/출력 토큰 0, duration_ms=514. claude 서브프로세스가 세션 한도로 0-turn 종료 → executor는 'Step did not update status'로 표면화. 코드 결함 아님 — Step 5 산출물(runner.py/stub_pipeline.py) 미생성이고 feat 커밋에 trace 이벤트만 포함됨.",
+    "artifact": "artifacts/escalation-detail.md"
+  },
+  "verified_cause": {
+    "cause_code": "flaky_external",
+    "description": "Anthropic 계정 세션 사용량 한도(429)에 걸려 step 5용 claude 세션이 실행되지 못함. 같은 실행에서 step 0~4는 31분간 정상 완료(verify.sh full 672 passed)했고 step 5만 0~2초 내 즉시 종료가 3회 반복 — 코드·검증 게이트와 무관한 외부 계정 한도다. 1:10am(KST) 리셋 후 재개 가능.",
+    "verified_by": "manual: phases/issue-0018/step5-output.json 의 api_error_status=429 와 세션 한도 메시지 직접 확인",
+    "causal_chain": [
+      "누적 사용량이 세션 한도 도달 (직전까지 step 0~4 정상 수행)",
+      "executor가 step5용 claude 호출 → 429 즉시 반환 (0 turn, 514ms)",
+      "status 미갱신 → executor가 3회 재시도, 모두 429 반복",
+      "3회 실패로 error 처리 + ESCALATION 작성"
+    ]
+  },
+  "resolution": {
+    "action": "retry_after_reset",
+    "description": "1:10am KST 세션 한도 리셋 후 step 5를 pending으로 되돌리고 executor 재실행. 코드 변경 없이 재실행만으로 해소되는지 확인 중.",
+    "commit": null
+  },
+  "status": "open",
+  "recurrence_of": "F-20260731-0001"
+}

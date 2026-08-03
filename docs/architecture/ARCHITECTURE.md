@@ -40,7 +40,8 @@ app/
 │       ├── worktree.py  #     [실행] (#0018) repo 경로 해석(path_env) + dirty/commit 사전검증 + 임시 detached worktree 컨텍스트 (finally cleanup)
 │       ├── answer_diff.py #   [실행] (#0018) answer commit 변경 추출(commit 대 commit, worktree 불필요) → scope 필터로 정답 집합 + fixture 기대교체 대조
 │       ├── golden_exec.py #   [실행] (#0018) fixture golden_command 실행 — shell=False + cwd=worktree 고정 + 인자 검증(절대경로·`..`·대상 재지정 옵션 거부, allowlist 는 loader 재사용), 타임아웃은 예외 대신 GoldenResult(status=error)
-│       ├── runner.py    #     [실행] (#0018) 임시 detached worktree 생성 → pipeline seam 호출 → 비교 → finally cleanup
+│       ├── runner.py    #     [실행] (#0018) 스펙 §4 조립 — 사전검증 → 임시 worktree → ReplayPipeline seam 호출(임베딩·추론 백엔드 미import) → 스크래치 apply/골든 → answer 비교 → finally cleanup. 케이스 실패는 failure_kind 로 격리하고 계속 진행(§9), privacy 는 fixture 중 가장 엄격한 모드. CLI 진입점(--fixtures/--output-dir/--privacy-mode/--stub)
+│       ├── stub_pipeline.py # [실행] (#0018) 결정적 stub 파이프라인(perfect/partial/empty) — worktree 실제 내용을 읽어 적용 가능한 unified diff 생성, 로컬·테스트 검증 전용
 │       └── report.py    #     [실행] (#0018) 스펙 §7 지표 산출(순수 계산) + privacy_mode 게이팅 저장 (allowed_artifacts 소비 지점, replay_report.json/md + environment.json)
 └── db/
     ├── database.py      #   SQLAlchemy 엔진/세션 (SQLite regtax.db) + init_db()/_migrate() (legacy verified backfill)

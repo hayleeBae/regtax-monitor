@@ -85,6 +85,10 @@ class ReplayOutcome:
     없음(None)** 이고, 리포트에는 허용 모드에서만 실린다. 특히 두 diff 본문은 참고용
     유사도를 계산하기 위한 입력일 뿐이며 `DIFF_BODY` 가 허용되지 않으면 저장되지
     않는다 — 계산에 쓰는 것과 저장하는 것은 별개다.
+
+    `failure_kind` 는 스펙 §9 의 실패 유형 코드다(#0018 runner 가 채운다). 예외
+    메시지가 아니라 **고정 어휘**이므로 모든 privacy 모드에서 저장할 수 있고, 값이
+    있으면 그 케이스는 채점 전제가 무너진 것이므로 합격시키지 않는다.
     """
 
     case_id: str
@@ -99,6 +103,7 @@ class ReplayOutcome:
     golden_output: Optional[str] = None
     generated_diff: Optional[str] = None
     answer_diff_text: Optional[str] = None
+    failure_kind: Optional[str] = None
     duration_ms: int = 0
 
 
@@ -231,14 +236,22 @@ def _verdict(
     git_apply: Optional[bool],
     golden_status: Optional[str],
     fixture_ok: bool,
+    failure_kind: Optional[str] = None,
 ) -> bool:
     """케이스 합격 판정.
 
-    합격 조건: fixture 가 answer commit 과 일관되고(그렇지 않으면 채점 자체가 무의미),
-    기대 교체를 모두 수행했고, in-scope 파일을 모두 건드렸고, `git apply --check` 가
-    실패하지 않았고, 골든이 실패/에러가 아니다. **유사도는 보지 않는다**(스펙 §7).
-    `git_apply`/`golden_status` 의 `None` 은 "실행하지 않음"이므로 실패로 세지 않는다.
+    합격 조건: 실행이 끝까지 갔고(`failure_kind` 없음), fixture 가 answer commit 과
+    일관되고(그렇지 않으면 채점 자체가 무의미), 기대 교체를 모두 수행했고, in-scope
+    파일을 모두 건드렸고, `git apply --check` 가 실패하지 않았고, 골든이 실패/에러가
+    아니다. **유사도는 보지 않는다**(스펙 §7). `git_apply`/`golden_status` 의 `None` 은
+    "실행하지 않음"이므로 실패로 세지 않는다.
+
+    `failure_kind` 를 먼저 보는 이유: 실행이 중간에 끊긴 케이스는 정답 집합도 기대
+    교체도 비어 있어 나머지 조건이 전부 "기준 없음 → 1.0"으로 통과해 버린다. 실패한
+    케이스가 합격으로 집계되면 pass rate 가 거짓이 된다.
     """
+    if failure_kind:
+        return False
     if not fixture_ok:
         return False
     if accuracy < 1.0 or coverage < 1.0:
@@ -300,7 +313,12 @@ def compute_metrics(outcome: ReplayOutcome) -> ReplayMetrics:
         ),
         fixture_replacements_ok=fixture_ok,
         passed=_verdict(
-            accuracy, coverage, outcome.git_apply_ok, outcome.golden_status, fixture_ok
+            accuracy,
+            coverage,
+            outcome.git_apply_ok,
+            outcome.golden_status,
+            fixture_ok,
+            outcome.failure_kind,
         ),
         replacements=replacements,
         duration_ms=outcome.duration_ms,
@@ -443,6 +461,8 @@ def _case_payload(
         "git_apply": metrics.git_apply,
         # GOLDEN_OUTPUT 미허용이어도 상태 문자열은 남는다 — 본문만 코드다.
         "golden_result": metrics.golden_result,
+        # 스펙 §9 실패 유형 — 고정 어휘라 코드가 아니다(모든 모드에서 남긴다).
+        "failure_kind": outcome.failure_kind,
         "fixture_replacements_ok": metrics.fixture_replacements_ok,
         "duration_ms": outcome.duration_ms,
         "metrics": _metrics_payload(metrics),
