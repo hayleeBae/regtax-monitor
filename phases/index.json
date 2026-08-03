@@ -17,7 +17,8 @@
     },
     {
       "dir": "issue-0018",
-      "status": "pending"
+      "status": "completed",
+      "completed_at": "2026-08-04T07:16:13+0900"
     }
   ]
 }
