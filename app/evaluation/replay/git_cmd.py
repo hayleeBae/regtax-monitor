@@ -77,6 +77,8 @@ FORBIDDEN_ARGS: frozenset[str] = frozenset(
         "--git-dir",
         "--work-tree",
         "--namespace",
+        "--output",
+        "-o",
     }
 )
 """서브커맨드와 무관하게 거부하는 인자.
@@ -85,14 +87,25 @@ FORBIDDEN_ARGS: frozenset[str] = frozenset(
 지정 통로이고, `-C`/`--git-dir`/`--work-tree`/`--namespace` 는 대상 repo 자체를
 바꾼다 — `cwd` 로 고정한 임시 worktree 밖으로 나가는 길이다.
 
+`--output`/`-o` 는 읽기 명령을 **쓰기 명령으로 바꾼다** — `git diff --output=<경로>`
+는 임의 경로에 파일을 만든다. 이 모듈의 허용 서브커맨드는 `apply` 를 빼면 전부
+읽기 전용이어야 하므로, 출력 리다이렉션은 서브커맨드와 무관하게 막는다.
+
 git-level 옵션은 서브커맨드 앞에만 놓을 수 있으므로 1차 방어는 "첫 토큰이
 allowlist 서브커맨드여야 한다"는 규칙이고, 이 목록은 그 뒤를 받치는 이중 방어다.
 """
 
 FORBIDDEN_APPLY_ARGS: frozenset[str] = frozenset(
-    {"--index", "--cached", "-3", "--3way"}
+    {"--index", "--cached", "-3", "--3way", "--directory", "--unsafe-paths"}
 )
-"""`apply` 에서만 거부하는 인자 — index 를 건드려 worktree 상태를 바꾼다.
+"""`apply` 에서만 거부하는 인자.
+
+`--index`/`--cached`/`-3`/`--3way` 는 index 를 건드려 worktree 상태를 바꾼다.
+
+`--directory`/`--unsafe-paths` 는 **적용 대상을 worktree 밖으로 옮긴다** —
+`apply --unsafe-paths --directory=<경로>` 조합이면 patch 안의 경로 제약이 풀려
+`cwd` 로 고정한 스크래치 밖에 파일을 쓸 수 있다. replay 는 생성 diff 를 임시
+worktree 안에만 적용해야 하므로(CLAUDE.md — 자동 적용 금지, ADR-011) 여기서 막는다.
 
 `apply --check` 와 순수 `apply` 는 허용한다(스펙 §5). `--cached` 는 `diff` 에서는
 정상 옵션이므로 `apply` 로 한정해 검사한다.

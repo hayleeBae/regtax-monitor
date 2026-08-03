@@ -186,6 +186,46 @@ def test_rejects_apply_index_options(option):
 @pytest.mark.parametrize(
     "args",
     [
+        ["apply", "--directory=/tmp", "proposal.patch"],
+        ["apply", "--directory", "/tmp", "proposal.patch"],
+        ["apply", "--unsafe-paths", "proposal.patch"],
+        ["apply", "--unsafe-paths", "--directory=/", "proposal.patch"],
+    ],
+)
+def test_rejects_apply_escaping_worktree(args):
+    """`apply` 가 스크래치 worktree 밖에 쓰는 것을 막는다.
+
+    `--unsafe-paths --directory=<경로>` 조합은 patch 안의 경로 제약을 풀어 `cwd` 로
+    고정한 임시 worktree 밖에 파일을 쓰는 통로가 된다 — 자동 적용 금지(CLAUDE.md)와
+    "생성 diff 는 worktree 안에만 적용한다"(ADR-011)를 우회하는 경로다.
+    """
+    with pytest.raises(GitCommandNotAllowed):
+        validate_git_args(args)
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["diff", "--output=/tmp/leak.txt", "A", "B"],
+        ["diff", "-o", "/tmp/leak.txt", "A", "B"],
+        ["show", "--output=/tmp/leak.txt", "HEAD"],
+        ["status", "--output=/tmp/leak.txt"],
+    ],
+)
+def test_rejects_output_redirection(args):
+    """읽기 명령이 쓰기 명령으로 바뀌는 것을 막는다.
+
+    `git diff --output=<경로>` 는 임의 경로에 파일을 만든다. `apply` 를 제외한 허용
+    서브커맨드는 전부 읽기 전용이어야 하므로 출력 리다이렉션은 서브커맨드와 무관하게
+    거부한다.
+    """
+    with pytest.raises(GitCommandNotAllowed):
+        validate_git_args(args)
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
         ["diff", "-c", "user.name=x"],
         ["status", "--git-dir=/other/.git"],
         ["status", "--work-tree=/other"],
