@@ -24,7 +24,7 @@
       "status": "completed",
       "started_at": "2026-08-04T00:04:20+0900",
       "summary": "app/evaluation/replay/answer_diff.py 신규 — ChangedFile(path/status/added_lines/removed_lines) + AnswerDiff(in_scope/out_of_scope/excluded 3분할, all_changed 프로퍼티로 합집합 보존). extract_answer_diff(repo_path, base, answer, scope): diff --name-status -z + diff --numstat -z 를 run_git 경유로 호출(-z 사용 이유 = core.quotePath 이스케이프로 한글 경로 매칭 실패 방지), rename/copy 는 신규 경로로 판정하고 status 원본 코드(R100) 보존, 바이너리 numstat '-' 는 0. worktree·파일 쓰기 없음(commit 대 commit 읽기만). 매칭: POSIX 정규화(\\→/, ./ 제거) 후 정확일치 또는 구분자 경계 디렉토리 접두, excluded_paths 가 relevant_paths 보다 우선. check_expected_replacements(repo_path, answer, scope) -> ReplacementCheck(path/match_mode/path_exists/found_after/found_before/ok) — show <answer>:<path> 를 check=False 로 읽어 없는 경로는 예외 대신 path_exists=False, normalized_text 는 공백 정규화 비교(experiments.py 와 동일 규칙), 빈 문자열 needle 은 항상 False. git 실패는 절대경로·stderr 를 담지 않는 AnswerDiffError. ARCHITECTURE.md replay 트리에 answer_diff.py 실행 계층 추가. tests/test_replay_answer_diff.py 31건 추가(case3 unrelated exclusion, case2 relevant 2개, case1 단일, out_of_scope 보존, excluded 우선, 디렉토리 접두, rename, fixture 대조 성공/실패, 원본 무변경, 경로 미노출)",
-      "completed_at": "2026-08-04T00:16:00+0900"
+      "completed_at": "2026-08-04T00:10:32+0900"
     },
     {
       "step": 3,
@@ -43,5 +43,5 @@
     }
   ],
   "created_at": "2026-08-03T23:52:08+0900",
-  "total_cost_usd": 4.2756
+  "total_cost_usd": 6.739
 }
