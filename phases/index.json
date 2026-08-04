@@ -14,6 +14,11 @@
       "dir": "issue-0017",
       "status": "completed",
       "completed_at": "2026-08-02T23:04:33+0900"
+    },
+    {
+      "dir": "issue-0018",
+      "status": "completed",
+      "completed_at": "2026-08-04T07:16:13+0900"
     }
   ]
 }

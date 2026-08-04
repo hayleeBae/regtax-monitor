@@ -9,6 +9,10 @@ httpx>=0.27
 chromadb>=0.5
 sentence-transformers>=3.0
 torch>=2.13.0          # macOS/Python 3.10 보안 검증 기준 (PYSEC-2025-194)
+# 아래 둘은 전이 의존성(chromadb→kubernetes→aiohttp, anthropic→aiohttp)이지만
+# 보안 하한을 명시해야 회사 PC 재설치에서도 취약 버전으로 되돌아가지 않는다.
+aiohttp>=3.14.3        # CVE-2026-59881 / CVE-2026-69243 / CVE-2026-69244
+cryptography>=50.0.0   # CVE-2026-69247
 truststore>=0.9
 apscheduler>=3.10
 pypdf>=6.0            # 참고 문서(개정세법 해설) PDF 텍스트 추출
