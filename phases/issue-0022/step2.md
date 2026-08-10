@@ -19,15 +19,17 @@
 `--pipeline {stub,real}` 옵션을 추가한다(기본값 없음 — 미지정 시 현재처럼 exit 2).
 
 - `--pipeline stub`이면 기존 `--stub {perfect,partial,empty}`와 조합해 동작한다. 기존 사용법(`--stub perfect`)이 **그대로 계속 동작해야 한다** — 회귀 금지.
-- `--pipeline real`이면 `build_real_pipeline(...)`을 쓴다.
-- **무거운 모듈은 해당 분기 안에서만 import 한다.** `real_pipeline`을 파일 상단에서 import하면 ADR-011의 "runner는 임베딩·LLM을 import하지 않는다"가 깨진다. `stub_pipeline`이 이미 `main()` 안에서 지연 import되고 있으니 같은 방식을 따른다.
+- `--pipeline real`이면 초안 함수를 만들어 `build_real_pipeline(draft_fn=..., index_root=...)`에 **주입한다.**
+  - `real_pipeline`은 ADR-012 보강으로 초안 생성을 직접 하지 않고 `draft_fn`을 주입받는다. 생성 스택 의존은 `app/application/replay_draft.py::build_replay_draft_fn`에만 있다 — `app/evaluation/` 아래에 두면 계층 가드(#0004)와 충돌한다.
+  - 배선: `from app.application.replay_draft import build_replay_draft_fn` → `draft_fn = build_replay_draft_fn()` → `build_real_pipeline(draft_fn=draft_fn, ...)`.
+- **무거운 모듈은 해당 분기 안에서만 import 한다.** `real_pipeline`·`replay_draft`를 파일 상단에서 import하면 ADR-011의 "runner는 임베딩·LLM을 import하지 않는다"가 깨진다. `stub_pipeline`이 이미 `main()` 안에서 지연 import되고 있으니 같은 방식을 따른다.
 - `--index-root` 옵션(선택)으로 인덱스 캐시 루트를 바꿀 수 있게 한다. 기본은 Step 0의 `evaluation/replay_index`.
 
 `runner.py`의 나머지(`run_case`·`run_fixtures`·실패 격리·privacy 선택)는 **수정하지 마라.**
 
 ### 2) 외부 전송 경고 — 이 step의 안전 항목
 
-`propose_and_build`가 쓰는 LLM은 `LLM_BACKEND` 설정을 따른다. `claude`면 **대상 코드 스니펫이 Anthropic API로 나간다.** 기존 `apply` 경로와 같은 동작이지만, replay는 여러 케이스를 자동으로 연속 실행하므로 실수로 대량 전송될 여지가 크다.
+`build_replay_draft_fn`이 만든 초안 함수는 `LLM_BACKEND` 설정을 따르는 백엔드를 쓴다. `claude`면 **대상 코드 스니펫이 Anthropic API로 나간다.** 기존 `apply` 경로와 같은 동작이지만, replay는 여러 케이스를 자동으로 연속 실행하므로 실수로 대량 전송될 여지가 크다.
 
 `--pipeline real`이고 `settings.llm_backend != "local"`이면:
 

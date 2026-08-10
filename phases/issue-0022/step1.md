@@ -1,5 +1,12 @@
 # Step 1: replay-real-pipeline
 
+> **ADR-012 보강 (2026-08-11 사람 개입):** 초안 생성이 `app/evaluation/` 계층 가드
+> (#0004, `app.llm` import 금지)와 충돌해 최초 실행이 blocked 됐다. 해결: 초안 생성을
+> `app/application/replay_draft.py::build_replay_draft_fn`으로 빼고 `real_pipeline`은
+> `draft_fn`을 **주입받는다**. 아래 지시 중 "LLM을 직접 부른다"는 부분은 이 구조로
+> 대체됐다 — `build_real_pipeline(*, draft_fn, index_root, top_k, indexer_factory,
+> adapter_factory)`이며 `llm_factory`는 없다.
+
 ## 읽어야 할 파일
 
 - `/CLAUDE.md` (CRITICAL — 코드 반출 금지, 승인 게이트, seam 규칙, 테스트에서 무거운 의존성 금지)

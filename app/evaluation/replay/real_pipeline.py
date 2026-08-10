@@ -33,16 +33,15 @@
 매핑은 법령 개정과 무관하게 거의 변하지 않아 지표를 뒤집을 크기가 아니고, 시그니처를
 바꾸는 일은 운영 인덱싱 경로에 회귀 위험을 만든다(CLAUDE.md — 동작 보존 우선).
 
-## 미해결 — 계층 가드와의 충돌 (사람 판단 필요)
+## 초안 생성은 주입받는다 (ADR-012 보강)
 
-`tests/test_evaluation.py::test_evaluation_layer_has_no_forbidden_imports`(#0004)는
-`app/evaluation/` 아래 모든 파일에서 `app.llm` import 를 문자열로 금지한다. ADR-012 는
-이 모듈이 `propose_and_build` 로 초안을 만들도록 정했으므로 둘이 정면으로 부딪힌다.
-여기서는 **가드를 우회하지 않았다** — `importlib` 이나 `from app import llm` 같은
-문자열 회피는 의존을 숨길 뿐 없애지 못한다. 대신 두 곳의 import 를 전부 함수 안으로
-내려 `import app.evaluation...` 만으로는 추론 백엔드가 딸려 오지 않게 했다(운영
-`apply` 엔드포인트와 같은 방식). 가드를 ADR-012 에 맞춰 좁힐지, 초안 생성 진입점을
-`app/evaluation/` 밖으로 뺄지는 사람이 정한다.
+`app/evaluation/` 아래에서는 생성 스택(추론 백엔드) import 가 계층 가드로 금지된다
+(`tests/test_evaluation.py::test_evaluation_layer_has_no_forbidden_imports`, #0004) —
+evaluation 은 측정 계층이라 생성 스택에 의존하지 않는다는 규칙이다. 그래서 이 모듈은
+초안을 직접 만들지 않고 `draft_fn` 을 **주입받는다**. 실제 구현은
+`app/application/replay_draft.py::build_replay_draft_fn` 에 있고, 생성 스택 의존은 그쪽에만
+남는다. `draft_fn` 이 없으면 파이프라인을 만들 수 없다 — 기본값으로 백엔드를 끌어오면
+같은 가드 충돌이 되돌아온다.
 
 ## 실패는 삼키지 않는다
 
@@ -85,17 +84,6 @@ DEFAULT_TOP_K = 5
 # ---------------------------------------------------------------------------
 # 기본 팩토리 (지연 import — ADR-011·ADR-012)
 # ---------------------------------------------------------------------------
-
-
-def _default_llm_factory() -> Any:
-    """기본 LLM — `get_llm_client()` (설정된 백엔드).
-
-    함수 안에서 import 하는 이유는 `index_cache` 와 같다: 이 모듈을 import 하는 것만으로
-    추론 백엔드 구현이 딸려 오지 않게 한다.
-    """
-    from app.llm import get_llm_client
-
-    return get_llm_client()
 
 
 def _default_adapter_factory(repo_root: str, indexer: Any) -> Any:
@@ -222,22 +210,28 @@ def _retrieve(adapter: Any, context: ReplayContext, top_k: int) -> Any:
 
 def build_real_pipeline(
     *,
+    draft_fn: Callable[..., str],
     index_root: Optional[Path] = None,
     top_k: int = DEFAULT_TOP_K,
-    llm_factory: Optional[Callable[..., Any]] = None,
     indexer_factory: Optional[Callable[..., Any]] = None,
     adapter_factory: Optional[Callable[..., Any]] = None,
 ) -> ReplayPipeline:
     """실제 인덱싱·검색·초안 생성을 하는 `ReplayPipeline` 을 만든다.
 
-    팩토리를 전부 열어 두는 이유는 `index_cache` 와 같다 — 테스트가 임베딩·ChromaDB·
-    추론 백엔드를 띄우지 않고 조립과 look-ahead 차단만 검증할 수 있어야 한다
-    (CLAUDE.md). `index_root` 는 캐시 루트 override 로, 테스트가 `tmp_path` 를 넘긴다.
+    `draft_fn` 은 (law_diff, code_snippets, read_file) → diff_text 계약이며 **필수**다.
+    생성 스택 의존을 evaluation 밖에 두기 위해 주입받는다(ADR-012 보강) — 구현은
+    `app/application/replay_draft.py::build_replay_draft_fn`. 기본값을 두지 않는 이유는
+    이 모듈이 백엔드를 끌어오면 계층 가드 충돌이 되돌아오기 때문이다.
+
+    나머지 팩토리를 열어 두는 이유는 `index_cache` 와 같다 — 테스트가 임베딩·ChromaDB 를
+    띄우지 않고 조립과 look-ahead 차단만 검증할 수 있어야 한다(CLAUDE.md). `index_root`
+    는 캐시 루트 override 로, 테스트가 `tmp_path` 를 넘긴다.
 
     한 케이스의 순서: 인덱스 준비(캐시 재사용) → worktree 어댑터 → 검색 →
-    상위 후보 스니펫 → `propose_and_build` → `PipelineOutput`.
+    상위 후보 스니펫 → `draft_fn` → `PipelineOutput`.
     """
-    make_llm = llm_factory or _default_llm_factory
+    if draft_fn is None:
+        raise ValueError("draft_fn 은 필수입니다 (build_replay_draft_fn 을 주입하세요).")
     make_adapter = adapter_factory or _default_adapter_factory
 
     def pipeline(context: ReplayContext) -> PipelineOutput:
@@ -277,22 +271,17 @@ def build_real_pipeline(
             len(snippets),
         )
 
-        # 프롬프트·앵커 편집 → unified diff 변환은 백엔드 공용 로직 한 곳에만 있다
-        # (CLAUDE.md). 운영 `apply` 와 같은 자리에서 같은 방식으로 지연 import 한다.
-        from app.llm.common import propose_and_build
-
-        # 예외를 잡지 않는다 — 실패는 runner 의 `pipeline_failed` 로 올라가야 한다.
-        diff_text, warnings, applied, _raw = propose_and_build(
-            make_llm(),
-            law_diff=law_diff_text(context.law),
-            code_snippets=snippets,
-            read_file=adapter.read_file,
+        # 초안 생성은 주입받은 draft_fn 이 한다(ADR-012 보강). 예외를 잡지 않는다 —
+        # 실패는 runner 의 `pipeline_failed` 로 올라가야 한다.
+        diff_text = draft_fn(
+            law_diff_text(context.law),
+            snippets,
+            adapter.read_file,
         )
         logger.info(
-            "replay 초안 생성 완료 (case=%s, edits_applied=%d, warnings=%d)",
+            "replay 초안 생성 완료 (case=%s, diff_empty=%s)",
             context.case_id,
-            applied,
-            len(warnings),
+            not (diff_text and diff_text.strip()),
         )
         return PipelineOutput(diff_text=diff_text, retrieved_paths=paths)
 

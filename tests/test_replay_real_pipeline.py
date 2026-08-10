@@ -13,10 +13,14 @@
 4. **실패를 삼키지 않는가** — 추론 백엔드 실패가 그대로 올라가는가(runner 가
    `pipeline_failed` 로 격리한다).
 
-임베딩·ChromaDB·추론 백엔드를 띄우지 않는다(CLAUDE.md). 인덱서·어댑터·LLM 은 전부 가짜
-팩토리로 주입하고, 사전·상수 provider 도 대역으로 바꾼다 — 진짜 provider 는 프로젝트
+임베딩·ChromaDB 를 띄우지 않는다(CLAUDE.md). 인덱서·어댑터·초안 함수(`draft_fn`)는 전부
+가짜로 주입하고, 사전·상수 provider 도 대역으로 바꾼다 — 진짜 provider 는 프로젝트
 루트의 전역 캐시 파일(`term_dict_cache.json` 등)을 읽고 쓰므로 테스트가 개발 환경의
 캐시를 건드리게 된다. 캐시 루트는 항상 `tmp_path` 다.
+
+초안 생성(`propose_and_build` 를 태우는 부분)은 `app/application/replay_draft.py` 로
+빠졌고(ADR-012 보강), 그 동작은 `tests/test_replay_draft.py` 가 고정한다. 여기서는
+`draft_fn` 이 받는 인자(스니펫·law_diff)와 반환 diff 의 전달만 본다.
 """
 
 from __future__ import annotations
@@ -102,22 +106,35 @@ class FakeAdapter:
             raise FileNotFoundError(path)
 
 
-class FakeLlm:
-    """편집 블록을 돌려주는 LLM 대역 — 진짜 `propose_and_build` 를 그대로 태운다."""
+class RecordingDraft:
+    """주입되는 `draft_fn` 대역 — 받은 인자를 기록하고 미리 정한 diff 를 돌려준다.
 
-    def __init__(self, response: str = "", error: Exception | None = None):
-        self.response = response
+    실제 초안 생성(`propose_and_build`)은 `app/application/replay_draft.py` 소관이라
+    여기서는 태우지 않는다(ADR-012 보강). 이 대역은 real_pipeline 이 draft_fn 에
+    무엇을 넘기고 그 반환을 어떻게 싣는지만 드러낸다.
+    """
+
+    def __init__(self, diff: str = "", error: Exception | None = None):
+        self.diff = diff
         self.error = error
         self.calls: list = []
 
-    def propose_edits(self, law_diff: str, code_snippets: list) -> str:
+    def __call__(self, law_diff, code_snippets, read_file) -> str:
         self.calls.append({"law_diff": law_diff, "code_snippets": list(code_snippets)})
         if self.error is not None:
             raise self.error
-        return self.response
+        return self.diff
 
-    def complete(self, prompt: str, max_tokens: int = 2048) -> str:  # pragma: no cover
-        return ""
+
+DEFAULT_DRAFT_DIFF = (
+    "--- a/src/TaxCalculator.java\n"
+    "+++ b/src/TaxCalculator.java\n"
+    "@@ -1,3 +1,3 @@\n"
+    " class TaxCalculator {\n"
+    "-    long credit = 150000L;\n"
+    "+    long credit = 250000L;\n"
+    " }\n"
+)
 
 
 class NullProvider:
@@ -144,14 +161,6 @@ class NullConstantProvider(NullProvider):
     source = RetrievalSource.CONSTANT_MATCH
     version = "fake-constant"
     instances: list = []
-
-
-EDIT_RESPONSE = (
-    "@@@FILE: src/TaxCalculator.java\n"
-    "@@@SEARCH\n    long credit = 150000L;\n"
-    "@@@REPLACE\n    long credit = 250000L;\n"
-    "@@@END\n"
-)
 
 
 # ---------------------------------------------------------------------------
@@ -208,20 +217,20 @@ def default_hits():
     )
 
 
-def run_pipeline(tmp_path: Path, *, llm=None, hits=None, doc_count=0, top_k=5):
+def run_pipeline(tmp_path: Path, *, draft=None, hits=None, doc_count=0, top_k=5):
     indexer_factory, adapter_factory, made = make_factories(
         hits=default_hits() if hits is None else hits, doc_count=doc_count
     )
-    llm = llm or FakeLlm(EDIT_RESPONSE)
+    draft = draft or RecordingDraft(DEFAULT_DRAFT_DIFF)
     pipeline = real_pipeline.build_real_pipeline(
+        draft_fn=draft,
         index_root=tmp_path / "index",
         top_k=top_k,
-        llm_factory=lambda: llm,
         indexer_factory=indexer_factory,
         adapter_factory=adapter_factory,
     )
     context = make_context(tmp_path)
-    return pipeline(context), made, llm, context
+    return pipeline(context), made, draft, context
 
 
 # ---------------------------------------------------------------------------
@@ -341,9 +350,9 @@ def test_returns_pipeline_output_with_ranked_paths(tmp_path):
 
 
 def test_snippets_and_law_diff_are_built_from_context(tmp_path):
-    output, _made, llm, _context = run_pipeline(tmp_path)
+    output, _made, draft, _context = run_pipeline(tmp_path)
 
-    call = llm.calls[0]
+    call = draft.calls[0]
     assert [snippet.splitlines()[0] for snippet in call["code_snippets"]] == [
         f"// {path}" for path in output.retrieved_paths
     ]
@@ -352,17 +361,16 @@ def test_snippets_and_law_diff_are_built_from_context(tmp_path):
     assert LAW.after_text in call["law_diff"]
 
 
-def test_diff_text_comes_from_anchor_edits(tmp_path):
-    output, _made, _llm, _context = run_pipeline(tmp_path)
+def test_draft_diff_is_passed_through(tmp_path):
+    """draft_fn 이 돌려준 diff 가 그대로 PipelineOutput 에 실린다."""
+    output, _made, _draft, _context = run_pipeline(tmp_path)
 
-    assert "--- a/src/TaxCalculator.java" in output.diff_text
-    assert "-    long credit = 150000L;" in output.diff_text
-    assert "+    long credit = 250000L;" in output.diff_text
+    assert output.diff_text == DEFAULT_DRAFT_DIFF
 
 
 def test_empty_draft_stays_empty(tmp_path):
     """초안이 비면 빈 문자열 그대로다 — 안내 주석을 채우면 `git apply` 지표가 뒤집힌다."""
-    output, _made, _llm, _context = run_pipeline(tmp_path, llm=FakeLlm("편집 없음"))
+    output, _made, _draft, _context = run_pipeline(tmp_path, draft=RecordingDraft(""))
 
     assert output.diff_text == ""
     assert output.retrieved_paths
@@ -374,10 +382,10 @@ def test_unreadable_candidate_is_skipped(tmp_path):
         CodeHit("src/TaxCalculator.java", "credit", "long credit = 150000L;", 0.9),
         CodeHit("src/gone.java", "x", "", 0.5),
     )
-    output, _made, llm, _context = run_pipeline(tmp_path, hits=hits)
+    output, _made, draft, _context = run_pipeline(tmp_path, hits=hits)
 
     assert "src/gone.java" in output.retrieved_paths
-    assert [snippet.splitlines()[0] for snippet in llm.calls[0]["code_snippets"]] == [
+    assert [snippet.splitlines()[0] for snippet in draft.calls[0]["code_snippets"]] == [
         "// src/TaxCalculator.java"
     ]
 
@@ -411,12 +419,12 @@ def test_cache_hit_skips_reindexing(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_llm_failure_propagates(tmp_path):
+def test_draft_failure_propagates(tmp_path):
     """runner 가 `pipeline_failed` 로 격리해야 한다 — 여기서 빈 diff 로 뭉개지 않는다."""
-    failing = FakeLlm(error=RuntimeError("추론 백엔드에 연결할 수 없습니다"))
+    failing = RecordingDraft(error=RuntimeError("추론 백엔드에 연결할 수 없습니다"))
 
     with pytest.raises(RuntimeError):
-        run_pipeline(tmp_path, llm=failing)
+        run_pipeline(tmp_path, draft=failing)
 
 
 def test_search_failure_propagates(tmp_path):
@@ -433,8 +441,8 @@ def test_search_failure_propagates(tmp_path):
         return FakeIndexer(persist_dir, doc_count=1)
 
     pipeline = real_pipeline.build_real_pipeline(
+        draft_fn=RecordingDraft(DEFAULT_DRAFT_DIFF),
         index_root=tmp_path / "index",
-        llm_factory=lambda: FakeLlm(EDIT_RESPONSE),
         indexer_factory=indexer_factory,
         adapter_factory=adapter_factory,
     )
@@ -448,8 +456,8 @@ def test_pipeline_is_reusable_across_cases(tmp_path):
     """같은 파이프라인 객체로 여러 케이스를 돌려도 상태가 섞이지 않는다."""
     indexer_factory, adapter_factory, made = make_factories(hits=default_hits())
     pipeline = real_pipeline.build_real_pipeline(
+        draft_fn=RecordingDraft(DEFAULT_DRAFT_DIFF),
         index_root=tmp_path / "index",
-        llm_factory=lambda: FakeLlm(EDIT_RESPONSE),
         indexer_factory=indexer_factory,
         adapter_factory=adapter_factory,
     )
