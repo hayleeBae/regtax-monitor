@@ -1,0 +1,24 @@
+{
+  "project": "regtax-monitor",
+  "phase": "issue-0022",
+  "steps": [
+    {
+      "step": 0,
+      "name": "replay-index-cache",
+      "status": "completed",
+      "started_at": "2026-08-10T22:24:25+0900",
+      "summary": "app/evaluation/replay/index_cache.py 신규 — 스펙 §6 네 구성요소(repo_id·base_commit·임베딩 모델·인덱서 버전) sha256 16자 캐시 키, evaluation/replay_index/<key> 루트 봉쇄(키 형태 거부 + resolve 재확인), prepare_index(worktree 기준 어댑터·디렉토리+문서수 캐시 판단, 팩토리 주입, 삭제 경로 없음). 운영 chroma_data·repo 경로 무접근. 테스트 19건 전부 가짜 팩토리(임베딩·ChromaDB 미기동)"
+    },
+    {
+      "step": 1,
+      "name": "replay-real-pipeline",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "replay-cli",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-08-10T22:24:25+0900"
+}

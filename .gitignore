@@ -27,3 +27,5 @@ evaluation/chroma_*/
 # replay mock git repo — scripts/build_replay_repos.py 가 매번 빌드한다 (ADR-010)
 # 원본 트리 evaluation/fixtures/replay_sources/ 는 커밋 대상이므로 무시하지 않는다.
 evaluation/fixtures/replay_repos/
+# replay 인덱스 캐시 — 대상 코드의 임베딩이 담긴다 (ADR-012, 반출 금지)
+evaluation/replay_index/
