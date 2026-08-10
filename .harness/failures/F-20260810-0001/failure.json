@@ -1,0 +1,31 @@
+{
+  "failure_id": "F-20260810-0001",
+  "ts": "2026-08-10T22:42:49+0900",
+  "run_id": "20260810-222425-8e61",
+  "stage": "implement",
+  "step": 1,
+  "trace_refs": [],
+  "symptom": {
+    "category": "validation_failure",
+    "signal": "verify.sh full 778 passed / 1 failed — 실패는 tests/test_evaluation.py::test_evaluation_layer_has_no_forbidden_imports 하나. ADR-012가 real_pipeline(app/evaluation/ 아래)에서 propose_and_build·get_llm_client를 쓰도록 정했으나, #0004부터 있던 이 가드가 app/evaluation/ 전체에서 'app.llm' 문자열 import를 금지한다. 세션은 우회(importlib·'from app import llm')를 거부하고 blocked로 멈춤 — 옳은 판단.",
+    "artifact": "artifacts/escalation-detail.md"
+  },
+  "verified_cause": {
+    "cause_code": "human_spec_ambiguity",
+    "description": "설계 결함이 구현 중 드러난 사례. ADR-012(설계 산출물)가 초안 생성 코드를 app/evaluation/replay/에 두라고 지시했는데, 그 디렉토리는 #0004 계층 가드가 'evaluation은 측정 계층이라 생성 스택(app.llm)에 의존하지 않는다'로 app.llm import를 금지한다. 설계 시 이 가드를 확인하지 못한 것이 원인 — 코드 결함이 아니라 설계 지시와 기존 불변식의 충돌이다.",
+    "verified_by": "manual: tests/test_evaluation.py:521 forbidden 목록에 'app.llm' 확인, verify.sh full에서 해당 테스트만 실패함을 재현",
+    "causal_chain": [
+      "ADR-012가 real_pipeline(app/evaluation/ 하위)에 app.llm 의존을 두도록 설계",
+      "#0004 계층 가드가 app/evaluation/ 전체에서 app.llm import를 문자열로 금지",
+      "함수 스코프 import·회피 모두 가드를 통과 못함(우회는 의존을 숨길 뿐)",
+      "세션이 기존 테스트를 약화시키지 않고 blocked로 정지 + 사람 판단 요청"
+    ]
+  },
+  "resolution": {
+    "action": "design_change",
+    "description": "ADR-012 보강: 초안 생성을 app/application/replay_draft.py(build_replay_draft_fn = get_llm_client + propose_and_build)로 분리하고, real_pipeline은 draft_fn을 필수 주입받도록 변경. 가드에 예외를 뚫는 대신 의존을 제자리(application)로 옮겨 가드와 설계 의도를 모두 유지. real_pipeline의 app.llm import 0건 확인, propose_and_build 동작은 test_replay_draft.py로 이동. verify.sh full 783 passed.",
+    "commit": "1cb419c"
+  },
+  "status": "resolved",
+  "recurrence_of": null
+}

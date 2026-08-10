@@ -13,10 +13,10 @@
     {
       "step": 1,
       "name": "replay-real-pipeline",
-      "status": "blocked",
+      "status": "completed",
       "started_at": "2026-08-10T22:29:10+0900",
-      "summary": "app/evaluation/replay/real_pipeline.py 신규 — worktree 기준 인덱스 캐시(Step 0) → RAG·사전·상수 3 provider(검증 매핑 provider·reranker 미구성, rerank_enabled=False, DB 미경유) → 상위 top_k 스니펫 → propose_and_build 초안. 테스트 18건 전부 가짜 팩토리. AC grep 출력 없음",
-      "blocked_reason": "ADR-012(real_pipeline이 propose_and_build/get_llm_client 사용)와 기존 계층 가드 tests/test_evaluation.py::test_evaluation_layer_has_no_forbidden_imports(#0004, app/evaluation/ 전체에서 'app.llm' 문자열 import 금지)가 정면 충돌한다. verify.sh full 결과 778 passed / 1 failed이며 실패는 이 가드 하나뿐이다. import를 전부 함수 스코프로 내려도 가드가 문자열 검사라 통과하지 못하고, importlib·'from app import llm' 같은 회피는 의존을 숨길 뿐이라 쓰지 않았다. 가드 수정은 step 규칙상 금지(기존 테스트 약화)여서 사람 판단이 필요하다. 선택지: (a) 가드의 forbidden 목록에서 replay/real_pipeline.py를 ADR-012 근거로 예외 처리, (b) 초안 생성 진입점을 app/evaluation/ 밖 모듈로 빼고 real_pipeline은 주입만 받도록 설계 변경(step 2 CLI도 함께 영향)."
+      "summary": "app/evaluation/replay/real_pipeline.py — worktree 인덱스 캐시(Step 0) → RAG·사전·상수 3 provider(검증 매핑·reranker 미구성, rerank_enabled=False, DB 미경유) → 상위 top_k 스니펫 → draft_fn 초안 → PipelineOutput. 최초 실행은 계층 가드(#0004)와 충돌해 blocked(F-20260810-0001). 사람 개입으로 ADR-012 보강: 초안 생성을 app/application/replay_draft.py(build_replay_draft_fn = get_llm_client + propose_and_build)로 분리하고 real_pipeline은 draft_fn을 필수 주입받도록 변경(llm_factory 제거, app.llm import 0건). test_replay_draft.py 신규(propose_and_build 실제 태움) + test_replay_real_pipeline.py는 draft_fn 대역으로 전환. verify.sh full 783 passed. fix 커밋 1cb419c. step 2 CLI는 build_replay_draft_fn을 지연 import해 draft_fn을 주입해야 함.",
+      "completed_at": "2026-08-11T00:00:00+0900"
     },
     {
       "step": 2,
@@ -25,5 +25,5 @@
     }
   ],
   "created_at": "2026-08-10T22:24:25+0900",
-  "total_cost_usd": 1.7104
+  "total_cost_usd": 6.246
 }

@@ -22,7 +22,8 @@
     },
     {
       "dir": "issue-0022",
-      "status": "pending"
+      "status": "blocked",
+      "blocked_at": "2026-08-10T22:42:49+0900"
     }
   ]
 }
