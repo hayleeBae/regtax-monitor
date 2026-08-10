@@ -69,6 +69,19 @@
 **이유**: 과거 개정을 그 시점에서 재현하면서 **그 개정을 처리하며 만들어진 오늘의 검증 매핑**을 입력으로 쓰면 정답을 보고 정답을 맞히는 것이 된다(look-ahead leakage). 지표가 부풀려지고, 그 숫자로 `#0019·#0020` 의 효과를 판단하면 방향이 틀어진다 — replay 의 존재 이유가 사라진다. 지연 import 는 ADR-011 이 seam 을 둔 이유(집 환경 테스트를 가볍게 유지)를 지키기 위해서다. 인덱스 캐시는 선택이 아니라 필수다: 실제 eHR repo 인덱싱은 수십 분이고, 캐시가 없으면 케이스마다 반복해 회사에서 한 번도 완주하지 못한다. 캐시를 `evaluation/` 하위에 두는 것은 그 디렉토리 전체가 이미 반출 금지·gitignore 구역이기 때문이다 — 인덱스에는 회사 코드의 임베딩이 담긴다.
 **트레이드오프**: replay 가 재는 대상이 "verified 자산 없는 순수 검색·생성 성능"으로 좁아진다 — 검증 매핑의 효과는 `#0016` 경로에서 따로 측정해야 한다. 인덱스 캐시가 디스크를 크게 차지하고(회사 repo 기준 수 GB 가능) 수동 정리가 필요하다. base commit 이 바뀔 때마다 재인덱싱이라 fixture 를 늘리면 첫 실행 비용이 선형으로 증가한다.
 
+#### ADR-012 보강 (2026-08-10, 구현 중 발견)
+최초 결정은 `real_pipeline.py` 가 `get_llm_client`·`propose_and_build` 를 직접 부르도록 했으나, `#0004` 부터 있던 계층 가드(`tests/test_evaluation.py::test_evaluation_layer_has_no_forbidden_imports`)가 `app/evaluation/` 전체에서 `app.llm` import 를 금지한다 — 정면 충돌이다. 그 가드는 "evaluation 은 **측정** 계층이며 생성 스택에 의존하지 않는다"를 강제하고, ARCHITECTURE 의 문서화된 규칙("DB·FastAPI 없이 실행 가능")보다 한 단계 엄격하다.
+
+**보강 결정**: 초안 생성을 evaluation 밖으로 뺀다.
+
+1. `app/application/replay_draft.py`(신규)가 `get_llm_client()` + `propose_and_build` 로 **초안 생성 함수**를 만든다. LLM 의존은 여기에만 있다. `app/application/` 은 이미 `MappingService`·`ProposalService` 가 orchestrator 와 LLM 을 조합하는 자리라 성격이 맞는다.
+2. `app/evaluation/replay/real_pipeline.py` 는 인덱싱·검색·스니펫 구성까지만 하고 **`draft_fn` 을 주입받는다**. 주입되지 않으면 오류다 — 기본값으로 LLM 을 끌어오면 같은 문제가 되돌아온다.
+3. `runner.py` 의 CLI 는 `--pipeline real` 분기에서만 application 팩토리를 지연 import 한다.
+
+**이유**: 가드에 예외를 뚫는 것은 가드가 막으려던 바로 그 일을 편의를 위해 허용하는 것이다. `importlib`·`from app import llm` 같은 회피는 문자열 검사만 통과시킬 뿐 의존을 숨긴다. 의존을 제자리(application)로 옮기면 가드도 설계 의도도 함께 유지된다.
+
+**추가 트레이드오프**: replay 실제 파이프라인이 두 계층에 걸쳐 있어 배선 지점이 하나 늘어난다. `app/application/` 이 `ReplayContext`·`PipelineOutput` 계약(evaluation 정의)을 import 하므로 계약 방향이 evaluation → application 한 방향으로 유지되는지 리뷰에서 확인해야 한다.
+
 ### ADR-007: 도메인 레지스트리(domains.json)로 수집 확장
 **결정**: 수집 대상 법령·고시 검색어를 코드가 아니라 `domains.json`(tax/hr)에서 관리. 파일 없으면 기존 세법 5종 폴백.
 **이유**: 연말정산(세법)을 넘어 인사 법령 전반으로 확장 + 도메인별 담당자 라우팅 기반. 법률만 수집하면 올해 개정(시행령·시행규칙 10건, 법률 0건)을 전부 놓쳤을 상황 — 3계층 수집이 필수임을 실검증.

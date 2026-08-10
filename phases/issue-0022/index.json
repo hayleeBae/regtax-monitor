@@ -21,7 +21,10 @@
     {
       "step": 2,
       "name": "replay-cli",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-08-11T07:01:44+0900",
+      "summary": "runner.py CLI 확장 — --pipeline {stub,real}(기본값 없음), --index-root, --allow-external-llm. real 분기에서만 build_replay_draft_fn·build_real_pipeline 지연 import 후 draft_fn 주입(ADR-012 보강 3항). --pipeline 없이 --stub 만 준 기존 사용법은 stub 모드로 그대로 동작(회귀 고정). settings.llm_backend != local 이면 백엔드명·케이스 수·외부 전송 경고를 stderr에 내고 --allow-external-llm 없으면 파이프라인 생성 전에 exit 2. tests/test_replay_cli.py 11건 신규(build_real_pipeline·run_fixtures 대역 — 임베딩·LLM 미태움, sys.modules 지연 import 검사 포함). COMPANY_VALIDATION.md §4-2를 실행 가능한 2단계 명령(stub → real)으로 교체하고 인덱싱 소요시간·캐시 적중·LLM_BACKEND 기록 항목 추가. .gitignore evaluation/replay_index/ 는 기존 엔트리로 이미 충족. verify.sh full 794 passed, stub smoke 정상, git status·worktree 누수 없음.",
+      "completed_at": "2026-08-11T07:20:00+0900"
     }
   ],
   "created_at": "2026-08-10T22:24:25+0900",
