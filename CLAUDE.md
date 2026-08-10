@@ -6,7 +6,7 @@
 
 ## 기술 스택
 
-- Python 3.10 (`.venv/` 가상환경 — 회사 PC 기준 버전, 3.11+ 문법 사용 금지)
+- Python 3.12 (`.venv/` 가상환경 — 회사 PC 실측 3.12.10, 2026-08-05 확인. 이전에 걸어둔 "3.11+ 문법 금지" 제약은 근거가 사라져 해제)
 - FastAPI + uvicorn (단일 서버, `static/index.html` 대시보드 서빙)
 - SQLite (`regtax.db`) + SQLAlchemy 2.x
 - ChromaDB (임베디드, `chroma_data/`) + bge-m3 (sentence-transformers, 로컬 CPU 임베딩)
@@ -52,7 +52,10 @@ python run.py                    # 개발 서버 (= uvicorn app.main:app --reloa
 
 - 두 실행 환경: 집 PC(macOS, M1/16GB) ↔ 회사 PC(macOS, M3급 — 사양 미확정). 환경별 차이는 전부 `.env`로 흡수한다 — 코드 분기·`verify=False` 하드코딩 금지.
 - `REPO_ROOT` 비어 있으면 `mock_repo/`(집), 지정 시 실제 eHR repo(회사).
+- CRITICAL: 실제 eHR repo에는 **exploded WAR 등 빌드 산출물이 소스와 같은 트리에 있다**(`out/artifacts/*_war_exploded/`, 2026-08-05 실측 — 인덱싱 대상 8,100개 중 상당수). 산출물을 인덱싱하면 매핑이 재생성되는 경로를 가리켜 patch가 무의미해지고 검색 상위를 중복 사본이 차지한다. 제외 목록은 `RealCodebaseAdapter.EXCLUDED_DIRS`이며 `app/golden.py::_IGNORE`와 같은 어휘다 — 한쪽을 고치면 다른 쪽도 함께 볼 것. 특정 모듈만 볼 때는 `REPO_INDEX_PATHS`로 더 좁힌다.
+- 서버 첫 기동 시 자동 인덱싱은 `./chroma_data`에 쓴다 — 경로가 코드에 고정되어 있어 환경변수로 못 바꾼다(`CodeIndexer(persist_dir="./chroma_data")`). mock↔회사 인덱스를 섞지 않으려면 디렉토리를 옮기거나 지우고 기동한다.
 - 회사망: SSL 제약으로 HuggingFace 직접 다운로드 불가(`HF_HUB_DISABLE_SSL` + pip `--trusted-host`로 대응). Ollama는 설치되어 있음.
+- macOS에서 Ollama가 앱으로 이미 떠 있으면 `ollama serve`가 "이미 실행 중"으로 실패한다. 그렇게 뜬 인스턴스에는 `OLLAMA_CONTEXT_LENGTH`가 걸려 있지 않으므로 `pkill -f "ollama serve"` 후 환경변수와 함께 재기동해야 한다.
 - 분석·초안 생성은 Ollama 서버(127.0.0.1:11434) 기동을 전제로 한다. 미기동 시 해당 API는 500.
 - CRITICAL: Ollama OpenAI 호환 레이어(`/v1`)는 `options.num_ctx`를 **무시한다**(0.31.1 확인). 컨텍스트 창은 서버 기동 시 설정한다: `OLLAMA_CONTEXT_LENGTH=16384 ollama serve`. serve 로그의 "context shift"는 프롬프트 유실 신호로 간주한다(`.harness/failures/F-20260712-0001`).
 - M1 생성 속도 약 5–8 t/s. LLM 타임아웃(600초)과 max_tokens는 출력 형식 설계와 연동해 판단할 것 (`F-20260712-0002` — 출력 토큰 폭발로 상한 절단·타임아웃).
