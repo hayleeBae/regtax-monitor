@@ -82,6 +82,14 @@ DEFAULT_RESULT_ROOT = Path("evaluation/results")
 PATCH_TEMP_PREFIX = "regtax_replay_patch_"
 """생성 diff 를 넘기기 위한 임시 파일 접두 — 아래 `_apply_in_worktree` 참조."""
 
+PIPELINE_STUB = "stub"
+PIPELINE_REAL = "real"
+"""CLI `--pipeline` 값. 기본값은 없다 — 실제 파이프라인이 기본이면 이 명령 하나로
+임베딩 인덱싱과 추론이 돌아 버린다(ADR-011)."""
+
+LOCAL_LLM_BACKEND = "local"
+"""이 값일 때만 초안 생성이 전부 로컬에서 끝난다 (CLAUDE.md — 코드는 외부로 나가지 않는다)."""
+
 
 # ---------------------------------------------------------------------------
 # 실패 구분 (스펙 §9)
@@ -549,19 +557,64 @@ def _default_output_dir() -> Path:
     return PROJECT_ROOT / DEFAULT_RESULT_ROOT / f"replay-{time.strftime('%Y%m%d-%H%M%S')}"
 
 
+def _external_llm_allowed(backend: str, case_count: int, allowed: bool) -> bool:
+    """비-local 백엔드로 replay 를 돌려도 되는지 — 명시적 opt-in 이 없으면 False.
+
+    `--pipeline real` 의 초안 생성은 설정된 백엔드를 쓴다. `claude` 면 **대상 코드
+    스니펫이 Anthropic API 로 나간다.** 운영 `apply` 경로도 같은 동작이지만 그쪽은
+    사람이 한 건씩 누르는 데 비해 replay 는 케이스를 자동으로 연속 실행하므로, 한 번
+    잘못 실행하면 되돌릴 수 없는 양이 나간다(CLAUDE.md CRITICAL — 코드는 외부로 나가지
+    않는다). 그래서 경고를 먼저 내고 플래그가 없으면 아예 시작하지 않는다.
+    """
+    if backend == LOCAL_LLM_BACKEND:
+        return True
+
+    print(
+        f"WARNING: LLM_BACKEND={backend} 입니다 — replay 초안 생성 시 **대상 코드 스니펫이 "
+        f"외부({backend} 백엔드 API)로 전송됩니다.**",
+        file=sys.stderr,
+    )
+    print(
+        f"WARNING: 실행 대상 케이스 {case_count}건이 연속 전송됩니다 "
+        "(케이스마다 검색 상위 후보 파일 내용이 프롬프트에 실립니다).",
+        file=sys.stderr,
+    )
+    if allowed:
+        return True
+
+    print(
+        "ERROR: 외부 전송을 허용하려면 --allow-external-llm 을 명시하세요. "
+        f"회사 환경에서는 LLM_BACKEND={LOCAL_LLM_BACKEND} 를 권장합니다.",
+        file=sys.stderr,
+    )
+    return False
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     """replay 실행 진입점.
 
-    **기본 파이프라인은 없다.** 회사에서는 실제 파이프라인을 주입해 `run_fixtures` 를
-    호출하고, 집에서는 `--stub` 으로 결정적 stub 을 골라 검증한다. 실제 파이프라인을
-    기본값으로 붙이면 이 명령 하나로 임베딩 인덱싱과 추론이 돌아 버린다(ADR-011).
+    **기본 파이프라인은 없다.** `--pipeline stub` 은 집에서 조립 경로를 결정적으로
+    검증하고, `--pipeline real` 은 실제 인덱싱·검색·초안 생성을 태운다. 실제
+    파이프라인을 기본값으로 붙이면 이 명령 하나로 임베딩 인덱싱과 추론이 돌아 버린다
+    (ADR-011).
+
+    무거운 모듈(`real_pipeline`·`replay_draft`)은 `--pipeline real` 분기 **안에서만**
+    import 한다 — 파일 상단에 두면 "runner 는 임베딩·LLM 을 import 하지 않는다"(ADR-011)가
+    깨지고, 집 환경의 mock 검증이 무거운 의존성을 끌고 온다(CLAUDE.md).
     """
     parser = argparse.ArgumentParser(
         prog="python -m app.evaluation.replay.runner",
         description=(
             "과거 개정 replay 를 임시 worktree 에서 실행하고 리포트를 저장한다. "
-            "파이프라인은 주입 대상이며, 로컬 검증용 stub 만 CLI 로 고를 수 있다."
+            "--pipeline stub 은 로컬 검증용 결정적 stub, --pipeline real 은 실제 "
+            "인덱싱·검색·초안 생성이다."
         ),
+    )
+    parser.add_argument(
+        "--pipeline",
+        choices=(PIPELINE_STUB, PIPELINE_REAL),
+        default=None,
+        help="파이프라인 선택 (기본값 없음). stub 은 --stub 과 함께 쓴다.",
     )
     parser.add_argument(
         "--fixtures",
@@ -584,27 +637,62 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument(
         "--stub",
         default=None,
-        help="로컬 검증용 stub 파이프라인 (perfect|partial|empty). 실제 파이프라인은 주입한다.",
+        help="로컬 검증용 stub 파이프라인 (perfect|partial|empty). --pipeline stub 과 함께 쓴다.",
+    )
+    parser.add_argument(
+        "--index-root",
+        type=Path,
+        default=None,
+        help=(
+            "replay 인덱스 캐시 루트 override (--pipeline real 전용, "
+            "기본: evaluation/replay_index)"
+        ),
+    )
+    parser.add_argument(
+        "--allow-external-llm",
+        action="store_true",
+        help=(
+            "LLM_BACKEND 가 local 이 아닐 때 외부 전송을 명시적으로 허용한다 "
+            "(--pipeline real 전용). 기본은 비활성 — 없으면 실행하지 않는다."
+        ),
     )
     args = parser.parse_args(argv)
 
     # stub 파이프라인은 CLI 전용이므로 여기서만 import 한다.
     from app.evaluation.replay.stub_pipeline import STUB_PIPELINES, build_stub_pipeline
 
-    if not args.stub:
+    stub_choices = "|".join(sorted(STUB_PIPELINES))
+
+    # `--pipeline` 없이 `--stub` 만 준 형태를 그대로 받는다 — #0018 런북·테스트가 쓰는
+    # 사용법이며 여기서 깨면 기존 검증 절차가 전부 실패한다.
+    mode = args.pipeline or (PIPELINE_STUB if args.stub else None)
+    if mode is None:
         print(
-            "ERROR: 파이프라인이 주입되지 않았습니다. 실제 파이프라인은 run_fixtures() "
-            f"에 주입하고, 로컬 검증은 --stub {{{'|'.join(sorted(STUB_PIPELINES))}}} 로 하세요.",
+            "ERROR: 파이프라인이 선택되지 않았습니다. 로컬 검증은 "
+            f"--pipeline stub --stub {{{stub_choices}}}, 실제 실행은 --pipeline real 입니다.",
             file=sys.stderr,
         )
         return 2
-    if args.stub not in STUB_PIPELINES:
+
+    if mode == PIPELINE_STUB:
+        if not args.stub:
+            print(
+                f"ERROR: --pipeline stub 은 --stub {{{stub_choices}}} 를 함께 요구합니다.",
+                file=sys.stderr,
+            )
+            return 2
+        if args.stub not in STUB_PIPELINES:
+            print(
+                f"ERROR: 알 수 없는 stub 입니다: {args.stub!r} "
+                f"(사용 가능: {', '.join(sorted(STUB_PIPELINES))})",
+                file=sys.stderr,
+            )
+            return 2
+    elif args.stub:
         print(
-            f"ERROR: 알 수 없는 stub 입니다: {args.stub!r} "
-            f"(사용 가능: {', '.join(sorted(STUB_PIPELINES))})",
+            "NOTE: --pipeline real 에서는 --stub 이 무시됩니다.",
             file=sys.stderr,
         )
-        return 2
 
     try:
         fixtures = ReplayFixtureLoader().load_yaml(args.fixtures)
@@ -614,10 +702,32 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"  - {detail}", file=sys.stderr)
         return 1
 
+    if mode == PIPELINE_STUB:
+        pipeline: ReplayPipeline = build_stub_pipeline(args.stub, fixtures)
+    else:
+        # 설정은 config 경유로만 읽는다(CLAUDE.md). import 를 분기 안에 두어 stub
+        # 실행이 설정 로딩까지 끌고 오지 않게 한다.
+        from config import settings
+
+        if not _external_llm_allowed(
+            settings.llm_backend, len(fixtures), args.allow_external_llm
+        ):
+            return 2
+
+        # 생성 스택 의존은 application 계층에만 있다(ADR-012 보강) — evaluation 안에서
+        # LLM 을 import 하면 #0004 계층 가드와 충돌한다.
+        from app.application.replay_draft import build_replay_draft_fn
+        from app.evaluation.replay.real_pipeline import build_real_pipeline
+
+        pipeline = build_real_pipeline(
+            draft_fn=build_replay_draft_fn(),
+            index_root=args.index_root,
+        )
+
     output_dir = args.output_dir or _default_output_dir()
     target = run_fixtures(
         fixtures,
-        build_stub_pipeline(args.stub, fixtures),
+        pipeline,
         PROJECT_ROOT,
         output_dir,
         privacy_mode=PrivacyMode(args.privacy_mode) if args.privacy_mode else None,

@@ -1,0 +1,33 @@
+{
+  "project": "regtax-monitor",
+  "phase": "issue-0022",
+  "steps": [
+    {
+      "step": 0,
+      "name": "replay-index-cache",
+      "status": "completed",
+      "started_at": "2026-08-10T22:24:25+0900",
+      "summary": "app/evaluation/replay/index_cache.py 신규 — 스펙 §6 네 구성요소(repo_id·base_commit·임베딩 모델·인덱서 버전) sha256 16자 캐시 키, evaluation/replay_index/<key> 루트 봉쇄(키 형태 거부 + resolve 재확인), prepare_index(worktree 기준 어댑터·디렉토리+문서수 캐시 판단, 팩토리 주입, 삭제 경로 없음). 운영 chroma_data·repo 경로 무접근. 테스트 19건 전부 가짜 팩토리(임베딩·ChromaDB 미기동)",
+      "completed_at": "2026-08-10T22:29:09+0900"
+    },
+    {
+      "step": 1,
+      "name": "replay-real-pipeline",
+      "status": "completed",
+      "started_at": "2026-08-10T22:29:10+0900",
+      "summary": "app/evaluation/replay/real_pipeline.py — worktree 인덱스 캐시(Step 0) → RAG·사전·상수 3 provider(검증 매핑·reranker 미구성, rerank_enabled=False, DB 미경유) → 상위 top_k 스니펫 → draft_fn 초안 → PipelineOutput. 최초 실행은 계층 가드(#0004)와 충돌해 blocked(F-20260810-0001). 사람 개입으로 ADR-012 보강: 초안 생성을 app/application/replay_draft.py(build_replay_draft_fn = get_llm_client + propose_and_build)로 분리하고 real_pipeline은 draft_fn을 필수 주입받도록 변경(llm_factory 제거, app.llm import 0건). test_replay_draft.py 신규(propose_and_build 실제 태움) + test_replay_real_pipeline.py는 draft_fn 대역으로 전환. verify.sh full 783 passed. fix 커밋 1cb419c. step 2 CLI는 build_replay_draft_fn을 지연 import해 draft_fn을 주입해야 함.",
+      "completed_at": "2026-08-11T00:00:00+0900"
+    },
+    {
+      "step": 2,
+      "name": "replay-cli",
+      "status": "completed",
+      "started_at": "2026-08-11T07:01:44+0900",
+      "summary": "runner.py CLI 확장 — --pipeline {stub,real}(기본값 없음), --index-root, --allow-external-llm. real 분기에서만 build_replay_draft_fn·build_real_pipeline 지연 import 후 draft_fn 주입(ADR-012 보강 3항). --pipeline 없이 --stub 만 준 기존 사용법은 stub 모드로 그대로 동작(회귀 고정). settings.llm_backend != local 이면 백엔드명·케이스 수·외부 전송 경고를 stderr에 내고 --allow-external-llm 없으면 파이프라인 생성 전에 exit 2. tests/test_replay_cli.py 11건 신규(build_real_pipeline·run_fixtures 대역 — 임베딩·LLM 미태움, sys.modules 지연 import 검사 포함). COMPANY_VALIDATION.md §4-2를 실행 가능한 2단계 명령(stub → real)으로 교체하고 인덱싱 소요시간·캐시 적중·LLM_BACKEND 기록 항목 추가. .gitignore evaluation/replay_index/ 는 기존 엔트리로 이미 충족. verify.sh full 794 passed, stub smoke 정상, git status·worktree 누수 없음.",
+      "completed_at": "2026-08-11T07:07:58+0900"
+    }
+  ],
+  "created_at": "2026-08-10T22:24:25+0900",
+  "total_cost_usd": 8.9957,
+  "completed_at": "2026-08-11T07:07:58+0900"
+}

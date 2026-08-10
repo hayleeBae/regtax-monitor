@@ -732,6 +732,49 @@ bash scripts/verify.sh security
 
 ---
 
+## Issue #0022 — Replay Pipeline Injection
+
+### 배경
+
+`#0018` runner는 초안 생성 파이프라인을 `ReplayPipeline` seam으로 주입받도록 설계했다(ADR-011). 그런데 **주입 수단을 만들지 않았다** — CLI는 `--stub {perfect,partial,empty}`만 받고, 실제 파이프라인을 붙이려면 호출 코드를 새로 작성해야 한다.
+
+결과적으로 회사 환경에서 `#0017~#0018`의 목적인 **"과거 실제 사례 성능 검증"을 수행할 수 없다**. 2026-08-05 회사 실행에서 이 공백이 드러났다.
+
+### 목표
+
+실제 인덱싱·검색·초안 생성 파이프라인을 replay runner에 주입해, 과거 개정 fixture로 end-to-end 측정을 수행할 수 있게 한다.
+
+### 구현 범위
+
+- `ReplayContext` → 실제 파이프라인 어댑터 (worktree를 대상 코드베이스로 삼는 인덱싱·검색·초안 생성)
+- worktree 전용 인덱스 — 운영 `chroma_data/`를 덮어쓰지 않는다
+- index cache (스펙 §6: repository id + base commit + embedding model + chunker version)
+- CLI에서 실제 파이프라인 선택 (`--pipeline real` 등)
+
+### 비범위
+
+- 새 검색·생성 알고리즘 — 기존 파이프라인을 그대로 연결만 한다
+- 파이프라인 성능 개선
+
+### 안전 제약
+
+- 운영 index를 덮어쓰지 않는다 (스펙 §6)
+- 생성 diff는 임시 worktree 안에만 적용한다 (`#0018` 규칙 유지)
+- `privacy_mode` 게이팅을 우회하지 않는다 — 저장은 `report.py` 한 곳
+
+### 수용 기준
+
+- mock fixture 3건이 실제 파이프라인으로 실행되고 리포트가 생성된다
+- 같은 base commit 재실행 시 인덱스가 재사용된다(캐시 적중)
+- 운영 `chroma_data/`가 변경되지 않는다
+- 원본 repo 무변경·worktree 누수 없음(`#0018` 회귀 유지)
+
+### 선행 조건
+
+`#0019`보다 먼저 하거나 병행할 수 있다. 다만 회사 검증 일정과 직결되므로 **`#0019`보다 우선한다** — 이것이 없으면 `#0019·#0020`의 효과를 실데이터로 측정할 방법이 없다.
+
+---
+
 # 4. Phase별 완료 정의
 
 ## Phase A — 측정 기반

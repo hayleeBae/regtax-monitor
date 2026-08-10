@@ -67,7 +67,7 @@ stale 이력 후보의 rank 변화:
 그대로). 정답이 부당하게 밀리는 사례가 관측되면 penalty를 중립화(boost 제거만)하는
 방향으로 스펙 §10 수치 개정을 검토한다.
 
-## 4-2. 과거 개정 replay (Issue #0017·#0018)
+## 4-2. 과거 개정 replay (Issue #0017·#0018·#0022)
 
 과거 개정 1~3건을 골라 **그때 실제로 고친 commit**과 우리 초안을 비교한다. 이 절이
 회사에서만 가능한 가장 중요한 확인이다 — 집에서는 합성 fixture로 비교 로직만
@@ -96,21 +96,50 @@ cp evaluation/datasets/company_replay.template.yaml evaluation/private/replay_co
 원본 repo가 **깨끗한 상태**여야 실행된다(커밋 안 된 변경이 있으면 시작 자체가 거부된다).
 실행은 임시 detached worktree에서만 이루어지고 원본 작업 트리는 건드리지 않는다.
 
-### 실행
+### 실행 1단계 — 배관·fixture 일관성 확인 (stub)
 
 ```bash
 export EHR_REPO_ROOT=/실제/eHR/repo/경로
-python -m app.evaluation.replay.runner --fixtures evaluation/private/replay_company.yaml --output-dir evaluation/results/replay-company --stub perfect
+python -m app.evaluation.replay.runner \
+  --fixtures evaluation/private/replay_company.yaml \
+  --output-dir evaluation/results/replay-company-stub \
+  --pipeline stub --stub perfect
 ```
 
-먼저 `--stub perfect` 로 한 번 돌려 **배관을 확인**한다(worktree 생성·answer diff 추출·
-정리까지). 이때 `expected_replacement_accuracy` 가 1.0이면 fixture가 answer commit과
-일관된다는 뜻이고, 낮으면 **fixture가 틀린 것**이므로 먼저 고친다 — fixture가 틀린 채로
-실제 파이프라인을 돌리면 결과 전체가 무의미하다.
+먼저 stub 으로 한 번 돌려 **배관을 확인**한다(worktree 생성·answer diff 추출·정리까지).
+이때 `expected_replacement_accuracy` 가 1.0이면 fixture가 answer commit과 일관된다는
+뜻이고, 낮으면 **fixture가 틀린 것**이므로 먼저 고친다 — fixture가 틀린 채로 실제
+파이프라인을 돌리면 결과 전체가 무의미하다. stub은 임베딩·추론을 쓰지 않아 몇 초 안에
+끝난다.
 
-배관이 확인되면 실제 파이프라인을 주입해 돌린다(주입 방법은 `runner.py` 의 `ReplayPipeline`
-시그니처 참조 — `ReplayContext` 를 받아 `PipelineOutput(diff_text, retrieved_paths)` 을
-돌려주는 callable이면 된다).
+### 실행 2단계 — 실제 파이프라인 (Issue #0022)
+
+```bash
+python -m app.evaluation.replay.runner \
+  --fixtures evaluation/private/replay_company.yaml \
+  --output-dir evaluation/results/replay-company \
+  --pipeline real
+```
+
+`--pipeline real` 은 base 시점 worktree를 인덱싱해 검색하고 초안을 생성한다. 확인할 것:
+
+- **첫 실행은 인덱싱 때문에 수십 분** 걸린다. 인덱스는 `evaluation/replay_index/<key>/`에
+  캐시되며, key는 (repo id, base commit, 임베딩 모델, 인덱서 버전)이다 — 같은 base
+  commit으로 다시 돌리면 두 번째부터 **캐시가 적중해 인덱싱을 건너뛴다**. 로그의
+  `replay 인덱스 캐시 적중` / `replay 인덱스를 새로 만듭니다` 로 어느 쪽인지 확인한다.
+  base commit이 다른 케이스를 추가하면 그만큼 첫 실행 비용이 늘어난다.
+- 캐시는 자동으로 지워지지 않는다. 재인덱싱이 필요하면 해당 디렉토리를 직접 삭제한다.
+  (`evaluation/replay_index/`는 gitignore 대상 — 대상 코드의 임베딩이 담겨 **커밋·반출
+  금지**다.)
+- Ollama가 떠 있어야 한다(`OLLAMA_CONTEXT_LENGTH=16384 ollama serve`). 미기동이면 해당
+  케이스가 `failure_kind=pipeline_failed` 로 격리되고 나머지 케이스는 계속 실행된다.
+- 운영 `chroma_data/`는 읽지도 쓰지도 않는다 — 개발 서버 인덱스와 섞이지 않는다.
+- 인덱스 캐시 루트를 다른 디스크에 두려면 `--index-root /다른/경로` 를 준다.
+
+**`LLM_BACKEND=claude` 이면 대상 코드 스니펫이 외부(Anthropic API)로 전송된다.** replay는
+케이스를 연속 실행하므로 이 경우 CLI가 경고를 내고 `--allow-external-llm` 없이는 실행을
+거부한다. **회사 환경에서는 `LLM_BACKEND=local` 을 쓴다** — 플래그를 붙여 돌리는 것은
+반출 판단이 끝난 경우에만 한다.
 
 ### 실행 후 확인
 
@@ -130,6 +159,9 @@ git worktree list         # 임시 worktree가 남아 있지 않아야 한다
 ```text
 replay 케이스 수:
 fixture 일관성(expected_replacement_accuracy, stub perfect 기준):
+첫 실행 인덱싱 소요시간 (case별):
+두 번째 실행 인덱스 캐시 적중: 예/아니오
+LLM_BACKEND (local 권장):
 file_coverage:
 expected_replacement_accuracy (실제 파이프라인):
 unnecessary_file_rate:
@@ -168,6 +200,7 @@ Ollama 모델과 context length:
 정답 rank 요약:
 rerank 발동 건수 / symbol 미매칭 건수:
 replay 케이스 수 / file_coverage / replacement accuracy:
+replay 인덱싱 소요시간 / 캐시 적중 여부:
 replay 원본 무변경·worktree 누수 여부:
 초안 생성 절단 재현 여부 (F-20260712-0002):
 requirements.txt 보안 하한 설치 성공 여부 (SSL 제약):
