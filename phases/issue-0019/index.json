@@ -21,7 +21,10 @@
     {
       "step": 2,
       "name": "symbol-fixture",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-08-11T22:05:18+0900",
+      "summary": "evaluation/fixtures/symbols/ 합성 fixture 8파일(com.example.* — Service↔Mapper(XML)↔Test 삼각형·상수·namespace 없는 UI XML·build/ 산출물·깨진 파일) + tests/test_symbol_fixture.py 12케이스 end-to-end(노드14·엣지18·skipped1, 4개 엣지 종류 전부 발동). MockCodebaseAdapter 에 EXCLUDED_DIRS 가 없어 build/ 제외가 안 되던 결함을 CodebaseAdapter(base)로 어휘를 올려 두 어댑터가 공유하도록 수정(mock_repo 목록 불변)",
+      "completed_at": "2026-08-11T22:22:40+0900"
     }
   ],
   "created_at": "2026-08-11T21:49:36+0900",
