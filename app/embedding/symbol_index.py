@@ -1,5 +1,5 @@
 """
-코드 심볼 인덱스 — 노드(심볼) 추출 (Issue #0019 / ADR-013).
+코드 심볼 인덱스 — 노드(심볼) 추출 + 관계 그래프 (Issue #0019 / ADR-013).
 
 eHR 레거시는 깔끔히 파싱되지 않고, 회사망 SSL 제약 때문에 진짜 파서(javalang·
 tree-sitter)를 새로 깔 수도 없다. 그래서 `indexer._chunk_java` 가 쓰던 것과 같은
@@ -14,12 +14,17 @@ tree-sitter)를 새로 깔 수도 없다. 그래서 `indexer._chunk_java` 가 �
     캐시로 떨어지므로 본문을 담으면 eHR 코드 반출 사고가 된다.
   - 파일 하나의 파싱 실패가 전체 추출을 멈추지 않는다(파일 단위 try/except).
 
-이 모듈은 노드까지만 만든다. 엣지(관계)·캐시는 Step 1, provider·검색 배선은 #0020.
+엣지(관계)는 휴리스틱이며 **"일부 연결"이 수용 기준**이다 — 못 찾으면 안 잇는다.
+오탐 엣지가 진짜 관계보다 많아지면 #0020 의 이웃 확장이 잘못된 후보를 상위로 올린다.
+provider·검색 배선은 이 모듈이 아니라 #0020 이 한다.
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
+from collections import Counter, defaultdict
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -45,6 +50,38 @@ class SymbolNode:
     name: str          # 사람이 읽는 이름 (메서드명·statement id 등)
     path: str          # 심볼이 있는 파일 (adapter 상대 경로)
     container: str | None = None   # 소속 (클래스 FQN·mapper namespace 등)
+
+
+class EdgeKind(str, Enum):
+    CONTAINS = "contains"                      # class → method/constant
+    SERVICE_TO_MAPPER = "service_to_mapper"    # Java 호출 → MyBatis statement
+    TEST_TO_SERVICE = "test_to_service"        # test 메서드 → service 클래스/메서드
+    USES_CONSTANT = "uses_constant"            # 파일/메서드 → constant
+
+
+@dataclass(frozen=True)
+class SymbolEdge:
+    src: str      # SymbolNode.id
+    dst: str      # SymbolNode.id
+    kind: EdgeKind
+
+
+@dataclass(frozen=True)
+class SymbolGraph:
+    nodes: tuple[SymbolNode, ...]
+    edges: tuple[SymbolEdge, ...]
+    skipped_files: int            # 파싱 실패로 건너뛴 파일 수 (관측성)
+
+
+_CACHE = Path(__file__).resolve().parents[2] / "symbol_index_cache.json"
+
+# 상수·메서드처럼 클래스에 소속된 노드 (CONTAINS 의 dst 후보)
+_MEMBER_KINDS = frozenset(
+    {SymbolKind.JAVA_METHOD, SymbolKind.TEST_METHOD, SymbolKind.CONSTANT}
+)
+_STATEMENT_KINDS = frozenset(
+    {SymbolKind.MYBATIS_STATEMENT, SymbolKind.SQL_STATEMENT}
+)
 
 
 # ── Java ──────────────────────────────────────────────────
@@ -81,11 +118,16 @@ _JAVA_CONST = re.compile(
 _TEST_ANNOTATION = re.compile(r"@Test\b")
 
 
-def _mask_java(text: str) -> str:
+def _mask_java(text: str, mask_strings: bool = True) -> str:
     """주석·문자열 리터럴을 같은 길이의 공백으로 치환한다.
 
     주석 안의 `{`/`//` 나 문자열 안의 중괄호가 경계 추적을 깨뜨리는 것을 막는다.
-    길이를 보존하므로 매치 위치를 원본과 그대로 견줄 수 있다."""
+    길이를 보존하므로 매치 위치를 원본과 그대로 견줄 수 있다.
+
+    `mask_strings=False` 는 주석만 지운다 — MyBatis statement 참조는
+    `selectOne("ns.statementId")` 처럼 문자열 리터럴 안에 있는 경우가 많아
+    엣지 연결에서는 문자열을 살려야 한다. 문자열 스캔 자체는 그대로 유지한다
+    (`"http://x"` 의 `//` 를 주석으로 오인하지 않기 위해)."""
     out: list[str] = []
     i, n = 0, len(text)
     while i < n:
@@ -105,7 +147,12 @@ def _mask_java(text: str) -> str:
             while j < n and text[j] != ch and text[j] != "\n":
                 j += 2 if text[j] == "\\" else 1
             j = min(j + 1, n)
-            out.append("".join(c if c == "\n" else " " for c in text[i:j]))
+            chunk = text[i:j]
+            out.append(
+                "".join(c if c == "\n" else " " for c in chunk)
+                if mask_strings
+                else chunk
+            )
             i = j
         else:
             out.append(ch)
@@ -383,3 +430,307 @@ def harvest_nodes(adapter) -> list[SymbolNode]:
         "심볼 노드 수확: 파일 %d개, 노드 %d개, 건너뜀 %d개", len(texts), len(nodes), skipped
     )
     return nodes
+
+
+# ── 엣지 연결 (휴리스틱) ───────────────────────────────────
+
+def _strip_comments(path: str, text: str) -> str:
+    """참조 탐색용 본문 — 주석만 제거한다(주석 처리된 코드로 엣지를 만들지 않기 위해).
+
+    문자열 리터럴은 남긴다: MyBatis statement 참조가 그 안에 있다."""
+    suffix = Path(path).suffix.lower()
+    if suffix == ".java":
+        return _mask_java(text, mask_strings=False)
+    if suffix == ".xml":
+        return _XML_COMMENT.sub(" ", text)
+    if suffix == ".sql":
+        return _SQL_COMMENT.sub(" ", text)
+    return text
+
+
+def _mentions(body: str, name: str) -> bool:
+    """단어 경계 기준 언급 여부. 대소문자 무시 — 필드명(`taxMapper`)이 타입명
+    (`TaxMapper`)과 대소문자만 다른 관례를 잡기 위해서다."""
+    return re.search(rf"\b{re.escape(name)}\b", body, re.IGNORECASE) is not None
+
+
+def _calls(body: str, name: str) -> bool:
+    """`.name(` 형태의 호출이 있는지. (수신자는 따지지 않는다 — 휴리스틱)"""
+    return re.search(rf"\.{re.escape(name)}\s*\(", body) is not None
+
+
+def _file_owners(
+    local: Sequence[SymbolNode], class_ids: frozenset[str]
+) -> list[SymbolNode]:
+    """파일 단위 관계의 src 로 쓸 노드.
+
+    Java 는 최상위 클래스(중첩 클래스까지 src 로 두면 같은 엣지가 중복된다),
+    클래스가 없는 XML·SQL 은 그 파일의 statement 노드다."""
+    classes = [
+        n
+        for n in local
+        if n.kind is SymbolKind.JAVA_CLASS and f"java:{n.container}" not in class_ids
+    ]
+    if classes:
+        return classes
+    return [n for n in local if n.kind in _STATEMENT_KINDS]
+
+
+def _link_mappers(
+    owners: Sequence[SymbolNode],
+    path: str,
+    body: str,
+    mappers: Mapping[str, list[SymbolNode]],
+) -> list[SymbolEdge]:
+    """SERVICE_TO_MAPPER — namespace(또는 끝 클래스명).statementId 참조 / 매퍼 호출."""
+    edges: list[SymbolEdge] = []
+    for namespace, statements in mappers.items():
+        simple = namespace.rsplit(".", 1)[-1]
+        mapper_mentioned = _mentions(body, simple)
+        for statement in statements:
+            if statement.path == path:
+                continue   # 매퍼 XML 자신은 호출자가 아니다
+            sid = statement.name
+            hit = (
+                f"{namespace}.{sid}" in body
+                or f"{simple}.{sid}" in body
+                # 매퍼 인터페이스 호출: 타입/필드명이 보이고 statement 이름을 호출한다
+                or (mapper_mentioned and _calls(body, sid))
+            )
+            if not hit:
+                continue   # 못 찾으면 안 잇는다
+            edges.extend(
+                SymbolEdge(owner.id, statement.id, EdgeKind.SERVICE_TO_MAPPER)
+                for owner in owners
+            )
+    return edges
+
+
+def _link_tests(
+    tests: Sequence[SymbolNode],
+    path: str,
+    body: str,
+    classes_by_name: Mapping[str, list[SymbolNode]],
+    methods_by_owner: Mapping[str, list[SymbolNode]],
+    test_paths: frozenset[str],
+) -> list[SymbolEdge]:
+    """TEST_TO_SERVICE — test 파일이 참조하는 service 클래스/메서드."""
+    if not tests:
+        return []
+    targets: list[str] = []
+    for name, candidates in classes_by_name.items():
+        if not re.search(rf"\b{re.escape(name)}\b", body):
+            continue   # 클래스명은 대소문자를 구분해 본다 (오탐 억제)
+        for klass in candidates:
+            if klass.path == path or klass.path in test_paths:
+                continue   # 자기 자신·다른 test 클래스는 service 가 아니다
+            fqn = klass.id.removeprefix("java:")
+            targets.append(klass.id)
+            targets.extend(
+                method.id
+                for method in methods_by_owner.get(fqn, ())
+                if _calls(body, method.name)
+            )
+    return [
+        SymbolEdge(test.id, target, EdgeKind.TEST_TO_SERVICE)
+        for test in tests
+        for target in targets
+    ]
+
+
+def _link_constants(
+    owners: Sequence[SymbolNode],
+    body: str,
+    constants: Sequence[SymbolNode],
+    unique_names: frozenset[str],
+    is_java: bool,
+) -> list[SymbolEdge]:
+    """USES_CONSTANT — `Class.CONST`(모든 파일) 또는 `CONST`(Java 파일, 이름이
+    그래프 전체에서 유일할 때만). 이름이 겹치는 상수를 맨몸 이름으로 잇는 것은
+    어느 클래스의 상수인지 알 수 없어 오탐이다."""
+    edges: list[SymbolEdge] = []
+    for const in constants:
+        container = const.container or ""
+        simple = container.rsplit(".", 1)[-1]
+        qualified = (
+            f"{container}.{const.name}" in body or f"{simple}.{const.name}" in body
+        )
+        bare = (
+            is_java
+            and const.name in unique_names
+            and re.search(rf"\b{re.escape(const.name)}\b", body) is not None
+        )
+        if not (qualified or bare):
+            continue
+        declaring = f"java:{container}"
+        edges.extend(
+            SymbolEdge(owner.id, const.id, EdgeKind.USES_CONSTANT)
+            for owner in owners
+            if owner.id != declaring   # 선언 클래스는 CONTAINS 가 이미 담는다
+        )
+    return edges
+
+
+def _dedup_edges(edges: list[SymbolEdge]) -> list[SymbolEdge]:
+    """같은 (src, dst, kind) 는 한 번만. 순서는 보존."""
+    seen: set[tuple[str, str, EdgeKind]] = set()
+    unique: list[SymbolEdge] = []
+    for edge in edges:
+        key = (edge.src, edge.dst, edge.kind)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(edge)
+    return unique
+
+
+def link_edges(
+    nodes: Sequence[SymbolNode], files: Mapping[str, str]
+) -> list[SymbolEdge]:
+    """노드 사이의 관계를 휴리스틱으로 잇는다.
+
+    `files` 는 `{경로: 본문}` — harvest 가 이미 읽은 본문을 재사용한다(재독 방지).
+    모든 엣지는 **실재하는 노드 id 끼리만** 잇는다(dangling 금지): 대상 노드가
+    없으면 엣지를 만들지 않는다."""
+    class_ids = frozenset(n.id for n in nodes if n.kind is SymbolKind.JAVA_CLASS)
+
+    mappers: dict[str, list[SymbolNode]] = defaultdict(list)
+    classes_by_name: dict[str, list[SymbolNode]] = defaultdict(list)
+    methods_by_owner: dict[str, list[SymbolNode]] = defaultdict(list)
+    by_path: dict[str, list[SymbolNode]] = defaultdict(list)
+    constants: list[SymbolNode] = []
+    test_paths: set[str] = set()
+
+    edges: list[SymbolEdge] = []
+    for node in nodes:
+        by_path[node.path].append(node)
+        if node.kind is SymbolKind.JAVA_CLASS:
+            classes_by_name[node.name].append(node)
+        elif node.kind is SymbolKind.MYBATIS_STATEMENT and node.container:
+            mappers[node.container].append(node)
+        elif node.kind is SymbolKind.JAVA_METHOD and node.container:
+            methods_by_owner[node.container].append(node)
+        elif node.kind is SymbolKind.CONSTANT:
+            constants.append(node)
+        if node.kind is SymbolKind.TEST_METHOD:
+            test_paths.add(node.path)
+        # CONTAINS — container 가 실재하는 클래스 노드일 때만. 가장 확실한 엣지다.
+        if node.kind in _MEMBER_KINDS and node.container:
+            owner_id = f"java:{node.container}"
+            if owner_id in class_ids:
+                edges.append(SymbolEdge(owner_id, node.id, EdgeKind.CONTAINS))
+
+    counts = Counter(const.name for const in constants)
+    unique_names = frozenset(name for name, n in counts.items() if n == 1)
+    frozen_test_paths = frozenset(test_paths)
+
+    for path, text in files.items():
+        local = by_path.get(path)
+        if not local:
+            continue   # 노드가 없는 파일은 관계의 주체가 될 수 없다
+        body = _strip_comments(path, text)
+        owners = _file_owners(local, class_ids)
+        tests = [n for n in local if n.kind is SymbolKind.TEST_METHOD]
+        edges.extend(_link_mappers(owners, path, body, mappers))
+        edges.extend(
+            _link_tests(
+                tests, path, body, classes_by_name, methods_by_owner, frozen_test_paths
+            )
+        )
+        edges.extend(
+            _link_constants(
+                owners,
+                body,
+                constants,
+                unique_names,
+                Path(path).suffix.lower() == ".java",
+            )
+        )
+    return _dedup_edges(edges)
+
+
+# ── 그래프 조립·캐시 ───────────────────────────────────────
+
+_EMPTY_GRAPH = SymbolGraph(nodes=(), edges=(), skipped_files=0)
+
+
+def harvest(adapter) -> SymbolGraph:
+    """adapter 로 노드 추출(Step 0) → 엣지 연결 → SymbolGraph."""
+    if adapter is None:
+        return _EMPTY_GRAPH
+    nodes, texts, skipped = _harvest_files(adapter)
+    if not nodes:
+        return SymbolGraph(nodes=(), edges=(), skipped_files=skipped)
+    edges = link_edges(nodes, texts)
+    logger.info(
+        "심볼 그래프 수확: 파일 %d개, 노드 %d개, 엣지 %d개, 건너뜀 %d개",
+        len(texts),
+        len(nodes),
+        len(edges),
+        skipped,
+    )
+    return SymbolGraph(nodes=tuple(nodes), edges=tuple(edges), skipped_files=skipped)
+
+
+def _to_dict(graph: SymbolGraph) -> dict:
+    """캐시용 JSON 직렬화. 노드에 본문이 없으므로 캐시에도 코드 본문이 없다."""
+    return {
+        "nodes": [
+            {
+                "id": n.id,
+                "kind": n.kind.value,
+                "name": n.name,
+                "path": n.path,
+                "container": n.container,
+            }
+            for n in graph.nodes
+        ],
+        "edges": [
+            {"src": e.src, "dst": e.dst, "kind": e.kind.value} for e in graph.edges
+        ],
+        "skipped_files": graph.skipped_files,
+    }
+
+
+def _from_dict(payload: dict) -> SymbolGraph:
+    return SymbolGraph(
+        nodes=tuple(
+            SymbolNode(
+                id=n["id"],
+                kind=SymbolKind(n["kind"]),
+                name=n["name"],
+                path=n["path"],
+                container=n.get("container"),
+            )
+            for n in payload["nodes"]
+        ),
+        edges=tuple(
+            SymbolEdge(src=e["src"], dst=e["dst"], kind=EdgeKind(e["kind"]))
+            for e in payload["edges"]
+        ),
+        skipped_files=int(payload.get("skipped_files", 0)),
+    )
+
+
+def load(adapter, refresh: bool = False) -> SymbolGraph:
+    """캐시가 있으면 로드, 없으면 수확 후 캐시 (`term_dict.load` 와 같은 규칙).
+
+    adapter 가 없거나 노드가 0개면 빈 그래프이며 **캐시를 쓰지 않는다** —
+    미설정 환경의 빈 결과가 캐시에 굳으면 되돌리기 어렵다."""
+    if adapter is None:
+        return _EMPTY_GRAPH
+    if _CACHE.exists() and not refresh:
+        try:
+            return _from_dict(json.loads(_CACHE.read_text(encoding="utf-8")))
+        except (json.JSONDecodeError, OSError, KeyError, TypeError, ValueError):
+            pass   # 깨진 캐시는 조용히 재수확한다
+    graph = harvest(adapter)
+    if not graph.nodes:
+        return graph
+    try:
+        _CACHE.write_text(
+            json.dumps(_to_dict(graph), ensure_ascii=False), encoding="utf-8"
+        )
+    except OSError:
+        pass
+    return graph

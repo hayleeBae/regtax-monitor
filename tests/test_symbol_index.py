@@ -1,19 +1,28 @@
-"""Issue #0019 Step 0 — 코드 심볼 노드 추출 테스트.
+"""Issue #0019 Step 0·1 — 코드 심볼 노드 추출 + 관계 그래프 테스트.
 
 실제 파일·임베딩·DB 없이 가짜 adapter 에 inline 소스를 담아 검증한다.
+캐시 테스트는 `_CACHE` 를 tmp_path 로 monkeypatch 한다 — 프로젝트 루트의 실제
+`symbol_index_cache.json` 을 건드리지 않는다.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import json
 
+from app.embedding import symbol_index
 from app.embedding.symbol_index import (
+    EdgeKind,
+    SymbolEdge,
     SymbolKind,
     SymbolNode,
     extract_java,
     extract_mybatis,
     extract_sql,
+    harvest,
     harvest_nodes,
+    link_edges,
+    load,
 )
 
 JAVA_SERVICE = """
@@ -92,6 +101,51 @@ public class Broken {
         if (true) {
     }
 """
+
+# 매퍼를 두 방식으로 호출하고 다른 클래스의 상수를 쓰는 DAO.
+JAVA_DAO = """
+package com.example.tax;
+
+public class TaxDao {
+
+    private TaxMapper taxMapper;
+
+    public long load(long id) {
+        long credit = taxMapper.findCredit(id);
+        long updated = sqlSession.update("com.example.tax.TaxMapper.updateCredit", id);
+        return credit + updated + TaxService.CHILD_CREDIT;
+    }
+}
+"""
+
+# 매퍼를 주석에서만 언급한다 — 엣지가 생기면 안 된다.
+JAVA_NO_MAPPER = """
+package com.example.tax;
+
+public class TaxReport {
+
+    public String describe(long id) {
+        // 매퍼는 TaxMapper.findCredit 이지만 여기서 호출하지는 않는다 (주석뿐)
+        return String.valueOf(id);
+    }
+}
+"""
+
+SERVICE_PATH = "src/tax/TaxService.java"
+DAO_PATH = "src/tax/TaxDao.java"
+REPORT_PATH = "src/tax/TaxReport.java"
+TEST_PATH = "src/test/java/com/example/tax/TaxServiceTest.java"
+MAPPER_PATH = "src/mapper/TaxMapper.xml"
+
+ALL_FILES = {
+    SERVICE_PATH: JAVA_SERVICE,
+    DAO_PATH: JAVA_DAO,
+    REPORT_PATH: JAVA_NO_MAPPER,
+    TEST_PATH: JAVA_TEST,
+    MAPPER_PATH: MAPPER_XML,
+    "src/webapp/TaxScreen.xml": LAYOUT_XML,
+    "sql/income_tax_rates.sql": SQL_SOURCE,
+}
 
 
 class FakeAdapter:
@@ -240,3 +294,173 @@ def test_nodes_carry_no_code_body() -> None:
         assert "{" not in values and "\n" not in values
         assert "SELECT" not in values.upper() or node.path.endswith(".xml")
         assert "150000L" not in values
+
+
+# ── Step 1: 엣지·그래프 ────────────────────────────────────
+
+
+def _full_graph() -> symbol_index.SymbolGraph:
+    return harvest(FakeAdapter(ALL_FILES))
+
+
+def _edges(graph: symbol_index.SymbolGraph, kind: EdgeKind) -> set[tuple[str, str]]:
+    return {(e.src, e.dst) for e in graph.edges if e.kind is kind}
+
+
+def test_contains_links_class_to_its_members() -> None:
+    graph = _full_graph()
+    contains = _edges(graph, EdgeKind.CONTAINS)
+
+    klass = "java:com.example.tax.TaxService"
+    assert (klass, f"{klass}#calculate") in contains
+    assert (klass, f"{klass}#load") in contains
+    assert (klass, "const:com.example.tax.TaxService.CHILD_CREDIT") in contains
+    assert (
+        "java:com.example.tax.TaxServiceTest",
+        "test:com.example.tax.TaxServiceTest#childCredit",
+    ) in contains
+
+
+def test_service_to_mapper_links_only_on_a_real_reference() -> None:
+    graph = _full_graph()
+    links = _edges(graph, EdgeKind.SERVICE_TO_MAPPER)
+
+    # 매퍼 인터페이스 호출(taxMapper.findCredit)과 namespace.statementId 문자열 참조
+    assert links == {
+        ("java:com.example.tax.TaxDao", "mybatis:com.example.tax.TaxMapper.findCredit"),
+        ("java:com.example.tax.TaxDao", "mybatis:com.example.tax.TaxMapper.updateCredit"),
+    }
+    # 매퍼를 언급조차 않는 서비스, 주석에서만 언급하는 파일은 이어지지 않는다.
+    srcs = {src for src, _dst in links}
+    assert "java:com.example.tax.TaxService" not in srcs
+    assert "java:com.example.tax.TaxReport" not in srcs
+
+
+def test_test_to_service_links_test_method_to_service() -> None:
+    graph = _full_graph()
+    links = _edges(graph, EdgeKind.TEST_TO_SERVICE)
+
+    test_method = "test:com.example.tax.TaxServiceTest#childCredit"
+    assert (test_method, "java:com.example.tax.TaxService") in links
+    assert (test_method, "java:com.example.tax.TaxService#calculate") in links
+    # 자기 자신(test 클래스)으로 되짚는 엣지는 만들지 않는다.
+    assert (test_method, "java:com.example.tax.TaxServiceTest") not in links
+    # src 는 항상 test 메서드다.
+    assert {src for src, _dst in links} == {test_method}
+
+
+def test_uses_constant_links_the_using_file() -> None:
+    graph = _full_graph()
+    links = _edges(graph, EdgeKind.USES_CONSTANT)
+
+    child_credit = "const:com.example.tax.TaxService.CHILD_CREDIT"
+    assert ("java:com.example.tax.TaxDao", child_credit) in links
+    # 선언 클래스 자신은 CONTAINS 가 담으므로 USES_CONSTANT 를 중복으로 만들지 않는다.
+    assert ("java:com.example.tax.TaxService", child_credit) not in links
+    # 상수를 언급하지 않는 파일은 이어지지 않는다.
+    assert ("java:com.example.tax.TaxReport", child_credit) not in links
+
+
+def test_edges_never_dangle() -> None:
+    graph = _full_graph()
+    ids = {node.id for node in graph.nodes}
+
+    assert graph.edges
+    for edge in graph.edges:
+        assert edge.src in ids, edge
+        assert edge.dst in ids, edge
+
+
+def test_missing_target_nodes_produce_no_edges() -> None:
+    """매퍼·상수 노드가 그래프에 없으면 참조가 있어도 엣지를 만들지 않는다."""
+    nodes = extract_java(DAO_PATH, JAVA_DAO)
+
+    edges = link_edges(nodes, {DAO_PATH: JAVA_DAO})
+
+    assert edges == [
+        SymbolEdge(
+            src="java:com.example.tax.TaxDao",
+            dst="java:com.example.tax.TaxDao#load",
+            kind=EdgeKind.CONTAINS,
+        )
+    ]
+
+
+def test_load_writes_cache_then_reads_it(monkeypatch, tmp_path) -> None:
+    cache = tmp_path / "symbol_index_cache.json"
+    monkeypatch.setattr(symbol_index, "_CACHE", cache)
+    adapter = FakeAdapter(ALL_FILES)
+
+    first = load(adapter)
+    reads_after_harvest = len(adapter.reads)
+
+    assert cache.exists()
+    assert reads_after_harvest > 0
+    assert first.nodes and first.edges
+
+    second = load(adapter)
+
+    assert len(adapter.reads) == reads_after_harvest   # 캐시 로드 — 재수확 없음
+    assert second == first                             # 직렬화 왕복이 그래프를 보존한다
+
+    third = load(adapter, refresh=True)
+
+    assert len(adapter.reads) > reads_after_harvest    # refresh 는 재수확한다
+    assert third == first
+
+
+def test_cache_holds_no_code_body(monkeypatch, tmp_path) -> None:
+    cache = tmp_path / "symbol_index_cache.json"
+    monkeypatch.setattr(symbol_index, "_CACHE", cache)
+
+    load(FakeAdapter(ALL_FILES))
+    raw = cache.read_text(encoding="utf-8")
+
+    for leaked in (
+        "private static final",
+        "public class",
+        "System.out.println",
+        "150000L",
+        "SELECT n0200",
+        "@Test",
+        "resultType",
+    ):
+        assert leaked not in raw, leaked
+    # 역직렬화는 enum 을 되살린다 (문자열이 아니라 SymbolKind/EdgeKind).
+    graph = symbol_index._from_dict(json.loads(raw))
+    assert {type(n.kind) for n in graph.nodes} == {SymbolKind}
+    assert {type(e.kind) for e in graph.edges} == {EdgeKind}
+
+
+def test_broken_cache_is_re_harvested(monkeypatch, tmp_path) -> None:
+    cache = tmp_path / "symbol_index_cache.json"
+    cache.write_text("{ 깨진 json", encoding="utf-8")
+    monkeypatch.setattr(symbol_index, "_CACHE", cache)
+
+    graph = load(FakeAdapter(ALL_FILES))
+
+    assert graph.nodes
+
+
+def test_empty_or_missing_adapter_yields_an_empty_graph(monkeypatch, tmp_path) -> None:
+    cache = tmp_path / "symbol_index_cache.json"
+    monkeypatch.setattr(symbol_index, "_CACHE", cache)
+
+    for adapter in (None, FakeAdapter({}), FakeAdapter({"README.md": "대상 아님"})):
+        graph = load(adapter)
+        assert graph.nodes == ()
+        assert graph.edges == ()
+        assert graph.skipped_files == 0
+
+    assert harvest(None).nodes == ()
+    # 빈 결과는 캐시에 굳히지 않는다 (미설정 환경 대응).
+    assert not cache.exists()
+
+
+def test_graph_records_skipped_files() -> None:
+    graph = harvest(
+        FakeAdapter({"src/tax/Broken.java": BROKEN_JAVA, SERVICE_PATH: JAVA_SERVICE})
+    )
+
+    assert graph.skipped_files == 1
+    assert "java:com.example.tax.TaxService" in {n.id for n in graph.nodes}
