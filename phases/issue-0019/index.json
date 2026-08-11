@@ -16,7 +16,7 @@
       "status": "completed",
       "started_at": "2026-08-11T21:57:22+0900",
       "summary": "symbol_index.py 에 EdgeKind/SymbolEdge/SymbolGraph + link_edges(CONTAINS·SERVICE_TO_MAPPER·TEST_TO_SERVICE·USES_CONSTANT, 실재 노드끼리만·못 찾으면 안 이음) + harvest/load(symbol_index_cache.json, term_dict 캐시 규칙, 빈 결과는 캐시 안 함) 추가, .gitignore 에 캐시 등록, tests 11케이스 추가(총 19)",
-      "completed_at": "2026-08-11T22:31:00+0900"
+      "completed_at": "2026-08-11T22:05:18+0900"
     },
     {
       "step": 2,
@@ -25,5 +25,5 @@
     }
   ],
   "created_at": "2026-08-11T21:49:36+0900",
-  "total_cost_usd": 2.693
+  "total_cost_usd": 5.278
 }
