@@ -19,11 +19,21 @@ class MockCodebaseAdapter(CodebaseAdapter):
         self.indexer = indexer  # embedding.indexer.CodeIndexer 주입
 
     def list_files(self) -> list[str]:
-        return [
-            str(p.relative_to(self.root))
-            for p in self.root.rglob("*")
-            if p.is_file() and p.suffix in self.SOURCE_EXTS
-        ]
+        """확장자 필터 + 빌드 산출물 디렉토리 제외 (`EXCLUDED_DIRS`).
+
+        제외는 RealCodebaseAdapter 와 같은 규칙이다 — adapter 만 경유하는 소비자
+        (`symbol_index` 등)가 어느 어댑터에서든 산출물 심볼을 보지 않아야 한다.
+        `mock_repo/` 에는 해당 디렉토리가 없어 기존 동작은 그대로다.
+        """
+        files = []
+        for p in self.root.rglob("*"):
+            if not p.is_file() or p.suffix not in self.SOURCE_EXTS:
+                continue
+            relative = p.relative_to(self.root)
+            if self._is_excluded(relative):
+                continue
+            files.append(str(relative))
+        return files
 
     def read_file(self, path: str) -> str:
         return (self.root / path).read_text(encoding="utf-8")

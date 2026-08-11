@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  합성 fixture 전용 UI 레이아웃 XML (regtax-monitor Issue #0019).
+  MyBatis 매퍼가 아니다 — <mapper namespace="..."> 가 없다.
+  아래 <select>/<update> 는 화면 컴포넌트이므로 statement 노드가 되면 안 된다.
+-->
+<screen id="TaxScreen" title="세액공제 조회">
+    <layout>
+        <select id="taxYearCombo" label="귀속연도">
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+        </select>
+        <update id="saveButton" label="저장" action="submit"/>
+        <grid id="creditGrid" columns="taxYear,creditAmount"/>
+    </layout>
+</screen>

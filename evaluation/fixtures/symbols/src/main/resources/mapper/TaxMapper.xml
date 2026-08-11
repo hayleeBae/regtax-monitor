@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 합성 fixture 전용 MyBatis 매퍼 (regtax-monitor Issue #0019) -->
+<mapper namespace="com.example.tax.TaxMapper">
+
+    <select id="findCredit" parameterType="int" resultType="long">
+        SELECT credit_amount
+          FROM example_tax_credit
+         WHERE tax_year = #{taxYear}
+    </select>
+
+    <update id="updateCredit">
+        UPDATE example_tax_credit
+           SET credit_amount = #{amount}
+         WHERE tax_year = #{taxYear}
+    </update>
+
+</mapper>

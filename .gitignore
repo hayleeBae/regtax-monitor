@@ -9,10 +9,11 @@ chroma_data/
 .DS_Store
 mock_repo/patches/
 
-# 용어 사전·상수 인벤토리 캐시 — eHR 내부 파생물(외부 반출 금지) + 자동 재생성
+# 용어 사전·상수 인벤토리·심볼 그래프 캐시 — eHR 내부 파생물(외부 반출 금지) + 자동 재생성
 term_dict_cache.json
 term_loc_cache.json
 const_inventory_cache.json
+symbol_index_cache.json
 # 참고 문서 업로드 폴더 (개정세법 해설 PDF 등 — 용량 큰 발간물, repo에 커밋 안 함)
 data/uploads/
 # 실행 감사 artifact (프롬프트·모델 결과·코드가 포함될 수 있음)

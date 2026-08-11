@@ -82,6 +82,11 @@
 
 **추가 트레이드오프**: replay 실제 파이프라인이 두 계층에 걸쳐 있어 배선 지점이 하나 늘어난다. `app/application/` 이 `ReplayContext`·`PipelineOutput` 계약(evaluation 정의)을 import 하므로 계약 방향이 evaluation → application 한 방향으로 유지되는지 리뷰에서 확인해야 한다.
 
+### ADR-013: 코드 심볼 인덱스는 휴리스틱 추출 + gitignore 캐시로, provider는 #0020에 분리 (Issue #0019)
+**결정**: Java·MyBatis XML·SQL 에서 최소 심볼(Java class/method, MyBatis namespace/statement id, test method, constant usage)과 관계(class→method, Service→Mapper, Test→Service, constant usage)를 추출하는 `app/embedding/symbol_index.py` 를 만든다. `term_dict.py`·`const_inventory.py` 와 같은 **harvest/load/cache 가족**이다 — `harvest(adapter)` → JSON 직렬화 그래프, `load(adapter, refresh)` → `symbol_index_cache.json`(프로젝트 루트, gitignore, 자동 재생성). 파싱은 **정규식·휴리스틱**이며 진짜 파서·신규 의존성을 쓰지 않는다(`_chunk_java` 의 중괄호 매칭 재사용). 소스 파일 접근은 **`CodebaseAdapter` 를 경유**한다(`list_files()`/`read_file()`) — `EXCLUDED_DIRS`(빌드 산출물 제외)와 CP949 처리를 상속하기 위해서다. `RetrievalSource.CODE_GRAPH`(이미 예약)를 소비하는 `CodeGraphProvider` 와 검색 배선은 **이 이슈에 넣지 않고 #0020 으로 분리**한다. 파일 단위 try/except 로 파싱 실패 파일은 건너뛰고 개수만 기록하며 전체 추출을 중단시키지 않는다.
+**이유**: 로드맵이 "완전한 컴파일러 수준 분석"과 Neo4j 를 명시적으로 비범위로 두었고, 레거시 eHR 은 깔끔히 파싱되지 않아 휴리스틱이 현실적이다. 신규 파서 의존성은 회사망 SSL 제약(HuggingFace·pip 차단)에서 설치 부담이 크다. 어댑터 경유는 2026-08-05 실측 교훈의 직접 반영이다 — 직접 파일 순회는 `EXCLUDED_DIRS`·CP949 를 다시 구현해야 하고, 빠뜨리면 빌드 산출물(exploded WAR)의 심볼이 인덱스를 오염시킨다. provider 분리는 로드맵 구조(#0020 이 이 인덱스를 소비)와 일치하며, #0019 를 mock 으로 완결(수용 기준=mock repo 심볼 추출·일부 관계 연결)할 수 있게 한다. 회사 실측에서 검색이 VO 필드/term_dictionary 에 편중된 것이 이 인덱스의 동기지만, 그 격차를 좁히는 재정렬은 #0020 의 몫이다 — #0019 는 재료(관계 그래프)만 만든다.
+**트레이드오프**: 휴리스틱 추출은 오버로드·중첩 클래스·동적 MyBatis(`<include>`/`<sql>`)에서 놓치거나 오탐한다("일부 연결"이 수용 기준이라 감수). 캐시가 eHR 내부 구조 파생물이라 커밋되면 반출 사고가 된다 — `term_dict_cache.json` 등과 같은 gitignore·비커밋 규칙으로 방어한다. #0019 만으로는 검색 품질이 바뀌지 않아 효과가 #0020 에서야 측정된다(#0016 rerank 와 같은 지연 검증 구조).
+
 ### ADR-007: 도메인 레지스트리(domains.json)로 수집 확장
 **결정**: 수집 대상 법령·고시 검색어를 코드가 아니라 `domains.json`(tax/hr)에서 관리. 파일 없으면 기존 세법 5종 폴백.
 **이유**: 연말정산(세법)을 넘어 인사 법령 전반으로 확장 + 도메인별 담당자 라우팅 기반. 법률만 수집하면 올해 개정(시행령·시행규칙 10건, 법률 0건)을 전부 놓쳤을 상황 — 3계층 수집이 필수임을 실검증.

@@ -61,35 +61,9 @@ class RealCodebaseAdapter(CodebaseAdapter):
 
     SOURCE_EXTS = {".java", ".sql", ".xml", ".py", ".kt", ".ts", ".tsx", ".js"}
 
-    EXCLUDED_DIRS = frozenset(
-        {
-            ".git",
-            ".svn",
-            "target",
-            "build",
-            "out",
-            "dist",
-            "node_modules",
-            ".venv",
-            "venv",
-            "__pycache__",
-        }
-    )
-    """인덱싱에서 제외할 디렉토리 이름 (경로 구성요소 기준).
-
-    빌드 산출물을 인덱싱하면 세 가지가 동시에 망가진다:
-
-    1. **매핑이 쓸모없어진다** — exploded WAR 같은 산출물은 빌드할 때마다 덮어써지므로,
-       거기를 가리키는 매핑으로 patch 초안을 만들어도 실제 수정이 되지 않는다.
-    2. **검색이 오염된다** — 같은 코드가 소스와 산출물로 중복 인덱싱돼 상위 후보를
-       산출물이 차지한다.
-    3. **인덱싱 시간이 몇 배가 된다** — 실제 eHR repo 관측에서 인덱싱 대상 8,100개 중
-       상당수가 `out/artifacts/..._war_exploded/` 하위였다(2026-08-05 회사 실측).
-
-    목록은 `app/golden.py::_IGNORE`(스크래치 복사 제외 목록)와 같은 어휘다. 그쪽은
-    `shutil.ignore_patterns` 콜러블이고 여기는 경로 구성요소 집합이라 형태가 달라
-    공유하지 않는다 — 한쪽을 고치면 다른 쪽도 함께 볼 것.
-    """
+    # EXCLUDED_DIRS(빌드 산출물 제외 목록)는 CodebaseAdapter 에서 상속한다 —
+    # 어댑터 공통 규칙이라 base 에 있고, `RealCodebaseAdapter.EXCLUDED_DIRS` 로
+    # 참조하는 기존 코드·문서는 그대로 동작한다.
 
     def __init__(self, repo_root: str, indexer=None):
         self.root = Path(repo_root).resolve()
@@ -99,7 +73,7 @@ class RealCodebaseAdapter(CodebaseAdapter):
         """인덱싱 대상 파일인지 — 확장자 + 제외 디렉토리 판정."""
         if not path.is_file() or path.suffix not in self.SOURCE_EXTS:
             return False
-        return not (self.EXCLUDED_DIRS & set(path.parts))
+        return not self._is_excluded(path)
 
     def list_files(self) -> list[str]:
         index_paths = [
