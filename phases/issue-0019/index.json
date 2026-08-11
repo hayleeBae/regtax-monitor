@@ -1,0 +1,24 @@
+{
+  "project": "regtax-monitor",
+  "phase": "issue-0019",
+  "steps": [
+    {
+      "step": 0,
+      "name": "symbol-extract",
+      "status": "completed",
+      "started_at": "2026-08-11T21:49:36+0900",
+      "summary": "app/embedding/symbol_index.py 신규 — SymbolKind/SymbolNode 와 정규식·중괄호 매칭 기반 Java(클래스·메서드·상수·test)/MyBatis(namespace 있는 XML만)/SQL 노드 추출기 + adapter 경유 harvest_nodes(파일 단위 실패 격리), tests/test_symbol_index.py 8케이스"
+    },
+    {
+      "step": 1,
+      "name": "symbol-graph",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "symbol-fixture",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-08-11T21:49:36+0900"
+}
