@@ -22,7 +22,8 @@ app/
 │   ├── indexer.py       #   코드 청킹(Java/SQL/XML) + bge-m3 → chroma_data/
 │   ├── docs_index.py    #   참고 문서(해설서) 별도 컬렉션(tax_docs) 인덱싱
 │   ├── term_dict.py     #   암호 컬럼코드↔한글명 사전 (주석에서 자동 수확)
-│   └── const_inventory.py #  법령 수치 리터럴 인벤토리 (값 매칭)
+│   ├── const_inventory.py #  법령 수치 리터럴 인벤토리 (값 매칭)
+│   └── symbol_index.py  #   (#0019) Java/MyBatis/SQL 심볼·관계 그래프 추출 (adapter 경유, symbol_index_cache.json gitignore) — #0020 CodeGraphProvider가 소비
 ├── domain/mappings/    # 매핑 검증 결정 순수 도메인 (Issue #0015~#0016)
 │   ├── decisions.py     #   MappingDecisionType/reason enum, MappingDecisionRecord, resolve_state(), check_stale()
 │   └── reranking.py     #   (#0016) DecisionContext, classify_reuse, rerank_delta, RERANK_VERSION — 문맥 게이팅 검색 재정렬
