@@ -22,7 +22,10 @@
     {
       "step": 2,
       "name": "xfdl-chunker",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-08-14T15:08:19+0900",
+      "summary": "SOURCE_EXTS에 '.xfdl' 추가. indexer._chunk_xfdl 신규(복수 <Script> CDATA 추출→하나로 합쳐 함수 경계 this.x=function/function x로 분리, _chunk_java 중괄호 균형 기법 재사용, 여는 중괄호 다음줄 대응 find+가드; Script/함수 매치 없으면 파일 전체 폴백; 레이아웃 XML부는 청킹 안 함) + _chunk() 디스패치 등록. _extract_symbol .xfdl 분기(this.(\\w+)=function 우선, 없으면 function\\s+(\\w+)). test_xfdl_chunker.py 7건(함수분리·한도상수·레이아웃배제·심볼추출2형태·복수Script·_is_indexable) 전부 pass. 회귀0(실패집합 사전존재 Windows env·replay flaky 동일).",
+      "completed_at": "2026-08-14T15:20:00+0900"
     },
     {
       "step": 3,

@@ -59,7 +59,7 @@ class RealCodebaseAdapter(CodebaseAdapter):
     apply_patch()는 git apply로 워킹트리에 직접 반영한다.
     """
 
-    SOURCE_EXTS = {".java", ".sql", ".xml", ".py", ".kt", ".ts", ".tsx", ".js"}
+    SOURCE_EXTS = {".java", ".sql", ".xml", ".py", ".kt", ".ts", ".tsx", ".js", ".xfdl"}
 
     # EXCLUDED_DIRS(빌드 산출물 제외 목록)는 CodebaseAdapter 에서 상속한다 —
     # 어댑터 공통 규칙이라 base 에 있고, `RealCodebaseAdapter.EXCLUDED_DIRS` 로
