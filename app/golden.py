@@ -14,10 +14,13 @@ import tempfile
 import time
 from pathlib import Path
 
-# 스크래치 복사에서 제외 — 무겁거나 테스트와 무관한 산출물
+# 스크래치 복사에서 제외 — 무겁거나 테스트와 무관한 산출물.
+# 디렉토리 이름 어휘는 CodebaseAdapter.EXCLUDED_DIRS 와 맞춘다(CLAUDE.md CRITICAL) —
+# "classes" 는 eHR exploded WAR(1.7GB·4중 중첩, 2026-08-14 실측) 제외용.
 _IGNORE = shutil.ignore_patterns(
     ".git", ".svn", "target", "build", "out", "dist", "node_modules",
-    ".venv", "venv", "__pycache__", "chroma_data", "*.db", ".DS_Store",
+    ".venv", "venv", "__pycache__", "classes",
+    "chroma_data", "*.db", ".DS_Store",
 )
 _MAX_OUTPUT = 4000  # DB·응답에 남길 출력 상한 (마지막 부분 우선)
 

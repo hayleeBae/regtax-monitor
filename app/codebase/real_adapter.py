@@ -73,7 +73,9 @@ class RealCodebaseAdapter(CodebaseAdapter):
         """인덱싱 대상 파일인지 — 확장자 + 제외 디렉토리 판정."""
         if not path.is_file() or path.suffix not in self.SOURCE_EXTS:
             return False
-        return not self._is_excluded(path)
+        # root 상대 경로로 판정 — repo 루트 경로 자체에 제외어가 있어도(예: .../build/eHR)
+        # 저장소 전체가 제외되지 않게 한다.
+        return not self._is_excluded(path, self.root)
 
     def list_files(self) -> list[str]:
         index_paths = [

@@ -14,7 +14,10 @@
     {
       "step": 1,
       "name": "excluded-dirs",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-08-14T14:48:53+0900",
+      "summary": "EXCLUDED_DIRS에 'classes' 추가(eHR 1.7GB 4중중첩 exploded WAR), _is_excluded를 root 상대경로 기준으로 판정(optional root 파라미터)해 루트경로 자체에 제외어 포함 시 저장소 전체 제외되는 함정 제거. real_adapter._is_indexable가 root 전달. golden._IGNORE도 'classes' 동기화. 테스트 5건 추가/강화(classes 제외·중첩 exploded·루트경로 함정 회귀·golden 동기화 가드는 _IGNORE 실제 호출로 검증) 전부 pass. 변경 전후 full suite 실패집합 동일=회귀0(잔여 11건은 사전존재 Windows env 이슈, macOS 타깃에선 통과).",
+      "completed_at": "2026-08-14T15:05:00+0900"
     },
     {
       "step": 2,
