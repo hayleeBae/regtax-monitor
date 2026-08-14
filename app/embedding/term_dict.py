@@ -17,6 +17,8 @@ import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from config import settings
+
 # 컬럼 코드: 소문자 1 + 숫자 4 (a0121, b0181, n0200 ...)
 CODE_RE = re.compile(r"\b[a-z][0-9]{4}\b")
 
@@ -24,6 +26,10 @@ CODE_RE = re.compile(r"\b[a-z][0-9]{4}\b")
 _SQL_LINE = re.compile(r"^(.*?)--\s*(.+)$")
 # Java VO 한 줄: private Type code ... // 한글주석
 _JAVA_LINE = re.compile(r"private\s+\w[\w<>\[\]]*\s+([a-z][0-9]{4})\b.*?//\s*(.+)$")
+# xfdl(Nexacro JS) 한 줄: (코드가 있을 수 있는 앞부분) // 한글주석
+# .java 계열(// 주석)이되, VO 선언 문법(private ...)이 없는 JS 참조·상수 줄까지 잡는다.
+# _JAVA_LINE 매치 줄도 이 패턴에 포함되므로(첫 코드=컬럼코드, // 뒤=라벨) 별도 분기 불필요.
+_JS_LINE = re.compile(r"^(.*?)//\s*(.+)$")
 
 _HANGUL = re.compile(r"[가-힣]")
 _SKIP_DIRS = {".git", "classes", "target", "build", "node_modules", ".venv", "out", "dist"}
@@ -58,15 +64,28 @@ def _clean(label: str) -> str:
     return label.strip(" \t\r\n*/-_")
 
 
+def _scan_roots(root: Path) -> list[Path]:
+    """수확기 스캔 루트 목록. 인덱서(RealCodebaseAdapter.list_files)와 같은 해석 —
+    settings.repo_index_paths(쉼표 구분, root 상대) 설정 시 그 목록, 미설정 시
+    <root>/src 있으면 src, 없으면 root (mock repo 회귀 방지 — 스펙 §3).
+    존재하지 않는 경로는 호출부에서 조용히 건너뛴다(환경 간 차이 흡수)."""
+    index_paths = [p.strip() for p in settings.repo_index_paths.split(",") if p.strip()]
+    if index_paths:
+        return [root / p for p in index_paths]
+    return [root / "src" if (root / "src").is_dir() else root]
+
+
 def _iter_source_files(repo_root: str):
-    """repo의 SQL/XML/Java 소스 파일을 (Path, relpath) 로 순회."""
+    """repo의 SQL/XML/Java/xfdl 소스 파일을 (Path, relpath) 로 순회."""
     root = Path(repo_root).resolve()
-    scan_root = root / "src" if (root / "src").is_dir() else root
-    for path in scan_root.rglob("*"):
-        if not path.is_file() or _SKIP_DIRS & set(path.parts):
-            continue
-        if path.suffix.lower() in (".xml", ".sql", ".java"):
-            yield path, path.relative_to(root).as_posix()
+    for scan_root in _scan_roots(root):
+        if not scan_root.is_dir():
+            continue  # 미설정 경로는 조용히 건너뜀
+        for path in scan_root.rglob("*"):
+            if not path.is_file() or _SKIP_DIRS & set(path.parts):
+                continue
+            if path.suffix.lower() in (".xml", ".sql", ".java", ".xfdl"):
+                yield path, path.relative_to(root).as_posix()
 
 
 def harvest(repo_root: str) -> dict[str, list[str]]:
@@ -84,6 +103,16 @@ def harvest(repo_root: str) -> dict[str, list[str]]:
                     label = _clean(m.group(2))
                     if _HANGUL.search(label):
                         raw[m.group(1)][label] += 1
+            elif suffix == ".xfdl":  # Nexacro JS — // 주석 계열, 코드가 앞부분에 등장
+                m = _JS_LINE.match(line)
+                if not m:
+                    continue
+                codes = CODE_RE.findall(m.group(1))
+                if not codes:
+                    continue
+                label = _clean(m.group(2))
+                if _HANGUL.search(label):
+                    raw[codes[0]][label] += 1
             else:  # sql / xml
                 m = _SQL_LINE.match(line)
                 if not m:
