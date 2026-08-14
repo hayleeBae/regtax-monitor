@@ -17,7 +17,7 @@
       "status": "completed",
       "started_at": "2026-08-14T10:21:06+0900",
       "summary": "law_api.py 파싱 분리 — 순수함수 _parse_law_detail(law dict→4필드+amendment_parsed)로 개정문/제개정이유 원문 보존(amendment_text/reason_text)하고 before/after는 step0 parse_amendment→derive_before_after로 파생(폴백 포함). fetch_detail은 얇은 껍데기화, fetch_admin_rule_detail·목록검색·mock 3종에 신규 키 계약 정렬, _mock_results는 실 P1 문형으로 갱신. tests/test_law_api_parsing.py 5건 green(HTTP 없이 dict fixture), 기존 회귀 없음.",
-      "completed_at": "2026-08-14T10:33:00+0900"
+      "completed_at": "2026-08-14T10:32:38+0900"
     },
     {
       "step": 2,
@@ -31,5 +31,5 @@
     }
   ],
   "created_at": "2026-08-14T10:10:42+0900",
-  "total_cost_usd": 2.61
+  "total_cost_usd": 4.815
 }
