@@ -1,7 +1,7 @@
 {
   "run_id": "20260814-101042-bf4c",
   "started_at": "2026-08-14T10:10:42+0900",
-  "finished_at": null,
+  "finished_at": "2026-08-14T11:23:50+0900",
   "task": "regtax-monitor / issue-0023",
   "stage_entry": "implement",
   "harness_version": "1.1.0",
@@ -9,8 +9,10 @@
     "branch": "feat-issue-0023",
     "base_commit": "0e57613"
   },
-  "outcome": null,
+  "outcome": "success",
   "failure_refs": [],
   "phase_dir": "issue-0023",
-  "total_steps": 4
+  "total_steps": 4,
+  "final_commit": "45e2105",
+  "total_cost_usd": 13.655
 }
