@@ -38,8 +38,8 @@ _MAX_LOC = 12  # 코드당 위치 캐시 상한
 
 
 def _read(path: Path) -> str:
-    """UTF-8 → CP949 fallback (eHR Java 레거시 대응)."""
-    for enc in ("utf-8", "cp949"):
+    """utf-8-sig → CP949 fallback (eHR Java 레거시 대응). utf-8-sig는 BOM 유무 모두 처리(xfdl UTF-8+BOM 커버)."""
+    for enc in ("utf-8-sig", "cp949"):
         try:
             return path.read_text(encoding=enc)
         except (UnicodeDecodeError, OSError):

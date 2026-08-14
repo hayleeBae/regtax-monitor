@@ -1,0 +1,35 @@
+{
+  "project": "regtax-monitor",
+  "phase": "issue-0024",
+  "owner": "haylee",
+  "steps": [
+    {
+      "step": 0,
+      "name": "encoding-policy",
+      "status": "completed",
+      "started_at": "2026-08-14T14:30:18+0900",
+      "summary": "읽기 정책을 utf-8-sig→cp949→utf-8(replace)로 통일 (real_adapter.read_file/apply_patch, term_dict._read). apply_patch는 BOM 감지 후 재부착으로 왕복 보존. test_encoding_policy.py 8건(BOM 제거·CP949·거짓 XML선언·BOM 왕복) 전부 pass."
+    },
+    {
+      "step": 1,
+      "name": "excluded-dirs",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "xfdl-chunker",
+      "status": "pending"
+    },
+    {
+      "step": 3,
+      "name": "harvest-scan-roots",
+      "status": "pending"
+    },
+    {
+      "step": 4,
+      "name": "docs-env",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-08-14T14:30:18+0900"
+}
