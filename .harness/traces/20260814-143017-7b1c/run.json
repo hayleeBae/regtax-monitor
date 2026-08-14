@@ -1,0 +1,16 @@
+{
+  "run_id": "20260814-143017-7b1c",
+  "started_at": "2026-08-14T14:30:17+0900",
+  "finished_at": null,
+  "task": "regtax-monitor / issue-0024",
+  "stage_entry": "implement",
+  "harness_version": "1.1.0",
+  "git": {
+    "branch": "feat-issue-0024",
+    "base_commit": "1e899dc"
+  },
+  "outcome": null,
+  "failure_refs": [],
+  "phase_dir": "issue-0024",
+  "total_steps": 5
+}
