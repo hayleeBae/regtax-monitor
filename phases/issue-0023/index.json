@@ -22,7 +22,10 @@
     {
       "step": 2,
       "name": "lawchange-migration",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-08-14T10:32:40+0900",
+      "summary": "LawChange에 amendment_text/reason_text(nullable) 컬럼 추가 + database._migrate의 table_adds에 반영. 신규 _backfill_collection_semantics(멱등): source='law' AND amendment_text IS NULL AND before_text!='' 행의 before/after(구 오의미: 개정문/제개정이유)를 amendment/reason으로 이관 후 parse_amendment→derive_before_after로 before/after 재파생(LLM 미사용). 행정규칙 행은 미변경. tests/test_collection_migration.py 4건 green(이관·재파생/행정규칙 불변/멱등/빈DB), 기존 migration 회귀 없음. full 잔여 실패는 baseline 동일 환경 이슈(replay·git·real-adapter).",
+      "completed_at": "2026-08-14T10:55:00+0900"
     },
     {
       "step": 3,
@@ -31,5 +34,5 @@
     }
   ],
   "created_at": "2026-08-14T10:10:42+0900",
-  "total_cost_usd": 4.815
+  "total_cost_usd": 5.055
 }
