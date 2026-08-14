@@ -8,7 +8,8 @@
       "name": "amendment-parser",
       "status": "completed",
       "started_at": "2026-08-14T10:10:42+0900",
-      "summary": "app/domain/changes/amendment.py 신규 — 개정문 P1~P5 문형을 순수함수로 파싱(AmendmentEdit)하고 before/after 파생(derive_before_after, 폴백 포함). 소비구간 span-masking·'같은 조/항' 상대참조 해소. tests/test_amendment_parser.py 12건 green(실채록 연결문형 2건·ChangeNormalizer 통합 포함)."
+      "summary": "app/domain/changes/amendment.py 신규 — 개정문 P1~P5 문형을 순수함수로 파싱(AmendmentEdit)하고 before/after 파생(derive_before_after, 폴백 포함). 소비구간 span-masking·'같은 조/항' 상대참조 해소. tests/test_amendment_parser.py 12건 green(실채록 연결문형 2건·ChangeNormalizer 통합 포함).",
+      "completed_at": "2026-08-14T10:21:05+0900"
     },
     {
       "step": 1,
@@ -26,5 +27,6 @@
       "status": "pending"
     }
   ],
-  "created_at": "2026-08-14T10:10:42+0900"
+  "created_at": "2026-08-14T10:10:42+0900",
+  "total_cost_usd": 2.61
 }
