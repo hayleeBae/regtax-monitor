@@ -18,7 +18,9 @@ def _candidate():
 
 def test_analysis_service_normalizes_classifies_and_preserves_analysis() -> None:
     service = AnalysisService(
-        ChangeNormalizer(), RuleChangeClassifier(), lambda before, after, context: {"summary": "금액 변경", "impact": "상수 수정"}
+        ChangeNormalizer(),
+        RuleChangeClassifier(),
+        lambda before, after, context, amendment_text="", reason_text="": {"summary": "금액 변경", "impact": "상수 수정"},
     )
     result = service.analyze("15만원", "25만원", "소득세법")
     assert result.classification.primary_type is ChangeType.VALUE_CHANGE

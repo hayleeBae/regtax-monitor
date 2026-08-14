@@ -11,8 +11,19 @@ class LlmClient(ABC):
     """
 
     @abstractmethod
-    def analyze_change(self, before: str, after: str, context: str = "") -> dict:
-        """변경 조문의 요약·영향을 분석. {'summary': ..., 'impact': ...} 형태."""
+    def analyze_change(
+        self,
+        before: str,
+        after: str,
+        context: str = "",
+        amendment_text: str = "",
+        reason_text: str = "",
+    ) -> dict:
+        """변경 조문의 요약·영향을 분석. {'summary': ..., 'impact': ...} 형태.
+
+        amendment_text(개정문 원문)·reason_text(제개정이유)는 있을 때만 프롬프트
+        컨텍스트로 실린다 — 값 델타 계산엔 쓰지 않는다(스펙 §2). 기본값을 둬서
+        기존 호출자(before/after만 넘기던 경로)는 그대로 동작한다."""
         raise NotImplementedError
 
     @abstractmethod

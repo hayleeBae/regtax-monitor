@@ -31,16 +31,28 @@ class AnalysisService:
         self,
         normalizer: ChangeNormalizer,
         classifier: Classifier,
-        analyzer: Callable[[str, str, str], dict],
+        analyzer: Callable[..., dict],
     ) -> None:
         self.normalizer = normalizer
         self.classifier = classifier
         self.analyzer = analyzer
 
-    def analyze(self, before: str, after: str, context: str = "") -> AnalysisResult:
+    def analyze(
+        self,
+        before: str,
+        after: str,
+        context: str = "",
+        amendment_text: str = "",
+        reason_text: str = "",
+    ) -> AnalysisResult:
+        # normalize/classify는 파생 발췌(before/after)만 본다 — 개정문 원문·제개정이유가
+        # 값 델타 계산에 새어들면 이 이슈(#0023)가 무효가 된다(스펙 §2). amendment/reason은
+        # analyzer(LLM 프롬프트)에만 컨텍스트로 전달한다.
         normalized = self.normalizer.normalize(before, after)
         classification = self.classifier.classify(normalized)
-        analysis = self.analyzer(before, after, context)
+        analysis = self.analyzer(
+            before, after, context, amendment_text=amendment_text, reason_text=reason_text
+        )
         parse_ok = "raw" not in analysis
         return AnalysisResult(
             normalized,

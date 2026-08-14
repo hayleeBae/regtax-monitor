@@ -1,0 +1,42 @@
+{
+  "project": "regtax-monitor",
+  "phase": "issue-0023",
+  "owner": "haylee",
+  "steps": [
+    {
+      "step": 0,
+      "name": "amendment-parser",
+      "status": "completed",
+      "started_at": "2026-08-14T10:10:42+0900",
+      "summary": "app/domain/changes/amendment.py 신규 — 개정문 P1~P5 문형을 순수함수로 파싱(AmendmentEdit)하고 before/after 파생(derive_before_after, 폴백 포함). 소비구간 span-masking·'같은 조/항' 상대참조 해소. tests/test_amendment_parser.py 12건 green(실채록 연결문형 2건·ChangeNormalizer 통합 포함).",
+      "completed_at": "2026-08-14T10:21:05+0900"
+    },
+    {
+      "step": 1,
+      "name": "fetch-detail-fields",
+      "status": "completed",
+      "started_at": "2026-08-14T10:21:06+0900",
+      "summary": "law_api.py 파싱 분리 — 순수함수 _parse_law_detail(law dict→4필드+amendment_parsed)로 개정문/제개정이유 원문 보존(amendment_text/reason_text)하고 before/after는 step0 parse_amendment→derive_before_after로 파생(폴백 포함). fetch_detail은 얇은 껍데기화, fetch_admin_rule_detail·목록검색·mock 3종에 신규 키 계약 정렬, _mock_results는 실 P1 문형으로 갱신. tests/test_law_api_parsing.py 5건 green(HTTP 없이 dict fixture), 기존 회귀 없음.",
+      "completed_at": "2026-08-14T10:32:38+0900"
+    },
+    {
+      "step": 2,
+      "name": "lawchange-migration",
+      "status": "completed",
+      "started_at": "2026-08-14T10:32:40+0900",
+      "summary": "LawChange에 amendment_text/reason_text(nullable) 컬럼 추가 + database._migrate의 table_adds에 반영. 신규 _backfill_collection_semantics(멱등): source='law' AND amendment_text IS NULL AND before_text!='' 행의 before/after(구 오의미: 개정문/제개정이유)를 amendment/reason으로 이관 후 parse_amendment→derive_before_after로 before/after 재파생(LLM 미사용). 행정규칙 행은 미변경. tests/test_collection_migration.py 4건 green(이관·재파생/행정규칙 불변/멱등/빈DB), 기존 migration 회귀 없음. full 잔여 실패는 baseline 동일 환경 이슈(replay·git·real-adapter).",
+      "completed_at": "2026-08-14T10:54:50+0900"
+    },
+    {
+      "step": 3,
+      "name": "route-wiring",
+      "status": "completed",
+      "started_at": "2026-08-14T10:54:51+0900",
+      "summary": "라우트 배선 — /collect·/fetch-detail이 fetch_detail 반환의 amendment_text/reason_text를 LawChange에 저장(행정규칙은 빈 문자열). /analyze는 normalize엔 before/after만(교정된 파생값), LLM 프롬프트엔 amendment+reason을 컨텍스트로 주입하고 응답·audit에 amendment_parsed(bool) 계측. 프롬프트는 common.analyze_prompt 공유 함수 단일 확장(amendment_text/reason_text 기본값 인자)으로 관통 — analyzer 콜백→analyze_with_retry→analyze_change→analyze_prompt, 백엔드 분기 복제 없음. AnalysisService.analyze/analyzer 콜백을 기본값 인자로 확장(ADR-009 보강1 전례). /apply normalize는 이미 before/after만 사용(무변경). tests/test_route_collection_semantics.py 5건 green(reason이 analyzer엔 가고 normalize엔 안 감/프롬프트 관통/mock collect 저장/amendment_parsed 존재/행정규칙 before='' 정상). 잔여 full 실패 23건은 변경 모듈 미import(replay·git·real-adapter·symbol·mcp 환경이슈, baseline 동일).",
+      "completed_at": "2026-08-14T11:23:49+0900"
+    }
+  ],
+  "created_at": "2026-08-14T10:10:42+0900",
+  "total_cost_usd": 13.655,
+  "completed_at": "2026-08-14T11:23:50+0900"
+}

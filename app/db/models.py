@@ -33,8 +33,10 @@ class LawChange(Base):
     promulgation_date = Column(String)           # 공포일 (YYYYMMDD) — 알림 트리거
     effective_date = Column(String)              # 시행일 (YYYYMMDD) — 반영 마감
     change_type = Column(String)                 # rate/limit/date/formula/logic
-    before_text = Column(Text)                   # 개정 전 조문
-    after_text = Column(Text)                    # 개정 후 조문
+    amendment_text = Column(Text, nullable=True)  # 개정문 원문
+    reason_text = Column(Text, nullable=True)     # 제개정이유 원문
+    before_text = Column(Text)                   # 개정 전 조문 (개정문 파싱 파생)
+    after_text = Column(Text)                    # 개정 후 조문 (개정문 파싱 파생)
     ai_summary = Column(Text)                    # AI 요약
     ai_impact = Column(Text)                     # AI 영향 분석
     status = Column(String, default="new")       # new/reviewing/pending_apply/done

@@ -15,11 +15,20 @@ class ClaudeClient(LlmClient):
         self.client = Anthropic(api_key=settings.anthropic_api_key)
         self.model = model or settings.llm_model
 
-    def analyze_change(self, before: str, after: str, context: str = "") -> dict:
+    def analyze_change(
+        self,
+        before: str,
+        after: str,
+        context: str = "",
+        amendment_text: str = "",
+        reason_text: str = "",
+    ) -> dict:
         resp = self.client.messages.create(
             model=settings.llm_model_cheap,
             max_tokens=2048,
-            messages=[{"role": "user", "content": common.analyze_prompt(before, after, context)}],
+            messages=[{"role": "user", "content": common.analyze_prompt(
+                before, after, context, amendment_text, reason_text,
+            )}],
         )
         text = "".join(b.text for b in resp.content if b.type == "text")
         return common.parse_json_response(text, required=("summary", "impact"))

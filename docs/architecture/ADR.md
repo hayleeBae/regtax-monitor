@@ -91,3 +91,13 @@
 **결정**: 수집 대상 법령·고시 검색어를 코드가 아니라 `domains.json`(tax/hr)에서 관리. 파일 없으면 기존 세법 5종 폴백.
 **이유**: 연말정산(세법)을 넘어 인사 법령 전반으로 확장 + 도메인별 담당자 라우팅 기반. 법률만 수집하면 올해 개정(시행령·시행규칙 10건, 법률 0건)을 전부 놓쳤을 상황 — 3계층 수집이 필수임을 실검증.
 **트레이드오프**: 법제처 등록명 정확 일치 관리 부담 (가운뎃점 `ㆍ` U+318D 등).
+
+### ADR-014: before/after는 개정문 파싱으로 파생하고, 원문은 amendment/reason 필드로 보존 (제안 이슈 #0023)
+**결정**: `fetch_detail()`이 개정문을 `before_text`에, 제개정이유를 `after_text`에 넣던 것을 중단한다. 원문은 신규 필드 `amendment_text`(개정문)·`reason_text`(제개정이유)에 보존하고, `before_text`/`after_text`는 개정문의 정형 문형("제N조 중 'A'를 'B'로 한다" 등)을 파싱하는 순수 함수(`app/domain/changes/amendment.py`)로 **파생**한다. 파싱 실패 시 `before=""`/`after=개정문 전문` 폴백(전부 "추가" 해석). 제개정이유는 LLM 분석 컨텍스트로만 쓰고 값 델타 계산에는 넣지 않는다. 기존 행은 경량 마이그레이션으로 idempotent 이관·재파생한다. 상세: `docs/specifications/COLLECTION_SEMANTICS_SPEC.md`.
+**이유**: `ChangeNormalizer`·분류기·정책 게이트가 두 필드를 "개정 전/후 조문"으로 간주해 값 델타를 계산하는데, 실 API 데이터에서는 "개정문 vs 제개정이유"라는 다른 종류의 문서를 비교하게 되어 감지 신호가 통째로 왜곡된다 — mock만 진짜 쌍이라 집 환경에서 관측되지 않는 결함이다. 개정문 자체가 공식적인 before→after 진술문이므로, 신구법 대비 API 추가 연동 없이 파싱만으로 올바른 쌍을 복원할 수 있다.
+**트레이드오프**: 파서가 개정문 문형 변형을 못 잡으면 폴백으로 내려가 델타 정밀도가 떨어진다(폴백 여부를 `amendment_parsed`로 계측). `law_change` 컬럼 2개 증가. 조문별 행 분리(1공포=N행)는 이번에 하지 않아, 여러 조문이 한 행에 섞이는 기존 한계는 남는다.
+
+### ADR-015: eHR 인덱싱은 .xfdl 1급 지원 + utf-8-sig 우선 + classes 제외·화이트리스트 기본 (제안 이슈 #0024)
+**결정**: `.xfdl`(Nexacro)을 `SOURCE_EXTS`·청커(`_chunk_xfdl`: Script CDATA 추출 → 함수 단위 분리)·심볼 추출·용어 사전·상수 인벤토리의 1급 대상으로 추가한다. 파일 읽기는 `utf-8-sig → cp949 → utf-8(replace)` 순으로 통일하고 XML 선언의 encoding 속성은 신뢰하지 않는다. `EXCLUDED_DIRS`에 `"classes"`를 추가하며(`golden.py::_IGNORE` 동기), `_is_excluded`는 repo root **상대 경로** 기준으로 고친다. 경로별 산출물(`web/eHR/`, `nexacro14lib/` 등)은 `REPO_INDEX_PATHS` 화이트리스트를 1차 방어로 삼아 배제하고, 수확기(`term_dict`/`const_inventory`)의 스캔 루트도 같은 설정을 공유한다. 상세: `docs/specifications/EHR_INDEXING_SPEC.md`.
+**이유**: 2026-08-14 eHR 실측 — 세법 한도값(직무발명보상금 비과세 등)이 Java/SQL이 아니라 **xfdl 내 JavaScript에 하드코딩**되어 있어, 현행 인덱싱으로는 수치 개정의 핵심 patch 대상이 검색에 절대 잡히지 않는다(재현율 공백 — 이 프로젝트 최우선 실패 유형). 최신 연말정산 mapper(`PayRefCom_2022~2026.xml`)가 CP949이고 선언·실제 불일치 파일이 실존해, BOM·스니핑 처리 없이는 컬럼 코드의 유일한 의미 사전(한글 주석)이 깨진다. `classes/`는 exploded WAR가 4중 재귀 중첩된 1.7GB라 블랙리스트 안전망이 필요하다.
+**트레이드오프**: 화이트리스트 방식은 신규 모듈 추가 시 운영자가 목록을 갱신해야 커버된다(누락 위험을 문서화로 완화). xfdl 레이아웃부(Dataset 등)는 버리므로 화면 구조 기반 검색은 안 된다(#0020 계열로 이월). `"classes"`가 일반적 이름이라 정당한 소스 디렉토리를 배제할 이론적 위험이 있다(상대 경로 판정 + 화이트리스트 우선으로 완화).

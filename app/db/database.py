@@ -30,6 +30,8 @@ def _migrate() -> None:
         "law_change": {
             "source": "VARCHAR DEFAULT 'law'",
             "domain": "VARCHAR DEFAULT 'tax'",
+            "amendment_text": "TEXT",
+            "reason_text": "TEXT",
         },
     }
     tables = set(insp.get_table_names())
@@ -43,6 +45,65 @@ def _migrate() -> None:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
 
     _backfill_legacy_mapping_decisions(tables)
+    _backfill_collection_semantics(tables)
+
+
+def _backfill_collection_semantics(tables: set) -> None:
+    """기존 행의 before/after(잘못된 의미: 개정문/제개정이유)를
+    amendment/reason으로 이관하고 before/after를 파서로 재파생한다. idempotent.
+
+    구 수집 계층은 `before_text`에 개정문을, `after_text`에 제개정이유를 잘못
+    저장했다(COLLECTION_SEMANTICS_SPEC §1). 이 함수는 그 원문을 신규 필드로
+    이관한 뒤, before/after를 §3 결정론 파서(parse_amendment→derive_before_after)
+    로 재파생한다. `amendment_text IS NOT NULL`인 행은 이미 이관됐으므로 건너뛴다
+    — `init_db()`가 기동마다 호출돼도 행당 이관은 1회다. LLM은 쓰지 않는다.
+    """
+    from sqlalchemy import text
+
+    from app.domain.changes.amendment import derive_before_after, parse_amendment
+
+    if "law_change" not in tables:
+        return
+
+    with engine.begin() as conn:
+        rows = conn.execute(
+            text(
+                """
+                SELECT id, before_text, after_text
+                FROM law_change
+                WHERE amendment_text IS NULL
+                  AND source = 'law'
+                  AND before_text IS NOT NULL
+                  AND before_text != ''
+                """
+            )
+        ).all()
+
+        for row_id, before_text, after_text in rows:
+            amendment_text = before_text
+            reason_text = after_text
+            new_before, new_after = derive_before_after(
+                parse_amendment(amendment_text), fallback_text=amendment_text
+            )
+            conn.execute(
+                text(
+                    """
+                    UPDATE law_change
+                    SET amendment_text = :amendment_text,
+                        reason_text = :reason_text,
+                        before_text = :before_text,
+                        after_text = :after_text
+                    WHERE id = :id
+                    """
+                ),
+                {
+                    "amendment_text": amendment_text,
+                    "reason_text": reason_text,
+                    "before_text": new_before,
+                    "after_text": new_after,
+                    "id": row_id,
+                },
+            )
 
 
 def _backfill_legacy_mapping_decisions(tables: set) -> None:

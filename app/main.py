@@ -392,6 +392,8 @@ def collect(db: Session = Depends(get_session)) -> dict:
             article_no=item["article_no"],
             promulgation_date=item["promulgation_date"],
             effective_date=item["effective_date"],
+            amendment_text=item.get("amendment_text", ""),
+            reason_text=item.get("reason_text", ""),
             before_text=item["before_text"],
             after_text=item["after_text"],
             source=item.get("source", "law"),
@@ -420,6 +422,8 @@ def collect(db: Session = Depends(get_session)) -> dict:
                 else:
                     continue
                 row.article_no = detail["article_no"]
+                row.amendment_text = detail["amendment_text"]
+                row.reason_text = detail["reason_text"]
                 row.before_text = detail["before_text"]
                 row.after_text = detail["after_text"]
                 detail_ok += 1
@@ -472,6 +476,8 @@ def fetch_detail(change_id: int, db: Session = Depends(get_session)) -> dict:
         raise HTTPException(status_code=422, detail="법령 MST가 없습니다. mock 데이터이거나 수집 오류입니다.")
 
     row.article_no = detail["article_no"]
+    row.amendment_text = detail["amendment_text"]
+    row.reason_text = detail["reason_text"]
     row.before_text = detail["before_text"]
     row.after_text = detail["after_text"]
     db.commit()
@@ -606,11 +612,25 @@ def analyze(change_id: int, force: bool = False, db: Session = Depends(get_sessi
     service = AnalysisService(
         ChangeNormalizer(),
         HybridChangeClassifier(llm),
-        lambda before, after, ctx: analyze_with_retry(
-            llm, before=before, after=after, context=ctx
+        lambda before, after, ctx, amendment_text="", reason_text="": analyze_with_retry(
+            llm, before=before, after=after, context=ctx,
+            amendment_text=amendment_text, reason_text=reason_text,
         ),
     )
-    result = service.analyze(row.before_text or "", row.after_text or "", context)
+    # 개정문 원문·제개정이유는 LLM 프롬프트 컨텍스트로만 전달한다 —
+    # normalize/검색 질의의 before/after 자리에는 넣지 않는다(스펙 §2).
+    result = service.analyze(
+        row.before_text or "",
+        row.after_text or "",
+        context,
+        amendment_text=row.amendment_text or "",
+        reason_text=row.reason_text or "",
+    )
+    # 폴백 비율 계측용(스펙 §3-4): 저장된 개정문을 순수 파서로 다시 돌려 edit이
+    # 잡히는지로 판정한다 — step 1의 amendment_parsed(bool(edits))와 같은 정의다.
+    # (파싱 실패 폴백은 before="" / after=개정문 전문이라 필드 비교로는 구분되지 않는다.)
+    from app.domain.changes.amendment import parse_amendment
+    amendment_parsed = bool(parse_amendment(row.amendment_text or ""))
     audit.record(
         AuditEventType.NORMALIZATION_COMPLETED,
         {
@@ -630,7 +650,11 @@ def analyze(change_id: int, force: bool = False, db: Session = Depends(get_sessi
     )
     audit.record(
         AuditEventType.ANALYSIS_COMPLETED,
-        {"parse_ok": result.parse_ok, "summary_length": len(result.summary)},
+        {
+            "parse_ok": result.parse_ok,
+            "summary_length": len(result.summary),
+            "amendment_parsed": amendment_parsed,
+        },
     )
 
     row.ai_summary = result.summary
@@ -665,6 +689,7 @@ def analyze(change_id: int, force: bool = False, db: Session = Depends(get_sessi
         "summary": row.ai_summary,
         "impact": row.ai_impact,
         "parse_ok": result.parse_ok,
+        "amendment_parsed": amendment_parsed,
         "classification": {
             "primary_type": result.classification.primary_type.value,
             "secondary_types": [item.value for item in result.classification.secondary_types],

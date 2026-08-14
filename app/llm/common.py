@@ -33,14 +33,30 @@ def classify_prompt(before: str, after: str, normalized: dict) -> str:
     )
 
 
-def analyze_prompt(before: str, after: str, context: str = "") -> str:
+def analyze_prompt(
+    before: str,
+    after: str,
+    context: str = "",
+    amendment_text: str = "",
+    reason_text: str = "",
+) -> str:
     # 도메인(세법/노동법 등) 명시는 context에 실려 온다 — main.analyze가
     # 도메인 라벨을 [참고 맥락] 첫 줄로 주입하므로 여기서는 중립 문구를 쓴다.
+    #
+    # 개정문 원문(amendment_text)·제개정이유(reason_text)는 값 델타 계산(normalize)에는
+    # 넣지 않지만(스펙 §2, ADR-014) 요약·영향 판단에는 유용해 있을 때만 프롬프트
+    # 컨텍스트로 덧붙인다. before/after(파생 발췌)와 역할이 다르다.
+    extra = ""
+    if amendment_text:
+        extra += f"\n[개정문 원문]\n{amendment_text}\n"
+    if reason_text:
+        extra += f"\n[제개정이유]\n{reason_text}\n"
     return (
         "다음은 법령 조문(또는 고시)의 개정 전후 내용입니다. "
         "변경의 핵심을 한국어로 요약하고, 인사·급여 시스템에 미칠 영향을 분석하세요.\n\n"
         f"[참고 맥락]\n{context}\n\n"
-        f"[개정 전]\n{before}\n\n[개정 후]\n{after}\n\n"
+        f"[개정 전]\n{before}\n\n[개정 후]\n{after}\n"
+        f"{extra}\n"
         '반드시 JSON으로만 응답: {"summary": "...", "impact": "..."}'
     )
 
@@ -213,11 +229,25 @@ def json_retry_prompt(raw: str) -> str:
     )
 
 
-def analyze_with_retry(llm, before: str, after: str, context: str = "", max_retries: int = 1) -> dict:
+def analyze_with_retry(
+    llm,
+    before: str,
+    after: str,
+    context: str = "",
+    amendment_text: str = "",
+    reason_text: str = "",
+    max_retries: int = 1,
+) -> dict:
     """analyze_change 후 JSON 파싱 실패 시 원 응답을 재포맷시켜 복구한다.
     전체 재분석(수 분)이 아니라 형식 교정(수십 초)이라 싸다 — 로컬 소형 모델의
     형식 이탈 보정 (propose의 앵커 재시도와 같은 원리)."""
-    result = llm.analyze_change(before=before, after=after, context=context)
+    result = llm.analyze_change(
+        before=before,
+        after=after,
+        context=context,
+        amendment_text=amendment_text,
+        reason_text=reason_text,
+    )
     for _ in range(max_retries):
         if "raw" not in result:
             break
