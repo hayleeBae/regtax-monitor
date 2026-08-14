@@ -31,9 +31,16 @@ class LocalClient(LlmClient):
         self.timeout = settings.local_llm_timeout_seconds
         self.num_ctx = settings.local_llm_num_ctx
 
-    def analyze_change(self, before: str, after: str, context: str = "") -> dict:
+    def analyze_change(
+        self,
+        before: str,
+        after: str,
+        context: str = "",
+        amendment_text: str = "",
+        reason_text: str = "",
+    ) -> dict:
         text = self._chat(
-            common.analyze_prompt(before, after, context),
+            common.analyze_prompt(before, after, context, amendment_text, reason_text),
             model=self.model_cheap, max_tokens=2048, temperature=0.2,
         )
         return common.parse_json_response(text, required=("summary", "impact"))
