@@ -22,6 +22,7 @@ import ssl
 
 import httpx
 
+from app.domain.changes.amendment import derive_before_after, parse_amendment
 from config import settings
 
 BASE_URL = "https://www.law.go.kr/DRF"
@@ -121,36 +122,13 @@ class LawApiClient:
 
     def fetch_detail(self, mst: str) -> dict:
         """
-        법령 MST로 개정문·제개정이유를 조회하여 반환한다.
-        반환값: {"article_no": str, "before_text": str, "after_text": str}
+        법령 MST로 개정문·제개정이유를 조회하여 4필드로 반환한다.
+        HTTP 호출 후 파싱은 순수 함수 `_parse_law_detail`에 위임한다.
+        반환값: {"article_no", "amendment_text", "reason_text",
+                 "before_text", "after_text", "amendment_parsed"}
         """
         data = self._get_json("lawService.do", {"target": "law", "MST": mst})
-        law = data.get("법령", {})
-
-        # 개정문 — 구체적인 변경 내용 ("X를 Y로 한다" 형식)
-        gaejung_items = law.get("개정문", {}).get("개정문내용", [])
-        if isinstance(gaejung_items, list) and gaejung_items:
-            raw = gaejung_items[0] if isinstance(gaejung_items[0], list) else gaejung_items
-            before_text = "\n".join(str(s) for s in raw if str(s).strip())
-        else:
-            before_text = ""
-
-        # 제개정이유 — 개정 배경·주요내용
-        iyou_items = law.get("제개정이유", {}).get("제개정이유내용", [])
-        if isinstance(iyou_items, list) and iyou_items:
-            raw = iyou_items[0] if isinstance(iyou_items[0], list) else iyou_items
-            after_text = "\n".join(str(s) for s in raw if str(s).strip())
-        else:
-            after_text = ""
-
-        # 개정문에서 조문 번호 추출 (첫 번째 언급 기준)
-        article_no = _extract_article_no(before_text)
-
-        return {
-            "article_no": article_no,
-            "before_text": before_text,
-            "after_text": after_text,
-        }
+        return _parse_law_detail(data.get("법령", {}))
 
     def _fetch_one_query(self, query: str, since: str) -> list[dict]:
         data = self._get_json("lawSearch.do", {
@@ -173,6 +151,8 @@ class LawApiClient:
                 "promulgation_date": item.get("공포일자", ""),
                 "effective_date": item.get("시행일자", ""),
                 "article_no": "",
+                "amendment_text": "",
+                "reason_text": "",
                 "before_text": "",
                 "after_text": "",
                 "source": "law",
@@ -229,6 +209,8 @@ class LawApiClient:
                     "promulgation_date": prom,
                     "effective_date": item.get("시행일자", ""),
                     "article_no": "",
+                    "amendment_text": "",
+                    "reason_text": "",
                     "before_text": "",
                     "after_text": "",
                     "source": kind,
@@ -257,10 +239,15 @@ class LawApiClient:
         )
         if len(text) < 50:
             text = (text + "\n\n" + self._attachment_text(svc)).strip()
+        # 행정규칙은 신구대조가 없어 본문 전문을 after_text로 둔다 (스펙 §3-5,
+        # "신설 공표" 의미). 개정문/제개정이유는 없으므로 빈 문자열로 계약 정렬.
         return {
             "article_no": _extract_article_no(text),
+            "amendment_text": "",
+            "reason_text": "",
             "before_text": "",
             "after_text": text,
+            "amendment_parsed": False,
         }
 
     def _attachment_text(self, svc: dict, max_pages: int = 20) -> str:
@@ -306,6 +293,8 @@ class LawApiClient:
                 "promulgation_date": since,
                 "effective_date": since,
                 "article_no": "",
+                "amendment_text": "",
+                "reason_text": "",
                 "before_text": "시간급 최저임금액은 10,030원으로 한다.",
                 "after_text": "시간급 최저임금액은 10,320원으로 한다.",
                 "source": "고시",
@@ -390,8 +379,12 @@ class LawApiClient:
                 "promulgation_date": since,
                 "effective_date": since,
                 "article_no": "제55조",
-                "before_text": "종합소득에 대한 소득세는 … 세율을 적용한다.",
-                "after_text": "종합소득에 대한 소득세는 … 개정된 세율을 적용한다.",
+                # 실 개정문 P1 문형 — mock이 실 데이터 구조를 흉내 내야 결함이 숨지 않는다.
+                "amendment_text": '제55조제1항 중 "1천200만원"을 "1천400만원"으로 한다.',
+                "reason_text": "종합소득 기본세율 최저구간 과세표준 상한을 "
+                               "1천200만원에서 1천400만원으로 상향.",
+                "before_text": "제55조제1항 과세표준 1천200만원 이하",
+                "after_text": "제55조제1항 과세표준 1천400만원 이하",
                 "source": "law",
             },
             {
@@ -403,6 +396,9 @@ class LawApiClient:
                 "promulgation_date": since,
                 "effective_date": since,
                 "article_no": "제189조",
+                "amendment_text": '제189조제1항 중 "100분의 6"을 "100분의 7"로 한다.',
+                "reason_text": "간이세액표 최저구간 원천징수 세율을 "
+                               "100분의 6에서 100분의 7로 조정.",
                 "before_text": "간이세액표 적용 시 과세표준 1천400만원 이하 구간의 "
                                "세율은 100분의 6으로 한다.",
                 "after_text": "간이세액표 적용 시 과세표준 1천400만원 이하 구간의 "
@@ -410,6 +406,41 @@ class LawApiClient:
                 "source": "law",
             },
         ]
+
+
+def _parse_law_detail(law: dict) -> dict:
+    """lawService.do 응답의 '법령' dict → 4필드 + 계측.
+
+    개정문/제개정이유 원문을 보존하고(`amendment_text`/`reason_text`),
+    before/after는 개정문 파싱으로 파생한다(스펙 §2, ADR-014). HTTP 없는
+    순수 함수라 응답 dict fixture만으로 테스트할 수 있다.
+    반환: {"article_no": str, "amendment_text": str, "reason_text": str,
+           "before_text": str, "after_text": str, "amendment_parsed": bool}
+    """
+    amendment_text = _extract_content(law, "개정문", "개정문내용")
+    reason_text = _extract_content(law, "제개정이유", "제개정이유내용")
+
+    edits = parse_amendment(amendment_text)
+    before_text, after_text = derive_before_after(edits, fallback_text=amendment_text)
+
+    return {
+        "article_no": _extract_article_no(amendment_text),
+        "amendment_text": amendment_text,
+        "reason_text": reason_text,
+        "before_text": before_text,
+        "after_text": after_text,
+        "amendment_parsed": bool(edits),
+    }
+
+
+def _extract_content(law: dict, outer: str, inner: str) -> str:
+    """'법령' dict의 outer.inner 하위 문자열을 개행 join으로 추출한다.
+    법제처 응답은 리스트-안-리스트 변형이 있어(첫 원소가 list) 한 겹 벗긴다."""
+    items = law.get(outer, {}).get(inner, [])
+    if isinstance(items, list) and items:
+        raw = items[0] if isinstance(items[0], list) else items
+        return "\n".join(str(s) for s in raw if str(s).strip())
+    return ""
 
 
 def dedupe_and_filter(items: list[dict], whitelist: list[str]) -> list[dict]:
