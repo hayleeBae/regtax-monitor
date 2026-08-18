@@ -16,8 +16,26 @@ bash scripts/verify.sh security
 
 ## 2. 환경 설정
 
-`.env`에 `REPO_ROOT`, 필요한 경우 `REPO_INDEX_PATHS`, local LLM 설정을 입력한다.
+`.env`에 `REPO_ROOT`, `REPO_INDEX_PATHS`, local LLM 설정을 입력한다.
 `.env`는 커밋하지 않는다.
+
+eHR 권장 화이트리스트 (도메인: 급여·연말정산/연차/4대보험 + SQL + Nexacro 화면):
+
+```bash
+REPO_INDEX_PATHS=src/hr/pay,src/hr/tim/annl,src/hr/ins,src/hr/sta/pay,src/hr/sqlmap,web/nexacro/solution/pay,web/nexacro/solution/tim,web/nexacro/solution/ins
+```
+
+`REPO_INDEX_PATHS`는 1차 방어다 — `web/eHR/`(컴파일 산출물)·`nexacro14lib/`(벤더
+런타임)·`UbiService/`(리포팅 엔진·로그) 같은 경로별 산출물은 `EXCLUDED_DIRS`
+블랙리스트로는 잡히지 않으므로 화이트리스트로 범위를 좁혀 원천 차단한다. 범위는
+운영자가 조정 가능하나, **화이트리스트 없이 eHR을 인덱싱하지 않는다**.
+
+> ⚠️ **보안 경고 (스펙 §6).** `build.xml`에 평문 자격증명이 존재한다(2026-08-14
+> 실측). 화이트리스트가 repo 루트 파일을 배제해 차단하지만, `REPO_INDEX_PATHS`를
+> 비우고(전체 인덱싱) 돌리면 자격증명이 인덱스·LLM 컨텍스트로 노출된다. 조치 권고
+> (eHR 소유자 몫): 자격증명 외부화(`build.properties` 분리 + 형상 제외), 사내
+> 정보보호팀(security@pantechcni.com) 통보. 실제 IP·계정·비밀번호 값은 이 문서를
+> 포함해 어디에도 옮겨 적지 않는다.
 
 ```bash
 OLLAMA_CONTEXT_LENGTH=16384 ollama serve
@@ -28,6 +46,33 @@ OLLAMA_CONTEXT_LENGTH=16384 ollama serve
 기존 mock `chroma_data`를 실제 index로 재사용하지 않는다. 삭제가 부담되면 회사
 환경 전용 persist directory를 사용한다. 서버 자동 인덱싱 로그에서 파일 수, chunk
 수, 소요시간, 오류를 기록한다.
+
+### 3-1. 인덱싱 범위 변경 시 캐시 재생성
+
+`REPO_INDEX_PATHS`(스캔 범위)를 바꾸면 프로젝트 루트의 전역 캐시가 구 범위를 그대로
+반영하므로, 아래 캐시와 벡터 인덱스를 삭제한 뒤 서버를 재기동해 새 범위로 재생성한다.
+
+```bash
+rm -f term_dict_cache.json term_loc_cache.json const_inventory_cache.json symbol_index_cache.json
+rm -rf chroma_data/
+python run.py   # 첫 기동 시 새 범위로 자동 재인덱싱 (CPU, 수십 분)
+```
+
+이 `*_cache.json`들은 eHR 내부 파생물이라 gitignore 대상 — 커밋·반출 금지다.
+
+### 3-2. eHR 적합화 검증 (Issue #0024)
+
+인덱싱 후 아래 세 항목을 확인한다.
+
+- **xfdl 인덱싱**: `.xfdl` Script의 청크가 검색에 잡히는지 스모크 확인한다. `/index`
+  이후 대시보드 검색에서 도메인 라벨(예: "직무발명") 또는 xfdl에 하드코딩된 한도
+  상수로 조회해 상위 후보에 `web/nexacro/solution/**/*.xfdl` 파일이 나오는지 본다
+  (건수·순위만 private 메모에 기록, 경로 원문은 가린다).
+- **인코딩(CP949 한글 주석)**: 최신 연말정산 SQL `PayRefCom_2026.xml`(CP949)의 한글
+  주석이 용어 사전에 깨지지 않고 수확되는지 확인한다. `term_dict_cache.json` 재생성
+  후 해당 컬럼 코드(a0121 등)의 한글 라벨이 정상 판독되는지 본다.
+- **인코딩(선언·실제 불일치)**: XML 선언이 EUC-KR인데 실제 UTF-8인 파일
+  (`TimTimm.xml`/`TimVac.xml`)이 폴백 없이 무손실 판독되는지 함께 확인한다.
 
 ## 4. 검색 확인
 
