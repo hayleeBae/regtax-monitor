@@ -89,6 +89,7 @@ def test_excludes_exploded_war_under_out(repo):
         "venv/lib/site.py",
         "__pycache__/mod.py",
         ".svn/tmp/entry.xml",
+        "classes/com/example/TaxService.java",
     ],
 )
 def test_excludes_build_output_directories(repo, relative):
@@ -125,18 +126,54 @@ def test_git_directory_still_excluded(repo):
     assert not [f for f in files if f.startswith(".git/")]
 
 
+def _list(root) -> list[str]:
+    """OS 경로구분자를 `/` 로 정규화한 목록 — Windows/macOS 양쪽에서 의미 동일."""
+    return [f.replace("\\", "/") for f in RealCodebaseAdapter(str(root)).list_files()]
+
+
+def test_excludes_classes_exploded_war(repo):
+    """eHR `classes/` (1.7GB·4중 중첩 exploded WAR, 2026-08-14 실측) 제외."""
+    _touch(repo, "classes/com/example/PayrollService.java")
+    files = _list(repo)
+    assert not [f for f in files if f.startswith("classes/")]
+    # 정상 소스는 그대로 남는지 (과다 제외 방지)
+    assert "src/main/java/com/example/TaxService.java" in files
+
+
+def test_excludes_deeply_nested_exploded_classes(repo):
+    """자기 자신을 재귀 중첩하는 exploded WAR — 중간 `classes/` 로도 걸러진다."""
+    _touch(
+        repo,
+        "classes/artifacts/eHR_war_exploded/WEB-INF/classes/src/A.java",
+    )
+    files = _list(repo)
+    assert not [f for f in files if "eHR_war_exploded" in f]
+
+
+def test_root_path_containing_excluded_word_is_not_self_excluded(tmp_path, monkeypatch):
+    """repo 루트 경로 자체에 제외어가 있어도 저장소가 통째로 제외되지 않는다.
+
+    `_is_excluded` 가 절대경로 parts 를 검사하면 `.../build/repo` 같은 루트에서
+    `build` 가 걸려 모든 파일이 사라진다 — root 상대 경로로 판정해야 한다.
+    """
+    monkeypatch.setattr("app.codebase.real_adapter.settings.repo_index_paths", "")
+    root = tmp_path / "build" / "repo"  # 경로에 제외어("build") 포함
+    _touch(root, "src/main/java/com/example/TaxService.java")
+    files = _list(root)
+    assert "src/main/java/com/example/TaxService.java" in files
+
+
 def test_excluded_dirs_matches_golden_ignore_vocabulary():
-    """`app/golden.py::_IGNORE` 와 같은 어휘를 쓰는지 — 한쪽만 바뀌는 것을 막는다."""
-    shared = {
-        ".git",
-        ".svn",
-        "target",
-        "build",
-        "out",
-        "dist",
-        "node_modules",
-        ".venv",
-        "venv",
-        "__pycache__",
-    }
-    assert shared <= RealCodebaseAdapter.EXCLUDED_DIRS
+    """`app/golden.py::_IGNORE` 와 같은 어휘를 쓰는지 — 한쪽만 바뀌는 것을 막는다.
+
+    두 목록은 형태가 다르다(집합 vs `shutil.ignore_patterns` 콜러블). `_IGNORE`
+    는 이름 목록으로 호출하면 무시할 이름 집합을 돌려주므로, `EXCLUDED_DIRS` 의
+    모든 이름이 `_IGNORE` 에도 잡히는지 실제로 호출해 확인한다.
+    """
+    from app.golden import _IGNORE
+
+    names = sorted(RealCodebaseAdapter.EXCLUDED_DIRS)
+    ignored = _IGNORE(".", names)
+    missing = set(names) - set(ignored)
+    assert not missing, f"golden._IGNORE 에서 누락된 제외 디렉토리: {sorted(missing)}"
+    assert "classes" in RealCodebaseAdapter.EXCLUDED_DIRS

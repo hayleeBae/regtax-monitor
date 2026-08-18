@@ -59,7 +59,7 @@ class RealCodebaseAdapter(CodebaseAdapter):
     apply_patch()는 git apply로 워킹트리에 직접 반영한다.
     """
 
-    SOURCE_EXTS = {".java", ".sql", ".xml", ".py", ".kt", ".ts", ".tsx", ".js"}
+    SOURCE_EXTS = {".java", ".sql", ".xml", ".py", ".kt", ".ts", ".tsx", ".js", ".xfdl"}
 
     # EXCLUDED_DIRS(빌드 산출물 제외 목록)는 CodebaseAdapter 에서 상속한다 —
     # 어댑터 공통 규칙이라 base 에 있고, `RealCodebaseAdapter.EXCLUDED_DIRS` 로
@@ -73,7 +73,9 @@ class RealCodebaseAdapter(CodebaseAdapter):
         """인덱싱 대상 파일인지 — 확장자 + 제외 디렉토리 판정."""
         if not path.is_file() or path.suffix not in self.SOURCE_EXTS:
             return False
-        return not self._is_excluded(path)
+        # root 상대 경로로 판정 — repo 루트 경로 자체에 제외어가 있어도(예: .../build/eHR)
+        # 저장소 전체가 제외되지 않게 한다.
+        return not self._is_excluded(path, self.root)
 
     def list_files(self) -> list[str]:
         index_paths = [
@@ -91,7 +93,9 @@ class RealCodebaseAdapter(CodebaseAdapter):
 
     def read_file(self, path: str) -> str:
         full_path = self.root / path
-        for enc in ("utf-8", "cp949"):
+        # utf-8-sig: BOM 유무 모두 처리(BOM 제거). xfdl(UTF-8+BOM)·일반 UTF-8 커버.
+        # XML 선언의 encoding= 속성은 신뢰하지 않는다(실측: 선언·실제 불일치 파일 존재) — 바이트 폴백.
+        for enc in ("utf-8-sig", "cp949"):
             try:
                 return full_path.read_text(encoding=enc)
             except UnicodeDecodeError:
@@ -152,8 +156,12 @@ class RealCodebaseAdapter(CodebaseAdapter):
         for f in files:
             full = self.root / f["path"]
             raw = full.read_bytes()
+            # BOM 파일(xfdl 등)은 utf-8-sig로 디코딩(BOM 제거)하고, 재인코딩 시 BOM을 재부착한다.
+            # 이렇게 하지 않으면 BOM이 첫 줄 텍스트에 섞여 hunk 왕복이 깨진다.
+            has_bom = raw.startswith(b"\xef\xbb\xbf")
             try:
-                enc, text = "utf-8", raw.decode("utf-8")
+                enc = "utf-8-sig" if has_bom else "utf-8"
+                text = raw.decode(enc)
             except UnicodeDecodeError:
                 enc, text = "cp949", raw.decode("cp949")
             newline = "\r\n" if b"\r\n" in raw else "\n"
@@ -162,7 +170,10 @@ class RealCodebaseAdapter(CodebaseAdapter):
             out = newline.join(new_lines)
             if raw.endswith(b"\n"):
                 out += newline
-            full.write_bytes(out.encode(enc))
+            data = out.encode("utf-8" if enc == "utf-8-sig" else enc)
+            if has_bom:
+                data = b"\xef\xbb\xbf" + data
+            full.write_bytes(data)
             changed.append(f["path"])
 
         return f"proposal_{proposal_id} 적용 완료 — {', '.join(changed)} (repo: {self.root})"

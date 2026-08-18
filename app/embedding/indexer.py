@@ -96,6 +96,8 @@ class CodeIndexer:
             return _chunk_python(text)
         if suffix == ".kt":
             return _chunk_kotlin(text)
+        if suffix == ".xfdl":
+            return _chunk_xfdl(text)
         if suffix == ".xml":
             return _chunk_xml(text)
         return [text]  # TS, JS 등 나머지는 파일 단위
@@ -221,6 +223,61 @@ def _chunk_xml(text: str) -> list[str]:
     return chunks if chunks else [text]
 
 
+_XFDL_SCRIPT = re.compile(r"<Script\b[^>]*>(.*?)</Script>", re.IGNORECASE | re.DOTALL)
+_XFDL_CDATA = re.compile(r"<!\[CDATA\[(.*?)\]\]>", re.DOTALL)
+_XFDL_FUNC = re.compile(
+    r"(?:this\.\w+\s*=\s*function|function\s+\w+)\s*\([^)]*\)",
+    re.MULTILINE,
+)
+
+
+def _xfdl_script_text(block: str) -> str:
+    """<Script> 블록 내부에서 CDATA 본문을 뽑는다. CDATA 없는 변형은 관대하게 원문 사용."""
+    cdata = _XFDL_CDATA.findall(block)
+    return "\n".join(cdata) if cdata else block
+
+
+def _chunk_xfdl(text: str) -> list[str]:
+    """Nexacro xfdl의 <Script> CDATA를 추출해 함수 단위로 분리.
+    Script가 없거나 함수 매치가 없으면 파일 전체 반환.
+    레이아웃 XML부(Layout/Dataset/Grid 등)는 청킹하지 않는다 — 검색 노이즈."""
+    scripts = _XFDL_SCRIPT.findall(text)
+    if not scripts:
+        return [text]
+    script = "\n".join(_xfdl_script_text(s) for s in scripts)
+
+    matches = list(_XFDL_FUNC.finditer(script))
+    if not matches:
+        return [text]
+
+    chunks = []
+    for i, m in enumerate(matches):
+        start = m.start()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(script)
+        # 여는 중괄호가 함수 선언 다음 줄에 오는 스타일도 자연 처리 (_chunk_java와 동일 기법)
+        body_start = script.find("{", start)
+        if body_start == -1 or body_start >= end:
+            chunk = script[start:end].strip()
+            if chunk:
+                chunks.append(chunk)
+            continue
+        depth, pos = 0, body_start
+        while pos < len(script):
+            if script[pos] == "{":
+                depth += 1
+            elif script[pos] == "}":
+                depth -= 1
+                if depth == 0:
+                    end = pos + 1
+                    break
+            pos += 1
+        chunk = script[start:end].strip()
+        if chunk:
+            chunks.append(chunk)
+
+    return chunks if chunks else [text]
+
+
 def _extract_symbol(path: str, snippet: str) -> str:
     """스니펫에서 메서드명/함수명/테이블명 등 식별자 추출."""
     suffix = Path(path).suffix.lower()
@@ -232,5 +289,11 @@ def _extract_symbol(path: str, snippet: str) -> str:
         return m.group(1) if m else ""
     if suffix == ".sql":
         m = re.search(r"(?:TABLE|INTO)\s+(\w+)", snippet, re.IGNORECASE)
+        return m.group(1) if m else ""
+    if suffix == ".xfdl":
+        m = re.search(r"this\.(\w+)\s*=\s*function", snippet)
+        if m:
+            return m.group(1)
+        m = re.search(r"function\s+(\w+)", snippet)
         return m.group(1) if m else ""
     return ""

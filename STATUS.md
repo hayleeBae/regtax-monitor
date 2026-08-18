@@ -4,6 +4,22 @@
 
 ---
 
+## 최근 이슈 반영 현황 (2026-08)
+
+### Issue #0024 — eHR 인덱싱 적합화 (진행 중)
+
+실측 eHR(Nexacro UI·iBATIS·Ant 빌드) 대응. 스펙: `docs/specifications/EHR_INDEXING_SPEC.md`.
+
+- step 0 인코딩 정책: 읽기 순서 utf-8-sig→cp949→utf-8(replace) 통일, BOM 왕복 보존 (완료)
+- step 1 제외 목록: `EXCLUDED_DIRS`에 `classes`(exploded WAR) 추가, `_is_excluded` root 상대경로 판정 (완료)
+- step 2 xfdl 청킹: `.xfdl` 1급 지원(`SOURCE_EXTS` + `_chunk_xfdl` + 심볼 추출) — 한도값 하드코딩 검색 커버 (완료)
+- step 3 수확 스캔 루트: `term_dict`/`const_inventory` 스캔 루트를 `REPO_INDEX_PATHS`로 통일 (완료)
+- step 4 문서·설정: `.env.example`/`COMPANY_VALIDATION.md`에 eHR 권장 화이트리스트·캐시 재생성·보안 경고 반영 (본 step)
+
+화이트리스트가 1차 방어 — `build.xml` 평문 자격증명(2026-08-14 실측) 노출 방지. 회사 검증 절차는 `docs/operations/COMPANY_VALIDATION.md` 참조.
+
+---
+
 ## 완료된 작업
 
 ### 1. Windows 이식 (M1 → Windows 11)

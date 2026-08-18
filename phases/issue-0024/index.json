@@ -1,0 +1,50 @@
+{
+  "project": "regtax-monitor",
+  "phase": "issue-0024",
+  "owner": "haylee",
+  "steps": [
+    {
+      "step": 0,
+      "name": "encoding-policy",
+      "status": "completed",
+      "started_at": "2026-08-14T14:30:18+0900",
+      "summary": "읽기 정책을 utf-8-sig→cp949→utf-8(replace)로 통일 (real_adapter.read_file/apply_patch, term_dict._read). apply_patch는 BOM 감지 후 재부착으로 왕복 보존. test_encoding_policy.py 8건(BOM 제거·CP949·거짓 XML선언·BOM 왕복) 전부 pass.",
+      "completed_at": "2026-08-14T14:48:51+0900"
+    },
+    {
+      "step": 1,
+      "name": "excluded-dirs",
+      "status": "completed",
+      "started_at": "2026-08-14T14:48:53+0900",
+      "summary": "EXCLUDED_DIRS에 'classes' 추가(eHR 1.7GB 4중중첩 exploded WAR), _is_excluded를 root 상대경로 기준으로 판정(optional root 파라미터)해 루트경로 자체에 제외어 포함 시 저장소 전체 제외되는 함정 제거. real_adapter._is_indexable가 root 전달. golden._IGNORE도 'classes' 동기화. 테스트 5건 추가/강화(classes 제외·중첩 exploded·루트경로 함정 회귀·golden 동기화 가드는 _IGNORE 실제 호출로 검증) 전부 pass. 변경 전후 full suite 실패집합 동일=회귀0(잔여 11건은 사전존재 Windows env 이슈, macOS 타깃에선 통과).",
+      "completed_at": "2026-08-14T15:08:17+0900"
+    },
+    {
+      "step": 2,
+      "name": "xfdl-chunker",
+      "status": "completed",
+      "started_at": "2026-08-14T15:08:19+0900",
+      "summary": "SOURCE_EXTS에 '.xfdl' 추가. indexer._chunk_xfdl 신규(복수 <Script> CDATA 추출→하나로 합쳐 함수 경계 this.x=function/function x로 분리, _chunk_java 중괄호 균형 기법 재사용, 여는 중괄호 다음줄 대응 find+가드; Script/함수 매치 없으면 파일 전체 폴백; 레이아웃 XML부는 청킹 안 함) + _chunk() 디스패치 등록. _extract_symbol .xfdl 분기(this.(\\w+)=function 우선, 없으면 function\\s+(\\w+)). test_xfdl_chunker.py 7건(함수분리·한도상수·레이아웃배제·심볼추출2형태·복수Script·_is_indexable) 전부 pass. 회귀0(실패집합 사전존재 Windows env·replay flaky 동일).",
+      "completed_at": "2026-08-14T15:25:07+0900"
+    },
+    {
+      "step": 3,
+      "name": "harvest-scan-roots",
+      "status": "completed",
+      "started_at": "2026-08-14T15:25:08+0900",
+      "summary": "term_dict._iter_source_files 스캔 루트를 list_files()와 동일 어휘로 통일(_scan_roots 신설: settings.repo_index_paths 설정 시 그 목록, 미설정 시 src 폴백/없으면 root, 미존재 경로는 조용히 skip). 확장자에 .xfdl 추가. harvest()에 xfdl 브랜치 신설 — _JAVA_LINE(private VO 전용)은 실측 xfdl JS에 안 맞아 _JS_LINE(^(.*?)//라벨) 신설로 처리(java VO 줄도 상위집합 포섭, .java 브랜치 무변경). const_inventory는 순회자 공유로 무수정 자동 확장(3000000 등 xfdl 상수 수확). rank_locations/harvest_locations는 xfdl을 이미 XML계열(VO 뒤)로 취급—무변경. test_harvest_scan_roots.py 7건(스캔루트 제한/src폴백/root폴백/미존재경로skip/xfdl라벨/xfdl상수/java·xml회귀) 전부 pass. full suite 12 failed는 term_dict stash baseline과 동일 재현=회귀0(5 deterministic Windows env + 7 replay flaky).",
+      "completed_at": "2026-08-14T15:56:31+0900"
+    },
+    {
+      "step": 4,
+      "name": "docs-env",
+      "status": "completed",
+      "started_at": "2026-08-18T09:01:35+0900",
+      "summary": ".env.example: REPO_INDEX_PATHS에 eHR 권장 화이트리스트(급여·연말정산/연차/4대보험+SQL+Nexacro) 주석 예시 + 화이트리스트가 1차 방어(경로별 산출물 web/eHR·nexacro14lib·UbiService 차단)라는 한 줄 명시. COMPANY_VALIDATION.md: §2에 권장 화이트리스트·1차 방어 원칙·build.xml 평문 자격증명(2026-08-14 실측) 보안 경고+정보보호팀 통보 권고, §3-1 인덱싱 범위 변경 시 캐시(*_cache.json 4종)+chroma_data 삭제 후 재생성 절차, §3-2 xfdl 검색 스모크·CP949(PayRefCom_2026.xml)·선언불일치(TimTimm/TimVac) 인코딩 검증 항목 추가. STATUS.md에 issue-0024 step0~4 반영 현황 1절 추가(기존 내용 무변경). 코드(app/) 무수정. verify full: 19 failed 전부 사전존재 Windows env(path sep·mcp 미설치·symbol)+replay flaky, 문서·설정만 변경이라 회귀0. 발견 결함 없음.",
+      "completed_at": "2026-08-18T09:09:36+0900"
+    }
+  ],
+  "created_at": "2026-08-14T14:30:18+0900",
+  "total_cost_usd": 11.5104,
+  "completed_at": "2026-08-18T09:09:38+0900"
+}
