@@ -55,7 +55,7 @@ OLLAMA_CONTEXT_LENGTH=16384 ollama serve
 ```bash
 rm -f term_dict_cache.json term_loc_cache.json const_inventory_cache.json symbol_index_cache.json
 rm -rf chroma_data/
-python run.py   # 첫 기동 시 새 범위로 자동 재인덱싱 (CPU, 수십 분)
+python run.py   # 첫 기동 시 새 범위로 자동 재인덱싱 (CPU — 소요는 §3-3 실측 참조: 저사양 PC에서 수 시간)
 ```
 
 이 `*_cache.json`들은 eHR 내부 파생물이라 gitignore 대상 — 커밋·반출 금지다.
@@ -73,6 +73,25 @@ python run.py   # 첫 기동 시 새 범위로 자동 재인덱싱 (CPU, 수십 
   후 해당 컬럼 코드(a0121 등)의 한글 라벨이 정상 판독되는지 본다.
 - **인코딩(선언·실제 불일치)**: XML 선언이 EUC-KR인데 실제 UTF-8인 파일
   (`TimTimm.xml`/`TimVac.xml`)이 폴백 없이 무손실 판독되는지 함께 확인한다.
+
+### 3-3. 실측 기록 (2026-08-18, Windows 회사 PC — §3-2 검증 완료)
+
+§3-2의 세 항목을 실측으로 확인했다 (권장 화이트리스트 1,599파일: java 844 / xfdl 672 / xml 83, `classes/` 유입 0, `build.xml` 차단 확인).
+
+- **xfdl 인덱싱** ✅: "직무발명보상금 비과세 한도" 검색 → 한도값이 하드코딩된
+  `PayRefCom003.xfdl`이 1위(0.471, 2위 대비 9배). "자녀세액공제 금액" → xfdl이 1·2위.
+  단 주석 없는 수식(지방소득세 절사 `Math.floor(...)`)은 의미 검색에 안 잡힘 —
+  설계상 상수 매칭 provider가 보완하는 유형(RAG 단독 한계, 정상).
+- **CP949 수확** ✅: 용어 사전 253코드, `n0200 → "자녀세액공제 공제대상자녀"` 무손실.
+  상수 인벤토리 963값 — 직무발명 한도 300/500/700만원이 xfdl 위치로 수확됨.
+- **소요 시간 ⚠️ 실측**: GPU 없는 Windows PC에서 bge-m3 CPU 인덱싱이 925/1,599파일에
+  **약 8시간** (sqlmap 대형 mapper가 병목 — 파일 수 5%가 청크 수 절반). "수십 분"
+  가정은 저사양 CPU에서 성립하지 않는다. **운영 인덱스는 Apple Silicon(M계열)에서
+  생성할 것을 권장**하고, 저사양 PC에서는 검증 목적의 부분 인덱싱(대상 파일 선별)으로
+  대체한다.
+- **회사망 주의**: 모델이 HF 캐시에 있어도 sentence-transformers가 기동 시 온라인
+  버전 확인을 시도하다 SSL에 막혀 실패한다 — `HF_HUB_OFFLINE=1`(+`TRANSFORMERS_OFFLINE=1`)
+  환경변수로 캐시 강제 사용이 필요하다.
 
 ## 4. 검색 확인
 
