@@ -41,9 +41,9 @@
       "status": "completed",
       "started_at": "2026-08-18T09:01:35+0900",
       "summary": ".env.example: REPO_INDEX_PATHS에 eHR 권장 화이트리스트(급여·연말정산/연차/4대보험+SQL+Nexacro) 주석 예시 + 화이트리스트가 1차 방어(경로별 산출물 web/eHR·nexacro14lib·UbiService 차단)라는 한 줄 명시. COMPANY_VALIDATION.md: §2에 권장 화이트리스트·1차 방어 원칙·build.xml 평문 자격증명(2026-08-14 실측) 보안 경고+정보보호팀 통보 권고, §3-1 인덱싱 범위 변경 시 캐시(*_cache.json 4종)+chroma_data 삭제 후 재생성 절차, §3-2 xfdl 검색 스모크·CP949(PayRefCom_2026.xml)·선언불일치(TimTimm/TimVac) 인코딩 검증 항목 추가. STATUS.md에 issue-0024 step0~4 반영 현황 1절 추가(기존 내용 무변경). 코드(app/) 무수정. verify full: 19 failed 전부 사전존재 Windows env(path sep·mcp 미설치·symbol)+replay flaky, 문서·설정만 변경이라 회귀0. 발견 결함 없음.",
-      "completed_at": "2026-08-18T09:10:00+0900"
+      "completed_at": "2026-08-18T09:09:36+0900"
     }
   ],
   "created_at": "2026-08-14T14:30:18+0900",
-  "total_cost_usd": 9.3392
+  "total_cost_usd": 11.5104
 }
