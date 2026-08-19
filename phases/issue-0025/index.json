@@ -1,0 +1,10 @@
+{
+  "project": "regtax-monitor",
+  "phase": "issue-0025",
+  "owner": "haylee",
+  "steps": [
+    { "step": 0, "name": "db-registry", "status": "pending" },
+    { "step": 1, "name": "routing-decision", "status": "pending" },
+    { "step": 2, "name": "apply-integration", "status": "pending" }
+  ]
+}

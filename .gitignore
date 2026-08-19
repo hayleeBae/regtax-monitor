@@ -30,3 +30,10 @@ evaluation/chroma_*/
 evaluation/fixtures/replay_repos/
 # replay 인덱스 캐시 — 대상 코드의 임베딩이 담긴다 (ADR-012, 반출 금지)
 evaluation/replay_index/
+
+# mock chroma 인덱스 백업 (바이너리 DB — chroma_data/ 와 동일 성격, 커밋 금지)
+chroma_data_mock_backup/
+# Claude Code 세션 로컬 데이터/메모리 (repo 콘텐츠 아님). .claude/commands·settings.json 은 추적 유지.
+.claude/projects/
+# uv 락파일 — 이 프로젝트 표준은 requirements.txt (stray 아티팩트, 실수 커밋 방지)
+uv.lock

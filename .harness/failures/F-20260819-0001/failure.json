@@ -1,0 +1,30 @@
+{
+  "failure_id": "F-20260819-0001",
+  "ts": "2026-08-19T17:22:20+0900",
+  "run_id": "20260819-172208-4376",
+  "stage": "implement",
+  "step": 0,
+  "trace_refs": [],
+  "symptom": {
+    "category": "env_error",
+    "signal": "execute.py의 nested `claude -p` 서브프로세스가 즉시 code 1 종료(비용 $0, 0초). step0-output.json: \"Failed to authenticate: OAuth session expired and could not be refreshed\"",
+    "artifact": "phases/issue-0025/step0-output.json"
+  },
+  "verified_cause": {
+    "cause_code": "env_config",
+    "description": "Claude Code CLI의 디스크 OAuth 세션이 만료돼 갱신 실패. execute.py가 step마다 별도 `claude` 프로세스를 띄우는데 그 프로세스 인증이 만료 상태였다(부모 세션과 별개). step 설계·스펙·코드와 무관.",
+    "verified_by": "log_evidence: step0-output.json result 문자열에 인증 실패 명시",
+    "causal_chain": [
+      "Claude Code OAuth 세션 만료",
+      "execute.py가 spawn한 headless `claude -p`가 인증 실패로 즉시 종료(code 1, $0)",
+      "status 갱신 없이 종료 → 3회 재시도 모두 동일 실패 → error 에스컬레이션"
+    ]
+  },
+  "resolution": {
+    "action": "pending_user",
+    "description": "사용자가 Claude Code CLI 재인증(재로그인) 후 execute.py 재실행 필요. 재인증은 사용자 인증 동작이라 자동화 불가.",
+    "commit": null
+  },
+  "status": "open",
+  "recurrence_of": null
+}
