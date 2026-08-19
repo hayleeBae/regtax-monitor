@@ -3,8 +3,23 @@
   "phase": "issue-0025",
   "owner": "haylee",
   "steps": [
-    { "step": 0, "name": "db-registry", "status": "pending" },
-    { "step": 1, "name": "routing-decision", "status": "pending" },
-    { "step": 2, "name": "apply-integration", "status": "pending" }
-  ]
+    {
+      "step": 0,
+      "name": "db-registry",
+      "status": "completed",
+      "started_at": "2026-08-19T17:51:46+0900",
+      "summary": "app/collector/registry.py에 DbItem(frozen dataclass)·Domain.db_items·DbDataRegistry 추가, load_domains()가 db_items 파싱(키 없으면 []); domains.json tax/hr에 빈 db_items 추가; DbDataRegistry.match(law_id, article_no) -> DbItem | None — law_id 정확일치 AND article_pattern 부분일치(빈 패턴은 매칭 안 함), 정확매칭만 수행하고 추론 없음; tests/test_db_registry.py 신규(회귀 고정 포함) — verify.sh full 874 passed"
+    },
+    {
+      "step": 1,
+      "name": "routing-decision",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "apply-integration",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-08-19T17:51:46+0900"
 }

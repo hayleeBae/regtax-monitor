@@ -8,7 +8,8 @@
       "부가가치세법",
       "조세특례제한법"
     ],
-    "admin_rule_queries": []
+    "admin_rule_queries": [],
+    "db_items": []
   },
   "hr": {
     "label": "노동·인사(급여/근태/4대보험)",
@@ -25,6 +26,7 @@
       "남녀고용평등과 일ㆍ가정 양립 지원에 관한 법률",
       "기간제 및 단시간근로자 보호 등에 관한 법률"
     ],
-    "admin_rule_queries": ["최저임금"]
+    "admin_rule_queries": ["최저임금"],
+    "db_items": []
   }
 }
