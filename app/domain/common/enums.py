@@ -55,11 +55,17 @@ class ChangeType(str, Enum):
 
 
 class AutomationDecision(str, Enum):
-    """자동화 정책 결정 — ARCHITECTURE_V2 §5.4 / CLASSIFICATION_SPEC §9."""
+    """자동화 정책 결정 — ARCHITECTURE_V2 §5.4 / CLASSIFICATION_SPEC §9.
+
+    DB_UPDATE_GUIDANCE: DbDataRegistry 정확 매칭 시 라우팅되는 결정값(ADR-016,
+    DB_DATA_ROUTING_SPEC §5) — ANALYSIS_ONLY(미구현/영향 없음)와 구분되는
+    "DB에서 갱신하라" 안내.
+    """
 
     DRAFT_ALLOWED = "draft_allowed"
     ANALYSIS_ONLY = "analysis_only"
     MANUAL_REVIEW_REQUIRED = "manual_review_required"
+    DB_UPDATE_GUIDANCE = "db_update_guidance"
 
 
 class RetrievalSource(str, Enum):

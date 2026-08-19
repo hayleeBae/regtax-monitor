@@ -14,7 +14,10 @@
     {
       "step": 1,
       "name": "routing-decision",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-08-19T17:54:28+0900",
+      "summary": "AutomationDecision.DB_UPDATE_GUIDANCE 추가(app/domain/common/enums.py); app/application/services.py에 DbUpdateGuidance(frozen dataclass: item_label/law_name/article/before/after/guidance, db_hint 없음) 신규; ProposalService.propose(policy_input, generator, db_match=None, guidance=None) — db_match가 있으면 PolicyResult(DB_UPDATE_GUIDANCE,(),policy.version)와 asdict(guidance)를 담은 ProposalResult(blocked=True)를 반환하고 generator() 미호출, db_match=None이면 기존 동작과 100% 동일(회귀); tests/test_pipeline_services.py에 라우팅/회귀/스키마비노출 테스트 추가, tests/test_domain_foundation.py 계약 테스트를 신규 enum값 포함하도록 갱신 — verify.sh full 877 passed",
+      "completed_at": "2026-08-19T18:10:00+0900"
     },
     {
       "step": 2,
