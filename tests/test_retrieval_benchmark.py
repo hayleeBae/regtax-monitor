@@ -44,6 +44,11 @@ def _run_variant(experiment):
         "verified_hybrid": ("A.java", "B.java"),
         "verified_rerank_off": ("A.java", "B.java"),
         "verified_rerank_on": ("A.java", "B.java"),
+        # graph_off는 verified_rerank_on과 조건이 완전히 같아 결과도 같아야 한다(회귀 고정).
+        "graph_off": ("A.java", "B.java"),
+        # graph_hybrid는 recall 이득 없이 불필요 후보(NoiseTest.java)만 늘어나는 사례를
+        # 시뮬레이션한다 — ablation은 이런 결과도 숨기지 않고 그대로 보고해야 한다.
+        "graph_hybrid": ("A.java", "B.java", "NoiseTest.java"),
     }
     return (
         BenchmarkCase("case-1", ("A.java",), predictions[experiment.experiment_id], 10),
@@ -56,9 +61,70 @@ def test_default_experiments_have_fixed_provider_combinations() -> None:
     assert [item.experiment_id for item in experiments] == [
         "rag_only", "rag_dict", "rag_const", "hybrid_all", "verified_hybrid",
         "verified_rerank_off", "verified_rerank_on",
+        "graph_off", "graph_hybrid",
     ]
     assert experiments[0].enabled_sources == ("rag",)
     assert "verified_mapping" in experiments[4].enabled_sources
+
+
+def test_graph_ablation_pair_differs_only_by_graph_flag() -> None:
+    """공정 비교 고정 — 조건이 graph_enabled 외에 다르면 차이의 원인을 특정할 수 없다."""
+    by_id = {item.experiment_id: item for item in default_experiments()}
+    off = by_id["graph_off"]
+    on = by_id["graph_hybrid"]
+
+    assert off.enabled_sources == on.enabled_sources
+    assert off.top_k == on.top_k
+    assert off.scoring_version == on.scoring_version
+    assert off.normalization_version == on.normalization_version
+    assert off.rerank_enabled == on.rerank_enabled
+    assert (off.graph_enabled, on.graph_enabled) == (False, True)
+
+
+def test_graph_off_matches_pre_graph_baseline() -> None:
+    """graph_off는 graph 도입 전 기준선(verified_rerank_on)과 조건이 동일하다."""
+    by_id = {item.experiment_id: item for item in default_experiments()}
+    baseline = by_id["verified_rerank_on"]
+    graph_off = by_id["graph_off"]
+
+    assert graph_off.enabled_sources == baseline.enabled_sources
+    assert graph_off.top_k == baseline.top_k
+    assert graph_off.rerank_enabled == baseline.rerank_enabled
+    assert graph_off.graph_enabled is False == baseline.graph_enabled
+
+
+def test_graph_ablation_report_shows_off_on_metrics_and_mock_disclaimer(
+    tmp_path: Path,
+) -> None:
+    result = RetrievalBenchmark(_run_variant).run(tmp_path, "graph-ablation")
+
+    # off 조건은 그래프 도입 전 기준선(verified_rerank_on)과 지표가 완전히 일치해야 한다.
+    assert result.summary["graph_off"] == result.summary["verified_rerank_on"]
+
+    # graph_hybrid는 recall 이득이 없고 불필요 후보·candidate 수만 늘었다 — 숨기지 않고 보고한다.
+    off_metrics = result.summary["graph_off"]
+    on_metrics = result.summary["graph_hybrid"]
+    assert on_metrics["recall_at_5"] == off_metrics["recall_at_5"]
+    assert on_metrics["unnecessary_file_rate"] > off_metrics["unnecessary_file_rate"]
+    assert on_metrics["average_candidate_count"] > off_metrics["average_candidate_count"]
+
+    report = (result.output_dir / "comparison.md").read_text(encoding="utf-8")
+    assert "graph_off" in report and "graph_hybrid" in report
+    assert "Unnecessary File Rate" in report and "Candidate Count" in report
+    assert "합성 mock 기준" in report
+
+
+def test_test_file_recall_counts_only_test_files() -> None:
+    from app.evaluation.retrieval_benchmark import _aggregate
+
+    cases = (
+        BenchmarkCase("c1", ("A.java", "ATest.java"), ("A.java", "ATest.java"), 10),
+        BenchmarkCase("c2", ("B.java",), ("wrong.java",), 10),
+    )
+    summary = _aggregate(cases)
+    # c1: test 파일(ATest.java) 1개 중 1개 회수 = 1.0. c2: test 관련 정답 없음 → 1.0(vacuous).
+    assert summary["test_file_recall_at_5"] == 1.0
+    assert summary["average_candidate_count"] == 1.5
 
 
 def test_rerank_ablation_pair_differs_only_by_rerank_flag() -> None:
@@ -134,6 +200,12 @@ def test_environment_records_rerank_flag_and_version(tmp_path: Path) -> None:
     }
     assert flags["verified_rerank_off"] is False
     assert flags["verified_rerank_on"] is True
+    graph_flags = {
+        item["experiment_id"]: item["graph_enabled"]
+        for item in environment["experiments"]
+    }
+    assert graph_flags["graph_off"] is False
+    assert graph_flags["graph_hybrid"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -305,3 +377,18 @@ def test_runner_passes_query_context_and_rerank_flag() -> None:
     # 공정 비교: rerank 외 조건은 두 변형에서 동일해야 한다.
     assert on_first[1].enabled_sources == orchestrator.calls[2][1].enabled_sources
     assert on_first[1].final_top_k == orchestrator.calls[2][1].final_top_k
+
+
+def test_runner_passes_graph_enabled_flag() -> None:
+    orchestrator = _RecordingOrchestrator()
+    cases = (_case("c1", "제59조의2", "value_change"),)
+    by_id = {item.experiment_id: item for item in default_experiments()}
+
+    run_orchestrator_cases(orchestrator, cases, by_id["graph_hybrid"])
+    run_orchestrator_cases(orchestrator, cases, by_id["graph_off"])
+
+    assert orchestrator.calls[0][1].graph_enabled is True
+    assert orchestrator.calls[1][1].graph_enabled is False
+    # 공정 비교: graph_enabled 외 조건은 두 변형에서 동일해야 한다.
+    assert orchestrator.calls[0][1].enabled_sources == orchestrator.calls[1][1].enabled_sources
+    assert orchestrator.calls[0][1].rerank_enabled == orchestrator.calls[1][1].rerank_enabled

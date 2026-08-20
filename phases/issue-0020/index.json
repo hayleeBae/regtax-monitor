@@ -1,0 +1,42 @@
+{
+  "project": "regtax-monitor",
+  "phase": "issue-0020",
+  "owner": "haylee",
+  "steps": [
+    {
+      "step": 0,
+      "name": "graph-traversal",
+      "status": "completed",
+      "started_at": "2026-08-20T13:54:16+0900",
+      "summary": "app/retrieval/graph_expand.py 신설: seed_node_ids(path[, symbol]→node id 집합, symbol 우선 없으면 path 전체 폴백), neighbors(graph, seed_ids, edge_allowlist, depth=1, max_depth=2, max_neighbors=20)→list[GraphHit(node, edge_kind, relation_path)]. 폭증방지: max_depth 클램프, BFS visited로 cycle 차단, max_neighbors 절단, EXCLUDED_DIRS 경로 노드 제외. tests/test_graph_expand.py 14개 추가, verify.sh full 통과(894 passed).",
+      "completed_at": "2026-08-20T13:57:38+0900"
+    },
+    {
+      "step": 1,
+      "name": "graph-expand-stage",
+      "status": "completed",
+      "started_at": "2026-08-20T13:57:39+0900",
+      "summary": "RetrievalConfig에 graph_enabled(기본 False)·graph_seed_top_n·graph_depth·graph_max_neighbors·graph_edge_allowlist(기본 CONTAINS/SERVICE_TO_MAPPER)·graph_edge_scores(service_to_mapper 0.75/uses_constant 0.70/test_to_service 0.65/contains 0.60) 필드 추가. RetrievalOrchestrator에 graph: SymbolGraph|None 주입 지점 추가, retrieve()에서 merge 직후·rerank 이전에 _graph_expand 실행(graph is not None and config.graph_enabled 가드). _graph_expand는 merged 상위 graph_seed_top_n 후보의 (path,symbol)을 seed_node_ids로 노드 매핑 → neighbors()로 이웃 확장 → GraphHit을 CODE_GRAPH evidence 후보로 만들어 merged와 합친 뒤 _merge_candidates 재호출(기존 후보엔 evidence 추가, 신규는 새 후보로). app/main.py::_make_mapping_service에 graph=symbol_index.load(adapter) 주입. tests/test_retrieval_orchestrator.py에 5개 테스트 추가(off-불변, graph=None skip, CODE_GRAPH evidence 반영, 이중 RAG 미발생, rerank가 확장 후보까지 관측). verify.sh full 통과(899 passed, 10 skipped).",
+      "completed_at": "2026-08-20T14:07:55+0900"
+    },
+    {
+      "step": 2,
+      "name": "gate-exclusion",
+      "status": "completed",
+      "started_at": "2026-08-20T14:07:55+0900",
+      "summary": "app/policy/automation.py::decide에서 독립 source 카운트를 sources(top.evidences 전체 source 집합)와 분리해 independent(CODE_GRAPH 제외) 집합으로 계산, min_independent_sources 판정에 independent 사용. VERIFIED_MAPPING 예외·다른 block 사유(score_low·candidate_missing 등)는 불변. tests/test_automation_policy.py에 3개 추가({RAG,CODE_GRAPH}→insufficient, {RAG,CONSTANT_MATCH}→종전대로 통과 회귀, CODE_GRAPH 단독→insufficient). verify.sh full 통과(902 passed, 10 skipped).",
+      "completed_at": "2026-08-20T14:09:59+0900"
+    },
+    {
+      "step": 3,
+      "name": "graph-ablation",
+      "status": "completed",
+      "started_at": "2026-08-20T14:09:59+0900",
+      "summary": "app/evaluation/retrieval_benchmark.py에 graph ablation 추가: RetrievalExperimentConfig.graph_enabled(기본 False) 필드, default_experiments()에 graph_off/graph_hybrid 쌍 추가(ALL_SOURCES·rerank_enabled=True 고정, graph_enabled만 다름 — graph_off는 verified_rerank_on과 조건 동일해 지표가 일치해야 함). run_orchestrator_cases가 RetrievalConfig(graph_enabled=...)로 전달. _aggregate에 test_file_recall_at_5(\"test\" in path.lower() 휴리스틱)·unnecessary_file_rate·average_candidate_count 추가, comparison.md에 해당 열과 \"합성 mock 기준 — 실 eHR 수치는 9월 W1 실 fixture 이후 재측정\" 문구 추가. main()에 symbol_index.load(adapter)로 그래프 주입(app/main.py::_make_mapping_service와 동일 배선), environment.json에 graph_enabled·graph_node_count·graph_edge_count 기록. tests/test_retrieval_benchmark.py에 5개 테스트 추가(쌍 조건 동일성, graph_off==verified_rerank_on 회귀, graph_hybrid의 recall 무변화·불필요후보/candidate 증가를 숨기지 않고 리포트, test_file_recall 계산, graph_enabled 배선). verify.sh full 통과(907 passed, 10 skipped).",
+      "completed_at": "2026-08-20T14:18:15+0900"
+    }
+  ],
+  "created_at": "2026-08-20T13:54:16+0900",
+  "total_cost_usd": 6.2029,
+  "completed_at": "2026-08-20T14:18:15+0900"
+}

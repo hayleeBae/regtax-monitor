@@ -83,3 +83,24 @@ def test_configurable_threshold_is_deterministic() -> None:
     second = engine.decide(_input())
     assert first == second
     assert first.decision is AutomationDecision.MANUAL_REVIEW_REQUIRED
+
+
+def test_rag_plus_code_graph_is_not_two_independent_sources() -> None:
+    candidate = _candidate(sources=(RetrievalSource.RAG, RetrievalSource.CODE_GRAPH))
+    result = AutomationPolicyEngine().decide(_input(candidates=(candidate,)))
+    assert "retrieval_evidence_insufficient" in {reason.code for reason in result.block_reasons}
+    assert result.decision is not AutomationDecision.DRAFT_ALLOWED
+
+
+def test_rag_plus_constant_match_still_satisfies_two_sources() -> None:
+    candidate = _candidate(sources=(RetrievalSource.RAG, RetrievalSource.CONSTANT_MATCH))
+    result = AutomationPolicyEngine().decide(_input(candidates=(candidate,)))
+    assert "retrieval_evidence_insufficient" not in {reason.code for reason in result.block_reasons}
+    assert result.decision is AutomationDecision.DRAFT_ALLOWED
+
+
+def test_code_graph_alone_is_not_sufficient() -> None:
+    candidate = _candidate(score=1.0, sources=(RetrievalSource.CODE_GRAPH,))
+    result = AutomationPolicyEngine().decide(_input(candidates=(candidate,)))
+    assert "retrieval_evidence_insufficient" in {reason.code for reason in result.block_reasons}
+    assert result.decision is not AutomationDecision.DRAFT_ALLOWED

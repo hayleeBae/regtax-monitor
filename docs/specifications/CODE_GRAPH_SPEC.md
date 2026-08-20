@@ -1,142 +1,139 @@
 # Code Graph Specification
 
-- 문서 상태: Later Phase Implementation Ready
-- 관련 Issue: `#0019`, `#0020`
+- 문서 상태: **실물 정합 갱신 (2026-08-20, 이슈 #0020 설계 승인)** — 이 문서는 실제 구현
+  `app/embedding/symbol_index.py`(#0019)를 기준으로 한다. 이전 버전이 기술하던
+  CodeSymbol/CodeRelation·SQLite·neighbors API·commit snapshot은 **실제로 구현되지 않았고,
+  도입하지 않는다**(ADR-017). 코드가 기준이다.
+- 관련 Issue: `#0019`(그래프 구축, 완료), `#0020`(검색 연결)
 - 버전: `code-graph-v1`
 
 ## 1. 목적
 
-텍스트 검색이 찾은 계산 로직 주변의 Mapper, VO, 테스트 등 함께 수정할 가능성이 높은 파일을 확장 검색한다. 그래프는 RAG를 대체하지 않는다.
+텍스트 검색이 찾은 계산 로직 주변의 Mapper·VO·테스트 등 함께 수정할 가능성이 높은
+파일을 확장 검색한다. 그래프는 RAG를 대체하지 않으며, 이미 나온 후보를 seed로 넓히는
+**후처리**다.
 
-## 2. 초기 범위
+## 2. 범위 / 비범위
 
-- Java class/method/call/constant usage
-- MyBatis namespace와 statement id
-- mapper interface method ↔ XML statement
-- 테스트 class/method ↔ production method
-- SQL alias와 단순 VO property
+- 범위: Java class/method/constant, MyBatis statement, SQL statement 노드 + 휴리스틱 관계,
+  그리고 이들을 검색에 연결(#0020).
+- 비범위: 완전한 compiler analysis, reflection, runtime graph, **SQLite/Neo4j 저장**,
+  **tree-sitter 등 신규 파서 도입**(회사망 SSL 제약 — regex+중괄호 매칭만).
 
-비범위: 완전한 compiler analysis, reflection, runtime graph, 모든 framework, Neo4j 필수 도입.
+## 3. 모델 (실물)
 
-## 3. 모델
+`SymbolKind`: JAVA_CLASS, JAVA_METHOD, MYBATIS_STATEMENT, TEST_METHOD, CONSTANT, SQL_STATEMENT.
 
-`SymbolKind`: JAVA_CLASS, JAVA_METHOD, JAVA_FIELD, MAPPER_NAMESPACE, MAPPER_STATEMENT, SQL_COLUMN, TEST_CLASS, TEST_METHOD.
-
-`RelationType`: CONTAINS, CALLS, IMPLEMENTS, MAPS_TO, READS_FIELD, WRITES_FIELD, TESTED_BY, USES_CONSTANT.
+`EdgeKind`: CONTAINS(class→member), SERVICE_TO_MAPPER(호출→statement),
+TEST_TO_SERVICE(test→service), USES_CONSTANT.
 
 ```python
 @dataclass(frozen=True)
-class CodeSymbol:
-    symbol_id: str
-    kind: SymbolKind
-    qualified_name: str
-    path: str
-    line_start: int
-    line_end: int
-    content_hash: str
-    parser_version: str
-
+class SymbolNode:
+    id: str; kind: SymbolKind; name: str; path: str; container: str | None
 @dataclass(frozen=True)
-class CodeRelation:
-    source_id: str
-    target_id: str
-    relation_type: RelationType
-    confidence: float
-    evidence: str
-    extractor_version: str
+class SymbolEdge:
+    src: str; dst: str; kind: EdgeKind          # confidence 없음 — kind가 점수를 정한다
+@dataclass(frozen=True)
+class SymbolGraph:
+    nodes: tuple[SymbolNode, ...]; edges: tuple[SymbolEdge, ...]; skipped_files: int
 ```
 
-## 4. Symbol ID
+- **노드에 코드 본문을 담지 않는다**(경로·이름·컨테이너만) — 캐시 반출 사고 방지.
+- 엣지는 휴리스틱이며 "일부 연결"이 수용 기준이다. dangling(대상 노드 없는 엣지) 금지.
 
-`sha256(repository_id + path + kind + qualified_name)`. line은 ID에 넣지 않는다. overload는 signature 포함.
+## 4. Symbol ID (실물)
 
-## 5. 저장
+읽기 쉬운 안정 식별자: `java:FQN`, `java:FQN#method`, `test:FQN#method`,
+`const:FQN.NAME`, `mybatis:namespace.statementId`, `sql:path#verb:table`. sha256 미사용.
+중복 id(오버로드·반복 statement)는 첫 번째만.
 
-초기 SQLite: code_index_snapshots, code_symbols, code_relations. snapshot key는 commit + parser version + repository id.
+## 5. 저장 (실물)
 
-## 6. Parser
+인메모리 `SymbolGraph` + JSON 캐시 `symbol_index_cache.json`(gitignore, 자동 재생성,
+본문 없음). **SQLite/commit-keyed snapshot 없음** — `term_dict`/`const_inventory`와 같은
+캐시 규약. 빈 그래프는 캐시하지 않는다.
 
-Java는 tree-sitter 등 경량 parser 우선, dependency 추가는 ADR. regex fallback은 package/class/method/call/constant 최소 정보만 추출하고 confidence를 낮춘다.
-
-MyBatis는 XML parser로 namespace, statement, resultMap, type, alias, include를 추출한다.
-
-## 7. 관계
-
-- Java mapper interface qualified name = XML namespace
-- method name = statement id
-- service call과 mapper method
-- test call과 service method
-- constant 위치와 enclosing symbol
-
-모호하면 relation confidence를 낮춘다.
-
-## 8. Snapshot Build
+## 6. Build
 
 ```python
-class CodeGraphIndexer:
-    def build(self, codebase: CodebaseAdapter, repository_commit: str) -> CodeGraphSnapshot: ...
+def harvest(adapter) -> SymbolGraph            # adapter.list_files()/read_file() 경유
+def load(adapter, refresh=False) -> SymbolGraph  # 캐시 로드 or 수확
 ```
 
-commit 변경 시 새 snapshot. unchanged file hash 재사용은 optional.
+파일 하나의 파싱 실패는 warning 후 계속(파일 단위 try/except, `skipped_files`로 계측).
+소스 접근은 `CodebaseAdapter`만 경유한다(`EXCLUDED_DIRS`·인코딩 처리 공유).
 
-## 9. Query
+## 7. 관계 (휴리스틱)
+
+CONTAINS(container가 실재 클래스일 때만), SERVICE_TO_MAPPER(namespace/매퍼호출 참조),
+TEST_TO_SERVICE(test 파일이 참조하는 service 클래스/메서드), USES_CONSTANT(`Class.CONST`
+또는 그래프 전역 유일명일 때 맨몸 `CONST`). 못 찾으면 안 잇는다(오탐 억제 우선).
+
+## 8. 이웃 순회 (#0020 신설 — #0019엔 없음)
+
+`SymbolGraph.edges`로 인접 리스트를 만들고 seed 노드에서 이웃을 넓힌다.
 
 ```python
-class CodeGraph:
-    def neighbors(self, symbol_id: str, relation_types: set[RelationType], depth: int = 1, limit: int = 20): ...
+def neighbors(graph, seed_ids, edge_allowlist, depth=1, max_neighbors=...) -> list[(SymbolNode, EdgeKind, path)]
 ```
 
-기본 depth 1, depth 2 제한. cycle/visited 관리.
+기본 depth 1, 최대 depth 2. visited/cycle 관리. edge_allowlist·seed top-N·max_neighbor·
+산출물(EXCLUDED_DIRS) 제외로 폭증 방지.
 
-## 10. Retrieval 연결
+## 9. Retrieval 연결 (#0020 — 조정 설계, ADR-017)
 
-seed candidate에서 관계 파일 확장:
+**그래프는 독립 provider가 아니라 orchestrator의 "merge 이후 확장 단계"다.**
 
-```text
-TaxService.calculateChildTaxCredit
-→ CALLS TaxMapper.selectChildren
-→ MAPS_TO TaxMapper.xml#selectChildren
-→ TESTED_BY TaxServiceTest.childCredit
-```
+파이프라인: `providers → merge → **graph-expand** → rerank → truncate`.
 
-예시 score: maps_to 0.75, uses_constant 0.70, tested_by 0.65, calls 0.60, regex relation 최대 0.40.
+- **`config.graph_enabled`(기본 False)로 가드** — off면 결과가 오늘과 **바이트 동일**(동작
+  보존). 기존 rerank 단계(`if reranker and config.rerank_enabled`)와 동일 패턴.
+- **seed = merge된 상위 N 후보 재사용** — RagProvider가 이미 계산한 후보를 seed로 삼는다.
+  **RAG를 다시 돌리지 않는다**(이중 RAG 금지).
+- seed 후보 → 그 경로/심볼을 `SymbolNode`에 매핑 → `neighbors()`로 관계 파일 확장 →
+  확장 파일을 `RetrievalSource.CODE_GRAPH` evidence로 후보에 얹거나 신규 후보로 추가.
+- EdgeKind별 고정 점수: service_to_mapper 0.75, uses_constant 0.70, test_to_service 0.65,
+  contains 0.60. (confidence가 없어 kind가 점수를 정한다. 절대값은 9월 W4 캘리브레이션 대상.)
 
-Graph 단독 evidence는 automation multi-source 조건을 충족하지 않는다.
+## 10. 자동화 게이트 — CODE_GRAPH는 독립 근거가 아니다 (D5 확정)
 
-## 11. 폭증 방지
+그래프 evidence는 seed에 **인과적으로 종속**되므로 automation 정책의
+`min_independent_sources` 카운트에서 **제외**한다. 따라서:
+- graph 단독 후보는 물론, RAG seed + graph 후보도 graph를 두 번째 독립 근거로 세지 않는다.
+- 그래프는 **draft 허용을 단독으로도 borrowed seed로도 유발하지 못한다.** (스펙 원문
+  "graph 단독 불가"를 인과 종속까지 넓혀 해석 — 안전 우선, 재현율>초안품질 원칙.)
 
-seed top N, relation allowlist, depth, module filter, max neighbor, visited, generated/vendor 제외.
+## 11. 설명 가능성 / 오류
 
-## 12. 설명 가능성
+- evidence에 relation path와 설명(seed→edge→target)을 담는다.
+- malformed 파일 skip, unresolved 관계 미생성, 그래프 로드 실패 시 확장 단계 skip(기존 결과
+  유지). 확장이 비어도 오류 아님.
 
-evidence에 relation path와 설명을 포함한다.
+## 12. 평가 (ablation, §14 기존 유지)
 
-## 13. 오류
+`retrieval_benchmark`에서 graph on/off를 비교: 관련 파일 Recall@5, test file recall,
+unnecessary file rate, candidate count, latency. **그래프가 불필요후보율을 높이면 그대로
+보고**한다(그래프가 늘 이득은 아니다 — ablation이 depth/edge 확대를 결정). 현 ablation은
+합성 mock 기반이며, 실 eHR 수치는 9월 W1(실 fixture) 이후 재측정한다.
 
-파일별 parser 실패는 warning 후 계속, malformed XML skip, duplicate symbol disambiguate, unresolved call 미생성, commit mismatch 시 provider skip, repo size/time limit.
+## 13. 테스트
 
-## 14. 평가
+Java symbol/overload, MyBatis link, service call, test relation, malformed isolation,
+cycle/depth 제한, **graph_enabled=off 시 결과 불변(회귀 고정)**, CODE_GRAPH가 독립 source로
+안 세짐(게이트), 이중 RAG 미발생(seed 재사용).
 
-`graph_hybrid`와 기준선에서 관련 파일 Recall@5, test file recall, unnecessary file rate, candidate count, latency를 비교한다.
+## 14. 수용 기준 (AC)
 
-## 15. 테스트
+- mock repo 심볼 그래프 로드, 이웃 순회(depth/allowlist/폭증방지)
+- graph-expand 단계 on/off — off면 기존 결과 불변
+- seed 재사용(RAG 재실행 없음) 검증
+- CODE_GRAPH가 자동화 2-source를 단독/borrowed 로 충족하지 않음
+- ablation report(recall·불필요후보·latency)
+- `bash scripts/verify.sh full` 통과
 
-Java symbol/overload, MyBatis link, service call, test relation, malformed isolation, cycle/depth, graph evidence, commit mismatch.
+## 15. Claude Code 요청문
 
-## 16. 수용 기준
-
-- mock repo symbol index
-- SQLite 관계 저장
-- graph provider on/off
-- graph 단독 draft 허용 금지
-- ablation report
-
-## 17. Claude Code 요청문
-
-```text
-Issue #0019와 #0020은 앞선 평가·검색·감사 기능 완료 후 구현하라.
-SQLite를 사용하고 Neo4j를 도입하지 않는다.
-parser 실패 파일 하나가 전체 index를 중단하지 않게 한다.
-GraphProvider는 seed candidate를 확장하며 graph 단독으로 DRAFT_ALLOWED를 충족하지 않는다.
-graph_hybrid 실험에서 recall과 불필요 후보를 함께 보고한다.
-```
+SQLite/Neo4j/신규 파서 도입 금지. parser 실패 한 파일이 전체를 멈추지 않게. graph-expand는
+merge된 seed를 재사용(이중 RAG 금지)하고, off면 동작 불변. graph는 draft를 단독/종속으로도
+허용하지 않는다. ablation에서 recall과 불필요후보를 함께 보고한다.

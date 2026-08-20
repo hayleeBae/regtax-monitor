@@ -83,7 +83,10 @@ class AutomationPolicyEngine:
                 reasons.append(BlockReason("retrieval_score_low", "최상위 검색 점수가 기준 미만"))
             sources = {evidence.source for evidence in top.evidences}
             valid_verified = RetrievalSource.VERIFIED_MAPPING in sources and not top.stale
-            if len(sources) < self.thresholds.min_independent_sources and not valid_verified:
+            independent = {
+                evidence.source for evidence in top.evidences if evidence.source is not RetrievalSource.CODE_GRAPH
+            }
+            if len(independent) < self.thresholds.min_independent_sources and not valid_verified:
                 reasons.append(BlockReason("retrieval_evidence_insufficient", "독립 검색 근거가 부족함"))
             if all(candidate.stale for candidate in policy_input.candidates):
                 reasons.append(BlockReason("stale_only_evidence", "현재 코드에서 유효한 검색 근거가 없음"))

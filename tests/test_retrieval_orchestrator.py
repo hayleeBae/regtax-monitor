@@ -8,6 +8,13 @@ from app.domain.common.enums import RetrievalSource
 from app.domain.mappings.decisions import MappingDecisionType
 from app.domain.mappings.reranking import DecisionContext
 from app.domain.retrieval import CandidateLocation, RetrievalCandidate, RetrievalEvidence
+from app.embedding.symbol_index import (
+    EdgeKind,
+    SymbolEdge,
+    SymbolGraph,
+    SymbolKind,
+    SymbolNode,
+)
 from app.retrieval.orchestrator import (
     ProviderResult,
     RetrievalConfig,
@@ -359,3 +366,92 @@ def test_rerank_receives_merge_stale_applied_for_stale_candidates(monkeypatch) -
     assert flags == [False, True]
     assert {call["query_article_id"] for call in captured} == {"법령001:제59조의4"}
     assert {call["query_change_type"] for call in captured} == {"rate_change"}
+
+
+# --- #0020 step 1: merge 이후 graph-expand 단계 ----------------------------
+
+SEED_NODE = SymbolNode(
+    id="java:Tax#calculate",
+    kind=SymbolKind.JAVA_METHOD,
+    name="calculate",
+    path="src/Tax.java",
+    container="Tax",
+)
+NEIGHBOR_NODE = SymbolNode(
+    id="mybatis:TaxMapper.selectRate",
+    kind=SymbolKind.MYBATIS_STATEMENT,
+    name="selectRate",
+    path="src/TaxMapper.xml",
+    container="TaxMapper",
+)
+GRAPH = SymbolGraph(
+    nodes=(SEED_NODE, NEIGHBOR_NODE),
+    edges=(
+        SymbolEdge(
+            "java:Tax#calculate", "mybatis:TaxMapper.selectRate", EdgeKind.SERVICE_TO_MAPPER
+        ),
+    ),
+    skipped_files=0,
+)
+
+
+def test_graph_expand_off_by_default_is_byte_identical() -> None:
+    """graph_enabled=False(기본)면 graph 주입 여부와 무관하게 결과가 바이트 동일해야 한다(ADR-017)."""
+    baseline = RetrievalOrchestrator(
+        [_rag_provider(("src/Tax.java", 0.9))]
+    ).retrieve(RetrievalQuery("query"))
+    response = RetrievalOrchestrator(
+        [_rag_provider(("src/Tax.java", 0.9))], graph=GRAPH
+    ).retrieve(RetrievalQuery("query"))
+
+    assert response.candidates == baseline.candidates
+    assert response.warnings == baseline.warnings
+    baseline_payload, response_payload = baseline.to_dict(), response.to_dict()
+    for key in baseline_payload:
+        if key == "duration_ms":
+            continue
+        assert response_payload[key] == baseline_payload[key]
+
+
+def test_graph_expand_skipped_when_graph_not_injected() -> None:
+    """graph=None이면 graph_enabled=True 여도 확장 단계가 skip된다."""
+    rag = _rag_provider(("src/Tax.java", 0.9))
+    config = RetrievalConfig(graph_enabled=True)
+    response = RetrievalOrchestrator([rag]).retrieve(RetrievalQuery("query"), config)
+
+    assert {c.location.path for c in response.candidates} == {"src/Tax.java"}
+
+
+def test_graph_expand_enabled_adds_neighbor_as_code_graph_candidate() -> None:
+    rag = _rag_provider(("src/Tax.java", 0.9))
+    config = RetrievalConfig(graph_enabled=True)
+    response = RetrievalOrchestrator([rag], graph=GRAPH).retrieve(
+        RetrievalQuery("query"), config
+    )
+
+    neighbor = next(
+        c for c in response.candidates if c.location.path == "src/TaxMapper.xml"
+    )
+    assert {e.source for e in neighbor.evidences} == {RetrievalSource.CODE_GRAPH}
+    evidence = neighbor.evidences[0]
+    assert evidence.normalized_score == 0.75  # service_to_mapper 고정 점수
+    assert evidence.explanation == "java:Tax#calculate -[service_to_mapper]-> mybatis:TaxMapper.selectRate"
+
+
+def test_graph_expand_does_not_call_rag_again() -> None:
+    """확장 단계가 seed 를 얻기 위해 adapter.search(RAG) 를 다시 부르지 않는다(이중 RAG 금지)."""
+    rag = _rag_provider(("src/Tax.java", 0.9))
+    config = RetrievalConfig(graph_enabled=True)
+    RetrievalOrchestrator([rag], graph=GRAPH).retrieve(RetrievalQuery("query"), config)
+
+    assert rag.calls == 1
+
+
+def test_graph_expand_runs_before_rerank() -> None:
+    """확장된 후보도 rerank 대상이어야 한다 — merge → graph-expand → rerank 순서."""
+    rag = _rag_provider(("src/Tax.java", 0.9))
+    reranker = _Reranker()
+    config = RetrievalConfig(graph_enabled=True)
+    RetrievalOrchestrator([rag], reranker, graph=GRAPH).retrieve(_CONTEXT_QUERY, config)
+
+    assert len(reranker.calls[0][1]) == 2
