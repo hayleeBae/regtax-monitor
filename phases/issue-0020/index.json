@@ -25,7 +25,7 @@
       "status": "completed",
       "started_at": "2026-08-20T14:07:55+0900",
       "summary": "app/policy/automation.py::decide에서 독립 source 카운트를 sources(top.evidences 전체 source 집합)와 분리해 independent(CODE_GRAPH 제외) 집합으로 계산, min_independent_sources 판정에 independent 사용. VERIFIED_MAPPING 예외·다른 block 사유(score_low·candidate_missing 등)는 불변. tests/test_automation_policy.py에 3개 추가({RAG,CODE_GRAPH}→insufficient, {RAG,CONSTANT_MATCH}→종전대로 통과 회귀, CODE_GRAPH 단독→insufficient). verify.sh full 통과(902 passed, 10 skipped).",
-      "completed_at": "2026-08-20T14:09:36+0900"
+      "completed_at": "2026-08-20T14:09:59+0900"
     },
     {
       "step": 3,
@@ -34,5 +34,5 @@
     }
   ],
   "created_at": "2026-08-20T13:54:16+0900",
-  "total_cost_usd": 3.001
+  "total_cost_usd": 3.6495
 }
