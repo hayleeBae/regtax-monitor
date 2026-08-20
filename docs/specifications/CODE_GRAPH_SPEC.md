@@ -132,6 +132,21 @@ cycle/depth 제한, **graph_enabled=off 시 결과 불변(회귀 고정)**, CODE
 - ablation report(recall·불필요후보·latency)
 - `bash scripts/verify.sh full` 통과
 
+## 14-1. 실측 검증 (2026-08-20, 맥 M3 — 건수만, 경로·코드 미기재)
+
+실 eHR 인덱스 + 실 25 법령개정(regtax.db)에 graph on/off 적용:
+- 그래프 구축: 노드 4,969 / 엣지 4,150 (정상).
+- **graph on/off 차이: 0/25** (CODE_GRAPH evidence 0건, top5 변화 0건, 추가 후보 0). 느슨한 설정
+  (seed_top_n 8·depth 2·엣지 4종·max 50)으로도 **0/25** — 설정이 아니라 근본.
+- mock ablation과 일치(recall 이득 없음, 불필요후보만 증가).
+
+**근본 원인:** `symbol_index._EXTRACTORS = java/xml/sql`만이라 **xfdl 미파싱**. eHR 세법 로직·한도값이
+xfdl에 있어(§eHR 인덱싱 실측) 상위 후보(xfdl)에 그래프 노드가 없다 → 확장 불가. java/xml seed도
+cross-file 이웃이 거의 없다(CONTAINS=같은 파일).
+
+**판정:** `graph_enabled=False` 기본 유지가 옳다. 유효화하려면 **xfdl 심볼·엣지 추출(#0019 확장)**
+후 재측정이 선행돼야 한다(후속 작업). 현 상태로 켜지 않는다.
+
 ## 15. Claude Code 요청문
 
 SQLite/Neo4j/신규 파서 도입 금지. parser 실패 한 파일이 전체를 멈추지 않게. graph-expand는
