@@ -144,8 +144,13 @@ cycle/depth 제한, **graph_enabled=off 시 결과 불변(회귀 고정)**, CODE
 xfdl에 있어(§eHR 인덱싱 실측) 상위 후보(xfdl)에 그래프 노드가 없다 → 확장 불가. java/xml seed도
 cross-file 이웃이 거의 없다(CONTAINS=같은 파일).
 
-**판정:** `graph_enabled=False` 기본 유지가 옳다. 유효화하려면 **xfdl 심볼·엣지 추출(#0019 확장)**
-후 재측정이 선행돼야 한다(후속 작업). 현 상태로 켜지 않는다.
+**판정:** `graph_enabled=False` 기본 유지가 옳다.
+
+**후속 실험 결론 (2026-08-20, ADR-018):** xfdl 심볼 + 파일 간 특이수치 공동출현 엣지(SHARES_VALUE)를
+추가해 그래프를 3배(노드 15,796·엣지 14,568)로 키워 재측정했으나 **여전히 0/25**. 엣지 94%가
+same-file CONTAINS, **SERVICE_TO_MAPPER=0** — eHR이 서비스 호출을 **SvcID 런타임 간접참조**로 해석해
+콜그래프가 코드 텍스트에 없다(xfdl뿐 아니라 java→mapper도 동일). **그래프 검색은 이 코드베이스의
+레버가 아니라고 확정하고, 실험 코드는 채택하지 않는다.** `graph_enabled=False` 영구 유지.
 
 ## 15. Claude Code 요청문
 
