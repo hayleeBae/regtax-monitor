@@ -1,0 +1,34 @@
+{
+  "project": "regtax-monitor",
+  "phase": "issue-0025",
+  "owner": "haylee",
+  "steps": [
+    {
+      "step": 0,
+      "name": "db-registry",
+      "status": "completed",
+      "started_at": "2026-08-19T17:51:46+0900",
+      "summary": "app/collector/registry.py에 DbItem(frozen dataclass)·Domain.db_items·DbDataRegistry 추가, load_domains()가 db_items 파싱(키 없으면 []); domains.json tax/hr에 빈 db_items 추가; DbDataRegistry.match(law_id, article_no) -> DbItem | None — law_id 정확일치 AND article_pattern 부분일치(빈 패턴은 매칭 안 함), 정확매칭만 수행하고 추론 없음; tests/test_db_registry.py 신규(회귀 고정 포함) — verify.sh full 874 passed",
+      "completed_at": "2026-08-19T17:54:27+0900"
+    },
+    {
+      "step": 1,
+      "name": "routing-decision",
+      "status": "completed",
+      "started_at": "2026-08-19T17:54:28+0900",
+      "summary": "AutomationDecision.DB_UPDATE_GUIDANCE 추가(app/domain/common/enums.py); app/application/services.py에 DbUpdateGuidance(frozen dataclass: item_label/law_name/article/before/after/guidance, db_hint 없음) 신규; ProposalService.propose(policy_input, generator, db_match=None, guidance=None) — db_match가 있으면 PolicyResult(DB_UPDATE_GUIDANCE,(),policy.version)와 asdict(guidance)를 담은 ProposalResult(blocked=True)를 반환하고 generator() 미호출, db_match=None이면 기존 동작과 100% 동일(회귀); tests/test_pipeline_services.py에 라우팅/회귀/스키마비노출 테스트 추가, tests/test_domain_foundation.py 계약 테스트를 신규 enum값 포함하도록 갱신 — verify.sh full 877 passed",
+      "completed_at": "2026-08-19T17:59:42+0900"
+    },
+    {
+      "step": 2,
+      "name": "apply-integration",
+      "status": "completed",
+      "started_at": "2026-08-20T09:25:52+0900",
+      "summary": "app/main.py의 apply() 라우트에 DB 라우팅 삽입 — article_id 계산 직후, 매핑 조회(verified_mappings/mappings 422 체크)보다 먼저 DbDataRegistry(load_domains()).match(row.law_id, row.article_no) 판정; 매칭 시 ChangeNormalizer로 값 델타 파생(신규 헬퍼 _db_value_delta — rate/money/date/duration/age 순으로 첫 델타의 raw 값을 before/after로, 없으면 \"\"), DbUpdateGuidance 구성 후 ProposalService().propose(policy_input, generator, db_match=, guidance=) 호출(generator·매핑조회·LLM 미진입) — 응답 {blocked:true, decision:'db_update_guidance', item_label, law_name, article, before, after, guidance, run_id}, POLICY_DECIDED 감사 이벤트 기록 후 즉시 audit.complete(); 미매칭 시 기존 로직(verified/confidence 매핑 → 422 → 정책 게이트 → LLM patch) 그대로 보존; tests/test_apply_db_routing.py 신규(매칭+매핑없음→200/db_update_guidance, 매칭+매핑있음→여전히 db_update_guidance로 우선순위 확인, 미매칭+매핑없음→기존 422 회귀), LLM client·_make_mapping_service를 raise 스텁으로 교체해 미진입을 직접 검증 — verify.sh full 880 passed",
+      "completed_at": "2026-08-20T09:33:16+0900"
+    }
+  ],
+  "created_at": "2026-08-19T17:51:46+0900",
+  "total_cost_usd": 4.8428,
+  "completed_at": "2026-08-20T09:33:17+0900"
+}

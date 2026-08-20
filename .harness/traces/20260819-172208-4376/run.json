@@ -1,0 +1,20 @@
+{
+  "run_id": "20260819-172208-4376",
+  "started_at": "2026-08-19T17:22:08+0900",
+  "finished_at": "2026-08-19T17:22:20+0900",
+  "task": "regtax-monitor / issue-0025",
+  "stage_entry": "implement",
+  "harness_version": "1.1.0",
+  "git": {
+    "branch": "feat-issue-0025",
+    "base_commit": "b87e101"
+  },
+  "outcome": "failed",
+  "failure_refs": [
+    "F-20260819-0001"
+  ],
+  "phase_dir": "issue-0025",
+  "total_steps": 3,
+  "final_commit": "b4984bc",
+  "total_cost_usd": 0.0
+}

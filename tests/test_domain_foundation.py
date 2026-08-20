@@ -46,10 +46,12 @@ def test_change_type_values_match_spec():
 
 
 def test_automation_decision_values_match_spec():
+    # db_update_guidance: ADR-016 / DB_DATA_ROUTING_SPEC §5 (이슈 #0025).
     assert {d.value for d in AutomationDecision} == {
         "draft_allowed",
         "analysis_only",
         "manual_review_required",
+        "db_update_guidance",
     }
 
 

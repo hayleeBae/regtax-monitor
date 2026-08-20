@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Callable, Protocol
 
+from app.collector.registry import DbItem
 from app.domain.changes.classification import ChangeClassification
 from app.domain.changes.normalization import ChangeNormalizer, NormalizedChange
-from app.domain.common.enums import RetrievalSource
+from app.domain.common.enums import AutomationDecision, RetrievalSource
 from app.domain.retrieval import RetrievalCandidate
 from app.policy.automation import AutomationPolicyEngine, PolicyInput, PolicyResult
 from app.retrieval.orchestrator import RetrievalConfig, RetrievalQuery
@@ -98,6 +99,19 @@ class MappingService:
 
 
 @dataclass(frozen=True)
+class DbUpdateGuidance:
+    """DB 데이터 개정 안내 산출물(DB_DATA_ROUTING_SPEC §6) — 실제 DB 스키마
+    원문(테이블/컬럼명)은 포함하지 않는다. 일반화된 라벨과 조문 전후값만 담는다."""
+
+    item_label: str
+    law_name: str
+    article: str
+    before: str
+    after: str
+    guidance: str
+
+
+@dataclass(frozen=True)
 class ProposalResult:
     blocked: bool
     policy: PolicyResult
@@ -112,7 +126,18 @@ class ProposalService:
         self,
         policy_input: PolicyInput,
         generator: Callable[[], dict],
+        db_match: DbItem | None = None,
+        guidance: DbUpdateGuidance | None = None,
     ) -> ProposalResult:
+        # db_match가 있으면 DbDataRegistry 정확 매칭 건이다 — 코드 draft 정책
+        # 게이트·LLM 생성 경로에 진입하지 않는다(ADR-016, 스펙 §5). generator()는
+        # 절대 호출하지 않는다.
+        if db_match is not None:
+            db_decision = PolicyResult(
+                AutomationDecision.DB_UPDATE_GUIDANCE, (), self.policy.version
+            )
+            proposal = asdict(guidance) if guidance is not None else None
+            return ProposalResult(True, db_decision, proposal)
         decision = self.policy.decide(policy_input)
         if not decision.draft_allowed:
             return ProposalResult(True, decision, None)
