@@ -16,6 +16,7 @@ from app.evaluation.metrics import (
     mean_reciprocal_rank,
     precision_at_k,
     reciprocal_rank,
+    unnecessary_file_rate,
 )
 from app.evaluation.case import EvaluationCase
 from app.domain.mappings.reranking import RERANK_VERSION
@@ -30,6 +31,8 @@ class RetrievalExperimentConfig:
     normalization_version: str = "retrieval-normalization-v1"
     # 기존 5개 실험은 rerank 없이 측정한다 — 과거 결과와 비교 가능해야 한다.
     rerank_enabled: bool = False
+    # graph-expand ablation(#0020 step 3, CODE_GRAPH_SPEC §12) — 기본 False.
+    graph_enabled: bool = False
 
 
 @dataclass(frozen=True)
@@ -56,11 +59,15 @@ ALL_SOURCES: tuple[str, ...] = (
 
 
 def default_experiments() -> tuple[RetrievalExperimentConfig, ...]:
-    """기존 5개 실험 뒤에 rerank on/off 쌍을 붙인다.
+    """기존 5개 실험 뒤에 rerank on/off 쌍, 그 뒤에 graph on/off 쌍을 붙인다.
 
     앞의 5개는 id·순서·소스 조합을 바꾸지 않는다(과거 벤치마크와 비교 가능성).
-    뒤의 두 변형은 provider 조합·top_k·정렬 조건이 완전히 같고 `rerank_enabled`
+    rerank 쌍은 provider 조합·top_k·정렬 조건이 완전히 같고 `rerank_enabled`
     하나만 다르다 — 다른 조건이 섞이면 차이의 원인을 rerank 로 특정할 수 없다.
+    graph 쌍(`graph_off`/`graph_hybrid`, CODE_GRAPH_SPEC §12)도 같은 원칙이다:
+    `verified_rerank_on`과 조건이 완전히 같고 `graph_enabled` 하나만 다르다.
+    `graph_off`는 graph 도입 전 기준선(`verified_rerank_on`)과 조건이 동일하므로
+    같은 데이터셋에서 두 실험의 지표가 일치해야 한다(회귀 고정).
     """
     return (
         RetrievalExperimentConfig("rag_only", ("rag",)),
@@ -78,6 +85,12 @@ def default_experiments() -> tuple[RetrievalExperimentConfig, ...]:
         ),
         RetrievalExperimentConfig(
             "verified_rerank_on", ALL_SOURCES, rerank_enabled=True
+        ),
+        RetrievalExperimentConfig(
+            "graph_off", ALL_SOURCES, rerank_enabled=True, graph_enabled=False
+        ),
+        RetrievalExperimentConfig(
+            "graph_hybrid", ALL_SOURCES, rerank_enabled=True, graph_enabled=True
         ),
     )
 
@@ -131,6 +144,7 @@ class RetrievalBenchmark:
                     "scoring_version": item.scoring_version,
                     "normalization_version": item.normalization_version,
                     "rerank_enabled": item.rerank_enabled,
+                    "graph_enabled": item.graph_enabled,
                 }
                 for item in self.experiments
             ],
@@ -140,6 +154,11 @@ class RetrievalBenchmark:
         return BenchmarkResult(output_dir, summary)
 
 
+def _is_test_path(path: str) -> bool:
+    """test 파일 판정 — symbol_index.py의 `is_test_path` 어휘와 동일(`"test" in path.lower()`)."""
+    return "test" in path.lower()
+
+
 def _aggregate(cases: Sequence[BenchmarkCase]) -> dict:
     count = len(cases)
     if not count:
@@ -147,6 +166,9 @@ def _aggregate(cases: Sequence[BenchmarkCase]) -> dict:
             "case_count": 0, "recall_at_1": 0.0, "recall_at_5": 0.0,
             "mrr": 0.0, "precision_at_5": 0.0, "average_latency_ms": 0.0,
             "provider_failure_count": 0,
+            "test_file_recall_at_5": 0.0,
+            "unnecessary_file_rate": 0.0,
+            "average_candidate_count": 0.0,
         }
     pairs = [(case.relevant_files, case.predicted_files) for case in cases]
     return {
@@ -157,21 +179,36 @@ def _aggregate(cases: Sequence[BenchmarkCase]) -> dict:
         "precision_at_5": sum(precision_at_k(*pair, 5) for pair in pairs) / count,
         "average_latency_ms": sum(case.duration_ms for case in cases) / count,
         "provider_failure_count": sum(case.provider_failure_count for case in cases),
+        # graph ablation 지표(CODE_GRAPH_SPEC §12): 관련 test 파일 recall, 불필요후보율, 후보 수.
+        "test_file_recall_at_5": sum(
+            file_recall_at_k(tuple(f for f in rel if _is_test_path(f)), pred, 5)
+            for rel, pred in pairs
+        ) / count,
+        "unnecessary_file_rate": sum(
+            unnecessary_file_rate(pred, rel) for rel, pred in pairs
+        ) / count,
+        "average_candidate_count": sum(len(pred) for _rel, pred in pairs) / count,
     }
 
 
 def _render_comparison(summary: dict[str, dict]) -> str:
     lines = [
         "# Retrieval Ablation Comparison", "",
-        "| Experiment | Recall@1 | Recall@5 | MRR | Precision@5 | Latency(ms) | Provider failures |",
-        "|---|---:|---:|---:|---:|---:|---:|",
+        "| Experiment | Recall@1 | Recall@5 | MRR | Precision@5 | Test File Recall@5 | "
+        "Unnecessary File Rate | Candidate Count | Latency(ms) | Provider failures |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for name, metrics in summary.items():
         lines.append(
             f"| {name} | {metrics['recall_at_1']:.3f} | {metrics['recall_at_5']:.3f} | "
             f"{metrics['mrr']:.3f} | {metrics['precision_at_5']:.3f} | "
+            f"{metrics['test_file_recall_at_5']:.3f} | {metrics['unnecessary_file_rate']:.3f} | "
+            f"{metrics['average_candidate_count']:.2f} | "
             f"{metrics['average_latency_ms']:.1f} | {metrics['provider_failure_count']} |"
         )
+    lines.append("")
+    # 그래프가 불필요후보율을 높이거나 recall 이득이 없어도 그대로 보고한다(CODE_GRAPH_SPEC §12).
+    lines.append("합성 mock 기준 — 실 eHR 수치는 9월 W1 실 fixture 이후 재측정.")
     return "\n".join(lines) + "\n"
 
 
@@ -222,6 +259,7 @@ def run_orchestrator_cases(orchestrator, cases: Sequence[EvaluationCase], experi
                 enabled_sources=enabled,
                 final_top_k=experiment.top_k,
                 rerank_enabled=experiment.rerank_enabled,
+                graph_enabled=experiment.graph_enabled,
             ),
         )
         failures = sum(status.status == "error" for status in response.provider_statuses.values())
@@ -266,6 +304,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--decisions", type=Path)
     args = parser.parse_args(argv)
 
+    from app.embedding import symbol_index
     from app.embedding.indexer import CodeIndexer
     from app.codebase.mock_adapter import MockCodebaseAdapter
     from app.evaluation.decision_fixtures import (
@@ -294,6 +333,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.decisions
         else None
     )
+    # graph-expand ablation(#0020 step 3) — 캐시 로드 or 수확, app/main.py::_make_mapping_service와 동일 배선.
+    graph = symbol_index.load(adapter)
     orchestrator = RetrievalOrchestrator(
         (
             VerifiedMappingProvider(lambda _query: ()),
@@ -302,6 +343,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             ConstantProvider(repo_root, refresh_cache=args.refresh_caches),
         ),
         reranker,
+        graph=graph,
     )
     benchmark = RetrievalBenchmark(
         lambda experiment: run_orchestrator_cases(orchestrator, cases, experiment),
@@ -313,6 +355,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "decisions_fixture": (
                 str(Path(args.decisions).resolve()) if args.decisions else None
             ),
+            "graph_node_count": len(graph.nodes),
+            "graph_edge_count": len(graph.edges),
         },
     )
     result = benchmark.run(args.result_dir, args.run_name)
