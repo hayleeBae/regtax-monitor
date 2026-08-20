@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.codebase.mock_adapter import MockCodebaseAdapter
 from app.codebase.real_adapter import RealCodebaseAdapter
 from app.collector.law_api import ApiNotGrantedError, LawApiClient
-from app.collector.registry import load_domains
+from app.collector.registry import DbDataRegistry, load_domains
 from app.db.database import init_db, get_session
 from app.db.models import LawChange, Mapping, PatchProposal, Review, SyncState
 from app.domain.mappings.decisions import (
@@ -916,6 +916,26 @@ def _record_mapping_decision(
     return decision_id, state
 
 
+def _db_value_delta(normalized) -> tuple[str, str]:
+    """DB 갱신 안내의 before/after 값 델타 — ChangeNormalizer가 잡아낸 첫 값
+    델타를 사용한다(DB_DATA_ROUTING_SPEC §6). 값 델타가 없으면 빈 문자열
+    (추론하지 않는다)."""
+    for deltas in (
+        normalized.rate_changes,
+        normalized.money_changes,
+        normalized.date_changes,
+        normalized.duration_changes,
+        normalized.age_changes,
+    ):
+        if not deltas:
+            continue
+        delta = deltas[0]
+        before = delta.before.raw if delta.before else ""
+        after = delta.after.raw if delta.after else ""
+        return before, after
+    return "", ""
+
+
 def _decision_payload(record) -> dict:
     """결정 1건 직렬화 — 코드 본문은 저장하지도, 반환하지도 않는다(스펙 §7)."""
     return {
@@ -1051,6 +1071,59 @@ def apply(
 
     article_id = f"{row.law_id}:{row.article_no}"
 
+    from app.application.services import DbUpdateGuidance, ProposalService
+    from app.domain.changes.classification import RuleChangeClassifier
+    from app.domain.changes.normalization import ChangeNormalizer
+    from app.policy.automation import PolicyInput
+
+    # DB 데이터 개정 라우팅(ADR-016, DB_DATA_ROUTING_SPEC §5) — 매핑 유무를
+    # 확인하기 전에 먼저 판정한다. 매칭 건이 "사용 가능한 매핑 없음" 422로
+    # 빠지면 안 되고, 매칭되면 매핑 조회·LLM patch 생성 경로에 진입하지 않는다.
+    db_match = DbDataRegistry(load_domains()).match(row.law_id, row.article_no)
+    if db_match is not None:
+        normalized = ChangeNormalizer().normalize(row.before_text or "", row.after_text or "")
+        classification = RuleChangeClassifier().classify(normalized)
+        before, after = _db_value_delta(normalized)
+        guidance = DbUpdateGuidance(
+            item_label=db_match.item_label,
+            law_name=row.law_name,
+            article=row.article_no,
+            before=before,
+            after=after,
+            guidance=db_match.guidance,
+        )
+        policy_input = PolicyInput(
+            change_type=classification.primary_type,
+            classification_confidence=classification.confidence,
+            candidates=(),
+            repository_commit=None,
+            existing_files=frozenset(),
+        )
+        gate = ProposalService().propose(
+            policy_input, lambda: {"allowed": True}, db_match=db_match, guidance=guidance,
+        )
+        audit.record(
+            AuditEventType.POLICY_DECIDED,
+            {
+                "decision": gate.policy.decision.value,
+                "reason_codes": [reason.code for reason in gate.policy.block_reasons],
+                "policy_version": gate.policy.policy_version,
+            },
+        )
+        audit.complete()
+        return {
+            "blocked": True,
+            "law_change_id": change_id,
+            "decision": gate.policy.decision.value,
+            "item_label": guidance.item_label,
+            "law_name": guidance.law_name,
+            "article": guidance.article,
+            "before": guidance.before,
+            "after": guidance.after,
+            "guidance": guidance.guidance,
+            **audit.response_fields(),
+        }
+
     # verified 매핑이 있으면 우선 사용, 없으면 confidence 기준 fallback
     verified_mappings = (
         db.query(Mapping)
@@ -1079,11 +1152,6 @@ def apply(
 
     # 분류·검색 근거·repository 상태를 정책에 전달한다. 정책이 차단하면 LLM patch
     # 생성에 진입하지 않는다. analyze/map 조회 자체는 이 정책과 무관하게 유지된다.
-    from app.application.services import ProposalService
-    from app.domain.changes.classification import RuleChangeClassifier
-    from app.domain.changes.normalization import ChangeNormalizer
-    from app.policy.automation import PolicyInput
-
     normalized = ChangeNormalizer().normalize(row.before_text or "", row.after_text or "")
     classification = RuleChangeClassifier().classify(normalized)
     mapping_service, adapter = _make_mapping_service(db, article_id)
