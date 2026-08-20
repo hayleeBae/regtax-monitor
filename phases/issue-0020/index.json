@@ -33,9 +33,9 @@
       "status": "completed",
       "started_at": "2026-08-20T14:09:59+0900",
       "summary": "app/evaluation/retrieval_benchmark.py에 graph ablation 추가: RetrievalExperimentConfig.graph_enabled(기본 False) 필드, default_experiments()에 graph_off/graph_hybrid 쌍 추가(ALL_SOURCES·rerank_enabled=True 고정, graph_enabled만 다름 — graph_off는 verified_rerank_on과 조건 동일해 지표가 일치해야 함). run_orchestrator_cases가 RetrievalConfig(graph_enabled=...)로 전달. _aggregate에 test_file_recall_at_5(\"test\" in path.lower() 휴리스틱)·unnecessary_file_rate·average_candidate_count 추가, comparison.md에 해당 열과 \"합성 mock 기준 — 실 eHR 수치는 9월 W1 실 fixture 이후 재측정\" 문구 추가. main()에 symbol_index.load(adapter)로 그래프 주입(app/main.py::_make_mapping_service와 동일 배선), environment.json에 graph_enabled·graph_node_count·graph_edge_count 기록. tests/test_retrieval_benchmark.py에 5개 테스트 추가(쌍 조건 동일성, graph_off==verified_rerank_on 회귀, graph_hybrid의 recall 무변화·불필요후보/candidate 증가를 숨기지 않고 리포트, test_file_recall 계산, graph_enabled 배선). verify.sh full 통과(907 passed, 10 skipped).",
-      "completed_at": "2026-08-20T14:22:00+0900"
+      "completed_at": "2026-08-20T14:18:15+0900"
     }
   ],
   "created_at": "2026-08-20T13:54:16+0900",
-  "total_cost_usd": 3.6495
+  "total_cost_usd": 6.2029
 }
