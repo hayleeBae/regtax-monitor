@@ -14,7 +14,10 @@
     {
       "step": 1,
       "name": "graph-expand-stage",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-08-20T13:57:39+0900",
+      "summary": "RetrievalConfig에 graph_enabled(기본 False)·graph_seed_top_n·graph_depth·graph_max_neighbors·graph_edge_allowlist(기본 CONTAINS/SERVICE_TO_MAPPER)·graph_edge_scores(service_to_mapper 0.75/uses_constant 0.70/test_to_service 0.65/contains 0.60) 필드 추가. RetrievalOrchestrator에 graph: SymbolGraph|None 주입 지점 추가, retrieve()에서 merge 직후·rerank 이전에 _graph_expand 실행(graph is not None and config.graph_enabled 가드). _graph_expand는 merged 상위 graph_seed_top_n 후보의 (path,symbol)을 seed_node_ids로 노드 매핑 → neighbors()로 이웃 확장 → GraphHit을 CODE_GRAPH evidence 후보로 만들어 merged와 합친 뒤 _merge_candidates 재호출(기존 후보엔 evidence 추가, 신규는 새 후보로). app/main.py::_make_mapping_service에 graph=symbol_index.load(adapter) 주입. tests/test_retrieval_orchestrator.py에 5개 테스트 추가(off-불변, graph=None skip, CODE_GRAPH evidence 반영, 이중 RAG 미발생, rerank가 확장 후보까지 관측). verify.sh full 통과(899 passed, 10 skipped).",
+      "completed_at": "2026-08-20T14:20:00+0900"
     },
     {
       "step": 2,

@@ -43,6 +43,7 @@ def _make_adapter(indexer=None):
 def _make_mapping_service(db: Session, article_id: str):
     """기존 네 검색원을 #0009 공통 orchestrator로 조합한다."""
     from app.application.services import MappingService
+    from app.embedding import symbol_index
     from app.retrieval.orchestrator import RetrievalOrchestrator
     from app.retrieval.providers import (
         ConstantProvider, DictionaryProvider, RagProvider,
@@ -51,6 +52,7 @@ def _make_mapping_service(db: Session, article_id: str):
 
     indexer = CodeIndexer()
     adapter = _make_adapter(indexer=indexer)
+    graph = symbol_index.load(adapter)
 
     def verified_lookup(_query):
         rows = db.query(Mapping).filter_by(article_id=article_id, verified=True).all()
@@ -82,7 +84,8 @@ def _make_mapping_service(db: Session, article_id: str):
         from app.mappings.reranking_lookup import SqlAlchemyDecisionContextLookup
 
         reranker = SqlAlchemyDecisionContextLookup(db, article_id)
-    return MappingService(RetrievalOrchestrator(providers, reranker=reranker)), adapter
+    orchestrator = RetrievalOrchestrator(providers, reranker=reranker, graph=graph)
+    return MappingService(orchestrator), adapter
 
 
 def _start_audit(db: Session, run_type, row):

@@ -9,7 +9,9 @@ from typing import Mapping, Protocol, Sequence
 
 from app.domain.common.enums import RetrievalSource
 from app.domain.mappings.reranking import DecisionContext, rerank_delta
-from app.domain.retrieval import RetrievalCandidate, RetrievalEvidence
+from app.domain.retrieval import CandidateLocation, RetrievalCandidate, RetrievalEvidence
+from app.embedding.symbol_index import EdgeKind, SymbolGraph
+from app.retrieval.graph_expand import neighbors, seed_node_ids
 
 
 SCORING_VERSION = "retrieval-scoring-v1"
@@ -20,6 +22,16 @@ DEFAULT_WEIGHTS = {
     RetrievalSource.RAG: 0.15,
     RetrievalSource.CODE_GRAPH: 0.05,
     RetrievalSource.HISTORICAL_COMMIT: 0.10,
+}
+
+# graph-expand 기본 설정 (ADR-017, CODE_GRAPH_SPEC §9) — 고정밀 엣지 위주로 시작한다.
+DEFAULT_GRAPH_EDGE_ALLOWLIST = frozenset({EdgeKind.CONTAINS, EdgeKind.SERVICE_TO_MAPPER})
+# EdgeKind 별 고정 점수 — confidence 가 없어 kind 가 점수를 정한다(절대값은 9월 W4 캘리브레이션 대상).
+DEFAULT_GRAPH_EDGE_SCORES = {
+    EdgeKind.SERVICE_TO_MAPPER: 0.75,
+    EdgeKind.USES_CONSTANT: 0.70,
+    EdgeKind.TEST_TO_SERVICE: 0.65,
+    EdgeKind.CONTAINS: 0.60,
 }
 
 
@@ -92,6 +104,17 @@ class RetrievalConfig:
     scoring_version: str = SCORING_VERSION
     # 검증 이력 rerank 는 기본 활성(ADR-009). off 면 rerank 단계를 통째로 건너뛴다.
     rerank_enabled: bool = True
+    # graph-expand 는 기본 비활성(ADR-017) — off 면 결과가 기존과 바이트 동일해야 한다.
+    graph_enabled: bool = False
+    graph_seed_top_n: int = 3
+    graph_depth: int = 1
+    graph_max_neighbors: int = 20
+    graph_edge_allowlist: frozenset[EdgeKind] = field(
+        default_factory=lambda: DEFAULT_GRAPH_EDGE_ALLOWLIST
+    )
+    graph_edge_scores: dict[EdgeKind, float] = field(
+        default_factory=lambda: dict(DEFAULT_GRAPH_EDGE_SCORES)
+    )
 
     def __post_init__(self) -> None:
         if self.final_top_k < 1:
@@ -144,9 +167,11 @@ class RetrievalOrchestrator:
         self,
         providers: Sequence[RetrievalProvider],
         reranker: CandidateReranker | None = None,
+        graph: SymbolGraph | None = None,
     ) -> None:
         self.providers = tuple(providers)
         self.reranker = reranker
+        self.graph = graph
 
     def retrieve(
         self,
@@ -182,10 +207,13 @@ class RetrievalOrchestrator:
             )
         if enabled_count and success_count == 0:
             raise RetrievalError("RETRIEVAL_ERROR: all enabled providers failed")
-        # 단계 순서 고정: merge → rerank → 정렬 → final_top_k 절단 → rank 부여.
-        # rerank 를 절단 뒤에 두면 상위 K 밖의 검증 후보가 boost 를 받아도 올라올 수
-        # 없다(ADR-009 보강 2항).
+        # 단계 순서 고정: merge → graph-expand → rerank → 정렬 → final_top_k 절단 → rank 부여.
+        # graph-expand 를 rerank 이전에 두는 이유는 확장된 후보도 rerank 대상이어야
+        # 하기 때문이고, rerank 를 절단 뒤에 두면 상위 K 밖의 검증 후보가 boost 를
+        # 받아도 올라올 수 없다(ADR-009 보강 2항, ADR-017).
         merged = _merge_candidates(candidates, config, warnings)
+        if self.graph is not None and config.graph_enabled:
+            merged = self._graph_expand(merged, config, warnings)
         rerank_version: str | None = None
         if self.reranker is not None and config.rerank_enabled:
             merged, rerank_version = self._rerank(query, merged, warnings)
@@ -247,6 +275,59 @@ class RetrievalOrchestrator:
         # 동점 시 결과가 흔들리면 ablation 재현성이 깨진다 — merge 와 같은 정렬 키.
         reranked.sort(key=lambda item: (-item.final_score, item.location.path))
         return reranked, version
+
+    def _graph_expand(
+        self,
+        merged: list[RetrievalCandidate],
+        config: RetrievalConfig,
+        warnings: list[str],
+    ) -> list[RetrievalCandidate]:
+        """merge 된 상위 seed 를 그래프 이웃으로 넓힌다(ADR-017, CODE_GRAPH_SPEC §9).
+
+        seed 는 merge 된 상위 N 후보를 재사용한다 — RagProvider 가 이미 계산한
+        후보이므로 RAG(adapter.search) 를 다시 호출하지 않는다(이중 RAG 금지).
+        그래프 조회 실패가 검색 전체를 죽이면 "개정을 놓침"으로 이어지므로,
+        rerank 와 같은 방식으로 warning 만 남기고 확장 없이 진행한다.
+        """
+        graph = self.graph
+        assert graph is not None
+        try:
+            seed_ids: set[str] = set()
+            for candidate in merged[: config.graph_seed_top_n]:
+                seed_ids |= seed_node_ids(
+                    graph, candidate.location.path, candidate.location.symbol
+                )
+            if not seed_ids:
+                return merged
+            hits = neighbors(
+                graph,
+                seed_ids,
+                config.graph_edge_allowlist,
+                depth=config.graph_depth,
+                max_neighbors=config.graph_max_neighbors,
+            )
+            if not hits:
+                return merged
+            graph_candidates = [
+                RetrievalCandidate(
+                    CandidateLocation(hit.node.path, hit.node.name),
+                    (
+                        RetrievalEvidence(
+                            RetrievalSource.CODE_GRAPH,
+                            config.graph_edge_scores.get(hit.edge_kind, 0.0),
+                            config.graph_edge_scores.get(hit.edge_kind, 0.0),
+                            explanation=hit.relation_path,
+                            provider_version="graph-expand-v1",
+                        ),
+                    ),
+                    config.graph_edge_scores.get(hit.edge_kind, 0.0),
+                )
+                for hit in hits
+            ]
+            return _merge_candidates(merged + graph_candidates, config, warnings)
+        except Exception as exc:
+            warnings.append(f"graph_expand: {exc}")
+            return merged
 
 
 def _merge_candidates(
