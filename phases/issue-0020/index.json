@@ -8,7 +8,8 @@
       "name": "graph-traversal",
       "status": "completed",
       "started_at": "2026-08-20T13:54:16+0900",
-      "summary": "app/retrieval/graph_expand.py 신설: seed_node_ids(path[, symbol]→node id 집합, symbol 우선 없으면 path 전체 폴백), neighbors(graph, seed_ids, edge_allowlist, depth=1, max_depth=2, max_neighbors=20)→list[GraphHit(node, edge_kind, relation_path)]. 폭증방지: max_depth 클램프, BFS visited로 cycle 차단, max_neighbors 절단, EXCLUDED_DIRS 경로 노드 제외. tests/test_graph_expand.py 14개 추가, verify.sh full 통과(894 passed)."
+      "summary": "app/retrieval/graph_expand.py 신설: seed_node_ids(path[, symbol]→node id 집합, symbol 우선 없으면 path 전체 폴백), neighbors(graph, seed_ids, edge_allowlist, depth=1, max_depth=2, max_neighbors=20)→list[GraphHit(node, edge_kind, relation_path)]. 폭증방지: max_depth 클램프, BFS visited로 cycle 차단, max_neighbors 절단, EXCLUDED_DIRS 경로 노드 제외. tests/test_graph_expand.py 14개 추가, verify.sh full 통과(894 passed).",
+      "completed_at": "2026-08-20T13:57:38+0900"
     },
     {
       "step": 1,
@@ -26,5 +27,6 @@
       "status": "pending"
     }
   ],
-  "created_at": "2026-08-20T13:54:16+0900"
+  "created_at": "2026-08-20T13:54:16+0900",
+  "total_cost_usd": 1.2742
 }
