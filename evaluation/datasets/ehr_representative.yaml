@@ -1,0 +1,39 @@
+# eHR 실개정 유래 대표 평가 케이스 (익명화 — GitHub 커밋 안전).
+# 실제 회사 검증에서 발굴한 세법 값-개정을, 사내 경로/코드 원문 없이 공개 법령 +
+# 대표(representative) 경로로 일반화한 케이스. 실경로 채점 fixture는 evaluation/private(gitignore).
+# 출처 방법론: docs/operations/WINDOWS_TRACK.md, evaluation/private/svn_track_a_recon.md
+cases:
+  - schema_version: "1"
+    case_id: tax_childcare_exemption_value_001
+    title: 보육수당 비과세 한도 인상 (월 10만원 → 20만원)
+    domain: tax
+    tags: [value_change, xfdl, nontaxable_limit, real_revision_2024]
+    law:
+      law_name: 소득세법 시행령
+      tier: enforcement_decree
+      article: 제17조의2
+      before_text: 근로자가 지급받는 보육수당은 월 10만원 이내의 금액을 비과세한다.
+      after_text: 근로자가 지급받는 보육수당은 월 20만원 이내의 금액을 비과세한다.
+      effective_date: 2024-01-01
+    repository:
+      fixture_type: directory
+      path: evaluation/fixtures/repositories/mock_tax
+    expected:
+      change_type: value_change
+      automation_decision: draft_allowed
+      retrieval:
+        relevant_files: [pay/ref/YearEndExemption.xfdl]
+        primary_files: [pay/ref/YearEndExemption.xfdl]
+        relevant_symbols: [birth_untax_amt_limit]
+      patch:
+        expected_replacements:
+          - path: pay/ref/YearEndExemption.xfdl
+            before: "100000"
+            after: "200000"
+            match_mode: exact
+        forbidden_files: []
+        require_git_apply: false
+        require_golden: false
+    notes: >
+      실제 eHR PayRefCom003.xfdl base_year 분기(birth_untax_amt_limit)에서 확인된 개정.
+      실경로/코드원문은 사내 로컬(evaluation/private)에만. 여기 경로는 대표 일반화값.
