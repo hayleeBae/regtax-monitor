@@ -61,10 +61,22 @@ def test_match_returns_none_when_registry_empty():
 # --- domains.json 로딩 회귀 --------------------------------------------------
 
 
-def test_load_domains_from_real_file_has_db_items_key():
+def test_load_domains_from_real_file_loads_db_items():
+    """실 domains.json의 db_items가 DbItem으로 로드되고, 스키마 원문(T_*/컬럼
+    코드)이 어느 필드에도 새지 않는다(DB_DATA_ROUTING_SPEC §8 보안)."""
+    import re
+
     domains = load_domains()
     for domain in domains.values():
-        assert domain.db_items == []
+        for item in domain.db_items:
+            assert isinstance(item, DbItem)
+            assert item.law_id and item.article_pattern and item.item_label
+            blob = " ".join(
+                (item.law_id, item.article_pattern, item.item_label,
+                 item.db_hint, item.guidance)
+            )
+            # 실제 DB 테이블명(T_...) 원문이 커밋 파일에 들어가면 안 된다.
+            assert not re.search(r"\bT_[A-Z]", blob)
 
 
 def test_domain_db_items_defaults_to_empty_list_when_key_absent(tmp_path, monkeypatch):
