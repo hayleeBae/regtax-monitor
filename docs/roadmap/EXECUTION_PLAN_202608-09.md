@@ -4,26 +4,40 @@
 > 각 이슈의 공통 게이트: 설계(/design 승인) → step 설계 승인 → harness 실행 →
 > verify full → 보안점검(/secscan, Critical/High 시 중단) → PR → 머지.
 
-## 0. 현재 상태 스냅샷 (2026-08-18)
+## 0. 현재 상태 스냅샷 (갱신 2026-08-21)
 
-- ✅ **issue-0023** 수집 필드 의미 정정 (PR #9) — before/after를 개정문 파싱으로 파생
-- ✅ **issue-0024** eHR 인덱싱 적합화 (PR #10) — xfdl 지원·인코딩 정책·classes 제외·수확 범위 통일
-- ✅ **임베딩 실측 검증 4/4** (Windows 회사 PC) — `COMPANY_VALIDATION.md` §3-3 실측 기록 참조
-- 🔶 법제처 API 신청 완료(현행법령·행정규칙·국세청 법령해석) — 승인 대기. "고시 수집" = 행정규칙(admrul) target이므로 별도 신청 불요 (목록/본문 둘 다 신청됐는지만 확인)
-- ⏳ LLM 검증 미실시 — **맥북(M3, Ollama 설치기)에서 진행** (B안: Windows=eHR·임베딩 검증, 맥=LLM. 인덱스·캐시는 기기별 재생성 — 기기 간 복사 금지)
+- ✅ **issue-0023** 수집 필드 의미 정정 (머지) — before/after를 개정문 파싱으로 파생
+- ✅ **issue-0024** eHR 인덱싱 적합화 (머지) — xfdl 지원·인코딩 정책·classes 제외·수확 범위 통일
+- ✅ **issue-0025** DB 데이터 개정 라우팅 + db_items 큐레이션 (머지, 8/20)
+- ✅ **issue-0020** 그래프 검색 (머지, 8/20 — **접음** ADR-018: SvcID 런타임 간접참조로 콜그래프 텍스트 부재)
+- ✅ **임베딩 실측 검증 4/4** (Windows) — `COMPANY_VALIDATION.md` §3-3
+- ✅ **법제처 API 실검증** (2026-08-21 Windows): OC 키 실동작, 실 수집 11건, **행정규칙(고시) 권한 승인 확인**(최저임금 고시 실수집). 추가 신청 불요.
+- ✅ **Windows 고유 작업 완료** — SVN 접근 + **값-개정 카탈로그 34건**(보육수당·식대·직무발명·고향사랑 등, `evaluation/private/svn_track_a_recon.md`), Oracle 스키마 recon(db_items 근거). **SVN/Oracle 의존 작업 없음.**
+- ✅ **recall 측정 인프라 커밋** — 도구 3종(`scripts/embed_cache.py`·`recall_eval.py`·`index_resumable.py`) + **fixture 8케이스**(`evaluation/datasets/recall_ehr_fixtures.yaml`). 맥에서 pull해 GPU로 실행.
+- ⏳ **LLM/모델 검증 미실시** → **맥(GPU)에서 진행.** Windows(GPU 없음)는 bge-m3 CPU 인코딩이 청크당 ~3.5s로 비실용 → recall/초안 측정을 맥으로 이관 확정(2026-08-21). 인덱스·캐시(`embed_cache.db`·`chroma_data`)는 기기별 재생성 — 커밋/복사 금지.
 
-## 1. 8월 잔여 플랜
+### 기기 분담 (확정)
+| 맥에서만 (GPU/로컬모델) | 어디서든 (harness·claude API) |
+|---|---|
+| recall 측정, 초안정확도 replay(`--pipeline real`) | issue-0026 **코드**(앵커 최소화) |
+| rerank 실발동(§4-1), F-20260712-0002 재현 | issue-0021 릴리스 게이트 문서 |
+| 9월 few-shot·라우팅·reranker 실측 | 카탈로그→fixture 확장 |
 
-| 기간 | 작업 | 게이트/산출물 |
-|---|---|---|
-| ~8/20 | **맥 셋업 + LLM 검증**: `COMPANY_VALIDATION.md` §1~§4-2 순서 — 재인덱싱(M3), `/analyze`·`/apply` E2E, rerank 실발동(§4-1), F-20260712-0002 절단 재현, replay `--pipeline real` 1케이스(§4-2) | 실측 검증 리포트 (이후 이슈 설계의 근거) |
-| 8/21~22 | **issue-0025** DB 데이터 개정 판정 — 세율·요율은 코드가 아니라 DB(`T_PAY_TAX`/`T_INS_RATE`)라, 해당 개정을 "코드 patch 불가 → DB 갱신 안내"로 라우팅 | 스펙+ADR, 구현, PR |
-| 8/25~26 | **issue-0020** 그래프 검색 — `symbol_index`(#0019 산출물) 소비처 `CodeGraphProvider` 배선 + ablation | 재현율 전후 수치 입증 |
-| 8/27~29 | **issue-0026** 출력 절단 봉합(F-0002, 앵커 최소화) + eHR 골든 정의 → **issue-0021** V2 릴리스 게이트 착수 | F-0002 레코드의 사전 정의 판정 기준(출력 토큰 절반↓ + 절단·타임아웃 소멸) |
+## 1. 8월 잔여 플랜 (갱신 2026-08-21)
 
-병행(코드 외): admrul 승인 확인 시 실수집 스모크 + `domains.json` `tax.admin_rule_queries` 채우기 / eHR `build.xml` 자격증명 외부화 + 정보보호팀 통보(소유자 몫).
+코드 이슈(0025·0020)는 일정보다 앞서 완료. 남은 것은 **맥 검증 + 0026 + 0021**.
 
-**issue-0027(연도 쌍 마이닝)은 9월로 이월** — 규모가 커서 8월에 압축하면 품질이 깨진다.
+| 작업 | 상태 | 기기 | 비고 |
+|---|---|---|---|
+| **맥 recall 측정** | ⏳ 다음 | 맥 | `git pull` → `HF_HUB_OFFLINE=1 python scripts/embed_cache.py` → `recall_eval.py --fixtures evaluation/datasets/recall_ehr_fixtures.yaml --redacted --out evaluation/results/recall_report.md`. 첫 숫자 결과. 리포트(redacted) 커밋. |
+| **맥 초안정확도 replay** | ⏳ | 맥 | `COMPANY_VALIDATION.md` §4-2 — `/analyze`·`/apply`, F-0002 재현, replay real 1케이스. Ollama 기동 필요. |
+| **rerank 실발동(§4-1)** | ⏳ | 맥 | 검증 매핑 쌓은 뒤 symbol 일치로 발동하는지 |
+| issue-0026 출력 절단 봉합 + eHR 골든 | ⬜ 미착수 | 코드=아무데나 / 재현검증=맥 | F-0002 판정 기준: 출력토큰 절반↓ + 절단·타임아웃 소멸 |
+| issue-0021 V2 릴리스 게이트 | ⬜ 미착수 | 아무데나 | verify.sh 3모드 통과 문서화 |
+
+병행(코드 외, 사용자): eHR `build.xml` 자격증명 외부화 + 정보보호팀 통보. `domains.json` `tax.admin_rule_queries` 채우기(고시 수집 확장).
+
+**issue-0027(연도 쌍 마이닝)은 9월로 이월** — W1 소스는 값-개정 카탈로그 34건으로 확보 완료.
 
 ## 2. 9월 플랜 — 모델 성능 향상
 
