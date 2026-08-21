@@ -1,37 +1,65 @@
-"""라이브 검색 recall 측정 도구 (범용, eHR 데이터 비포함).
+"""라이브 검색 recall 측정 도구 (임베딩 캐시 기반, chroma 비의존).
 
-기존 `chroma_data` 인덱스에 대해 fixture의 각 케이스를 검색하고,
-정답 파일이 top-K에 드는지로 recall/hit@K/MRR을 계산한다.
+`scripts/embed_cache.py`가 만든 크래시-안전 임베딩 캐시(embed_cache.db)를 읽어,
+각 fixture 케이스의 쿼리를 코사인 유사도로 검색하고 정답 파일이 top-K에 드는지로
+recall/hit@K/MRR을 계산한다. chroma의 HNSW 취약점을 우회한다.
 
-- fixture 스키마: {cases: [{id, query, answers: [relpath...]}]}
-  (fixture 자체는 eHR 경로를 담을 수 있으므로 gitignore 위치에 둔다 — 이 스크립트는 경로를 모른다.)
-- 출력 리포트는 경로 원문 없이 케이스 id·rank·hit만 남기도록 --redacted 지원.
+- 파일 단위 순위 = 그 파일 소속 청크의 최고 순위.
+- fixture 스키마: {cases: [{id, query, answers: [relpath...]}]} (gitignore 위치).
+- 리포트는 --redacted로 경로 원문 없이(케이스 id·rank만) 출력 가능.
 
 사용:
   HF_HUB_OFFLINE=1 python scripts/recall_eval.py --fixtures evaluation/private/recall_fixtures.yaml \
-      --k 10 --out evaluation/private/recall_report.md [--redacted]
+      --k 10 --out evaluation/private/recall_report.md --redacted
 """
 from __future__ import annotations
 
 import argparse
+import sqlite3
+import struct
 import sys
 from pathlib import Path
 
+import numpy as np
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.embedding.indexer import CodeIndexer  # noqa: E402
+from config import settings  # noqa: E402
 
 
-def _rank_of(hits, answers: set[str]) -> int | None:
-    """정답 파일이 처음 등장하는 순위(1-base). 없으면 None.
-    경로 비교는 basename과 posix 상대경로 양쪽을 허용(인덱스 경로 표기 차 흡수)."""
-    ans_base = {Path(a).name for a in answers}
+def _load_cache(db_path: str):
+    db = sqlite3.connect(db_path)
+    rows = db.execute("SELECT path, dim, vec FROM emb").fetchall()
+    db.close()
+    if not rows:
+        raise SystemExit(f"임베딩 캐시가 비어 있습니다: {db_path}")
+    paths = [r[0] for r in rows]
+    dim = rows[0][1]
+    mat = np.empty((len(rows), dim), dtype=np.float32)
+    for i, (_p, d, blob) in enumerate(rows):
+        mat[i] = struct.unpack(f"{d}f", blob)
+    # 코사인용 정규화
+    mat /= (np.linalg.norm(mat, axis=1, keepdims=True) + 1e-12)
+    return paths, mat
+
+
+def _file_ranking(scores: np.ndarray, paths: list[str]) -> list[str]:
+    """청크 점수 내림차순을 파일 단위 순위로 접는다(파일 최초 등장 순)."""
+    order = np.argsort(-scores)
+    seen: dict[str, None] = {}
+    for idx in order:
+        p = paths[idx].replace("\\", "/")
+        if p not in seen:
+            seen[p] = None
+    return list(seen.keys())
+
+
+def _rank_of(ranked_files: list[str], answers: set[str]) -> int | None:
     ans_posix = {a.replace("\\", "/") for a in answers}
-    for i, h in enumerate(hits, start=1):
-        hp = str(h.path).replace("\\", "/")
-        if hp in ans_posix or Path(hp).name in ans_base:
+    ans_base = {Path(a).name for a in answers}
+    for i, p in enumerate(ranked_files, start=1):
+        if p in ans_posix or Path(p).name in ans_base:
             return i
     return None
 
@@ -39,23 +67,27 @@ def _rank_of(hits, answers: set[str]) -> int | None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--fixtures", required=True)
+    ap.add_argument("--cache", default="embed_cache.db")
     ap.add_argument("--k", type=int, default=10)
-    ap.add_argument("--persist-dir", default="./chroma_data")
     ap.add_argument("--out", default="")
-    ap.add_argument("--redacted", action="store_true",
-                    help="리포트에 경로 원문을 남기지 않는다(케이스 id·rank만).")
+    ap.add_argument("--redacted", action="store_true")
     args = ap.parse_args()
 
     cases = yaml.safe_load(Path(args.fixtures).read_text(encoding="utf-8"))["cases"]
-    indexer = CodeIndexer(persist_dir=args.persist_dir)
+    paths, mat = _load_cache(args.cache)
 
-    rows = []
-    ranks = []
+    from sentence_transformers import SentenceTransformer
+    model = SentenceTransformer(settings.embedding_model)
+
+    rows, ranks = [], []
     for c in cases:
-        hits = indexer.search(c["query"], k=args.k)
-        rank = _rank_of(hits, set(c["answers"]))
+        q = np.asarray(model.encode(c["query"]), dtype=np.float32)
+        q /= (np.linalg.norm(q) + 1e-12)
+        scores = mat @ q
+        ranked = _file_ranking(scores, paths)
+        rank = _rank_of(ranked, set(c["answers"]))
         ranks.append(rank)
-        top = [] if args.redacted else [f"{Path(h.path).name}#{h.score:.3f}" for h in hits[:3]]
+        top = [] if args.redacted else [Path(p).name for p in ranked[:3]]
         rows.append((c["id"], rank, top))
 
     n = len(cases)
@@ -64,18 +96,17 @@ def main() -> int:
     mrr = sum((1.0 / r) for r in ranks if r) / n
 
     lines = [
-        f"# 검색 recall 리포트 (라이브 인덱스, K={args.k})",
+        f"# 검색 recall 리포트 (임베딩 캐시, 파일 {len({p.replace(chr(92),'/') for p in paths})}개, K={args.k})",
         "",
         f"- 케이스 수: {n}",
         f"- Hit@1: {hit_at(1):.2f}  Hit@3: {hit_at(3):.2f}  Hit@5: {hit_at(5):.2f}  Hit@{args.k}: {hit_at(args.k):.2f}",
         f"- MRR: {mrr:.3f}",
         "",
-        "| case | 정답 rank | top-3" + ("" if args.redacted else " (file#score)") + " |",
+        "| case | 정답 rank | top-3" + ("" if args.redacted else " (basename)") + " |",
         "|---|---|---|",
     ]
     for cid, rank, top in rows:
-        rk = str(rank) if rank else "miss"
-        lines.append(f"| {cid} | {rk} | {', '.join(top) if top else '(redacted)'} |")
+        lines.append(f"| {cid} | {rank if rank else 'miss'} | {', '.join(top) if top else '(redacted)'} |")
     report = "\n".join(lines)
 
     print(report)
