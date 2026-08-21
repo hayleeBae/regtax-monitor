@@ -1,0 +1,30 @@
+# eHR 검색 recall fixture (커밋본 — 실 eHR 상대경로 + 공개 법령 쿼리, 코드 원문 없음).
+# 각 케이스: 법령 개정을 검색 쿼리로, 정답 = 실제 변경 파일(실 eHR 경로).
+# 측정: 전체 eHR 임베딩 캐시 대비 정답 파일이 top-K에 드는가 (scripts/recall_eval.py).
+# 출처 방법론: docs/operations/WINDOWS_TRACK.md (값-개정 카탈로그).
+cases:
+  - id: boyuk_exemption
+    query: "소득세법 시행령 보육수당 비과세 한도 상향 월10만원에서 월20만원으로 개정"
+    answers: ["web/nexacro/solution/pay/ref/com/PayRefCom003.xfdl"]
+  - id: meal_exemption
+    query: "소득세법 식대 비과세 한도 상향 월10만원에서 월20만원으로 개정"
+    answers: ["web/nexacro/solution/pay/ref/com/PayRefCom003.xfdl"]
+  - id: job_invention_exemption
+    query: "소득세법 직무발명보상금 비과세 한도 상향 700만원"
+    answers: ["web/nexacro/solution/pay/ref/com/PayRefCom003.xfdl"]
+  - id: foreign_work_exemption
+    query: "소득세법 국외근로수당 비과세 한도 월100만원 월500만원"
+    answers: ["web/nexacro/solution/pay/ref/com/PayRefCom003.xfdl"]
+  - id: hometown_donation_limit
+    query: "고향사랑기부금 세액공제 한도 500만원에서 2000만원으로 상향"
+    answers: ["web/nexacro/solution/pay/ref/com/PayRefCom005Pop_104_2025.xfdl"]
+  - id: credit_card_deduction_limit
+    query: "신용카드 사용액 소득공제 한도 상향 개정"
+    answers: ["web/nexacro/solution/pay/ref/com/PayRefCom005_2020.xfdl",
+              "web/nexacro/solution/pay/ref/com/PayRefCom0082Pop_2020.xfdl"]
+  - id: dependent_medical_limit
+    query: "6세 이하 부양가족 의료비 세액공제 한도 미적용 개정"
+    answers: ["web/nexacro/solution/pay/ref/com/PayRefCom005Pop_204_2024.xfdl"]
+  - id: large_donation_rate
+    query: "고액기부금 세액공제율 한시 상향 개정"
+    answers: ["web/nexacro/solution/pay/ref/com/PayRefCom0083Pop_2024.xfdl"]

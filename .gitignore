@@ -37,3 +37,4 @@ chroma_data_mock_backup/
 .claude/projects/
 # uv 락파일 — 이 프로젝트 표준은 requirements.txt (stray 아티팩트, 실수 커밋 방지)
 uv.lock
+embed_cache.db*
