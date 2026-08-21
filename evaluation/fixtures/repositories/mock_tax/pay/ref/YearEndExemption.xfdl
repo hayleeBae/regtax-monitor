@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FDL version="2.1">
+  <Form id="YearEndExemption">
+    <Layout>
+      <Static id="sta_title" text="연말정산 비과세 한도 검증"/>
+    </Layout>
+    <Script type="xscript5.1"><![CDATA[
+this.fn_validateChildcareExemption = function(base_year, birth_untax_amt)
+{
+	// 보육수당 비과세 한도 (월 10만원 -> 20만원, 2024년 개정)
+	var birth_untax_amt_limit = 200000 ;
+	if (birth_untax_amt > birth_untax_amt_limit) {
+		this.gf_message("보육수당 비과세 금액은 월" + (birth_untax_amt_limit/10000) + "만원을 초과할 수 없습니다.") ;
+		return false;
+	}
+	return true;
+};
+
+this.fn_validateJobInventionExemption = function(base_year, job_invention_untax_amt)
+{
+	// 직무발명보상금 비과세 한도 (base_year 분기)
+	var job_invention_untax_amt_limit = 3000000 ;
+	if (base_year >= "2019" && base_year < "2024") {
+		job_invention_untax_amt_limit = 5000000 ;
+	}
+	else if (base_year >= "2024") {
+		job_invention_untax_amt_limit = 7000000 ;
+	}
+	return job_invention_untax_amt <= job_invention_untax_amt_limit;
+};
+]]></Script>
+  </Form>
+</FDL>
