@@ -30,6 +30,20 @@ bash scripts/verify.sh full
   (화이트리스트 `REPO_INDEX_PATHS` 필수 — `build.xml` 자격증명 노출 방지, COMPANY_VALIDATION §2).
 - SVN·Oracle 도달성 확인: `ping 172.20.88.58`, Oracle MCP 연결 상태.
 
+## 1-1. 윈도우 실측 정정 (2026-08-21)
+
+핸드오프 원안의 전제 두 가지를 실측으로 정정한다.
+
+- **모델 활용 불가**: 윈도우 회사 PC는 GPU가 없어 Ollama 미설치다. 따라서 초안 생성(LLM)이
+  필요한 작업은 윈도우에서 못 한다 — Track A의 `--pipeline real` 중 **초안 정확도
+  (expected_replacement_accuracy) 절반은 맥으로 이월**한다. 윈도우가 담당할 수 있는 것은
+  **모델이 필요 없는 절반** — SVN 리비전 추출 + base 시점 인덱싱 + **검색 recall(file_coverage)**
+  측정이다("정답 파일을 찾는가"는 임베딩만으로 성립).
+- **svn CLI 부재**: 서버(`https://172.20.88.58:8443`)는 HTTPS DAV로 도달·인증요구(401) 확인됐으나,
+  이 PC는 TortoiseSVN이 CLI 컴포넌트(`svn.exe`) 없이 설치돼 `svn log`/`svn export`를 못 돌린다.
+  URL이 아니라 실행파일이 문제다 — Slik SVN 설치 또는 TortoiseSVN "command line client tools"
+  재설치(재부팅) 후에야 Track A 착수 가능.
+
 ## 2. 트랙 A — SVN 클린 리비전 → 초안 정확도 replay (§4-2 심화)
 
 맥에서 불가했던 이유: eHR git은 **SVN→Git 단일 마이그레이션 커밋**이라 개정 이력이 없다(연도 짝 코드
@@ -60,6 +74,17 @@ Oracle MCP로 이걸 실검증하고 issue-0025 레지스트리를 실제로 채
 3. **issue-0025 실검증**: 해당 change_id로 `POST /changes/{id}/apply` → 응답이 `db_update_guidance`로
    라우팅되는지 확인(코드 draft 미진입). 미매칭이면 db_items 패턴 조정.
 4. 기록: 매핑 건수·라우팅 성공 여부만(경로·스키마 원문 제외).
+
+### 트랙 B 진행 기록 (2026-08-21)
+
+- Oracle `devDB`(PRISM_RDS) 스키마 recon 완료(읽기 전용, PII 행 미조회): 세율·요율·한도가
+  코드가 아니라 DB 관리임을 실증 — 근거 테이블 4종 확인(요율/기준값 코드성, 급여 PII 없음).
+- `domains.json` tax.db_items **2건 큐레이션**(일반화 라벨만): 종합소득 기본세율표(제55조),
+  근로소득 간이세액표(시행령 제189조). 4대보험 요율은 hr 도메인 law_id 미수집으로 보류.
+- 라우팅 검증 6/6 통과(모델 불필요 — DB 매칭은 LLM 경로 진입 전 단락): 양성 2건(세율/간이세액표),
+  음성 4건. **자녀세액공제(제59조의2)는 eHR xfdl 하드코딩 코드 케이스라 DB 라우팅 제외** 확인.
+- 미완: 실 개정 change_id로의 `/apply` E2E는 매칭 change 부재로 미실시(현 수집 14건에 세율/간이세액표
+  개정 없음). 해당 개정 수집 또는 테스트 change 추가 후 확인.
 
 ## 4. 코디네이션 (맥과 꼬임 방지)
 
